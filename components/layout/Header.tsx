@@ -1,6 +1,6 @@
 "use client";
 import { Bell, Search, Menu, ChevronDown, Building2, LogOut, User, Settings } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { notifications, currentUser } from "@/lib/data";
 import { getInitials, formatDateTime } from "@/lib/utils";
@@ -15,6 +15,20 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
   const [showProfile, setShowProfile] = useState(false);
   const [showCompanySwitcher, setShowCompanySwitcher] = useState(false);
   const { companiesList, activeCompanyId, activeCompany, setActiveCompanyId } = useCompanies();
+  const [profileName, setProfileName] = useState(currentUser.name);
+  const [profilePhoto, setProfilePhoto] = useState("");
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("phidtech_profile");
+      if (stored) {
+        const p = JSON.parse(stored);
+        if (p.name) setProfileName(p.name);
+      }
+      const photo = localStorage.getItem("phidtech_profile_photo");
+      if (photo) setProfilePhoto(photo);
+    } catch {}
+  }, []);
 
   const unread = notifications.filter((n) => !n.read).length;
 
@@ -137,11 +151,14 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
             onClick={() => { setShowProfile(!showProfile); setShowNotifications(false); setShowCompanySwitcher(false); }}
             className="flex items-center gap-2 p-1.5 hover:bg-gray-100 rounded-lg"
           >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white">
-              {getInitials(currentUser.name)}
+            <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white">
+              {profilePhoto
+                ? <img src={profilePhoto} alt="profile" className="w-full h-full object-cover" />
+                : getInitials(profileName)
+              }
             </div>
             <div className="hidden md:block text-left">
-              <p className="text-sm font-medium text-gray-800 leading-none">{currentUser.name}</p>
+              <p className="text-sm font-medium text-gray-800 leading-none">{profileName}</p>
               <p className="text-xs text-gray-400 mt-0.5 capitalize">{currentUser.role}</p>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-gray-400 hidden md:block" />
