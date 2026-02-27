@@ -19,16 +19,18 @@ import {
   Users, UserPlus, Search, Filter, MoreVertical, Mail,
   Phone, Building2, Shield, UserCheck, UserX, Edit, Eye
 } from "lucide-react";
-import { users, departments, companies } from "@/lib/data";
+import { users, departments } from "@/lib/data";
 import { formatDate, formatCurrency, getInitials, getStatusColor } from "@/lib/utils";
+import { useCompanyContext } from "@/lib/CompanyContext";
 
 export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<typeof users[0] | null>(null);
+  const { activeCompanyId } = useCompanyContext();
 
-  const companyUsers = users.filter(u => u.companyId === "c1");
+  const companyUsers = users.filter(u => u.companyId === activeCompanyId || u.companyId === "c1");
   const filtered = companyUsers.filter(u => {
     const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase()) ||

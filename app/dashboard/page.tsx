@@ -15,22 +15,26 @@ import {
 } from "recharts";
 import {
   monthlyRevenueData, salesPipelineData, tasks, leaveRequests,
-  users, invoices, supportTickets, kpis, notifications, currentCompany,
+  users, invoices, supportTickets, kpis, notifications,
   attendanceSummary
 } from "@/lib/data";
 import { formatCurrency, getInitials, getStatusColor, formatDate } from "@/lib/utils";
 import Link from "next/link";
+import { useCompanyContext } from "@/lib/CompanyContext";
 
 const COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444"];
 
 export default function DashboardPage() {
-  const activeUsers = users.filter(u => u.status === "active" && u.companyId === "c1").length;
-  const pendingLeaves = leaveRequests.filter(l => l.status === "pending").length;
-  const openTickets = supportTickets.filter(t => t.status === "open" || t.status === "in-progress").length;
-  const overdueInvoices = invoices.filter(i => i.status === "overdue").length;
+  const { activeCompany, activeCompanyId } = useCompanyContext();
+  const cid = activeCompanyId;
+
+  const activeUsers = users.filter(u => u.status === "active" && (u.companyId === cid || u.companyId === "c1")).length;
+  const pendingLeaves = leaveRequests.filter(l => l.companyId === cid || l.companyId === "c1").filter(l => l.status === "pending").length;
+  const openTickets = supportTickets.filter(t => t.companyId === cid || t.companyId === "c1").filter(t => t.status === "open" || t.status === "in-progress").length;
+  const overdueInvoices = invoices.filter(i => i.companyId === cid || i.companyId === "c1").filter(i => i.status === "overdue").length;
   const totalRevenue = monthlyRevenueData[monthlyRevenueData.length - 1].revenue;
-  const pendingTasks = tasks.filter(t => t.status === "pending" || t.status === "in-progress").length;
-  const onTrackKpis = kpis.filter(k => k.status === "on-track").length;
+  const pendingTasks = tasks.filter(t => t.companyId === cid || t.companyId === "c1").filter(t => t.status === "pending" || t.status === "in-progress").length;
+  const onTrackKpis = kpis.filter(k => (k.companyId === cid || k.companyId === "c1") && k.status === "on-track").length;
   const unreadNotifications = notifications.filter(n => !n.read).length;
 
   return (
@@ -43,7 +47,7 @@ export default function DashboardPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">Good morning, John!</h1>
-            <p className="text-sm text-gray-500">{currentCompany.name} · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+            <p className="text-sm text-gray-500">{activeCompany?.name ?? "Your Company"} · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
           </div>
         </div>
         {unreadNotifications > 0 && (

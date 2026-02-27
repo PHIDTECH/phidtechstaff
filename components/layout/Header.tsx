@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { notifications, currentUser } from "@/lib/data";
 import { getInitials, formatDateTime } from "@/lib/utils";
-import { useCompanies } from "@/lib/useCompanies";
+import { useCompanyContext } from "@/lib/CompanyContext";
 
 interface HeaderProps {
   onMobileMenuOpen: () => void;
@@ -14,7 +14,7 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showCompanySwitcher, setShowCompanySwitcher] = useState(false);
-  const { companiesList, activeCompanyId, activeCompany, setActiveCompanyId } = useCompanies();
+  const { companiesList, activeCompanyId, activeCompany, setActiveCompanyId } = useCompanyContext();
   const [profileName, setProfileName] = useState(currentUser.name);
   const [profilePhoto, setProfilePhoto] = useState("");
 

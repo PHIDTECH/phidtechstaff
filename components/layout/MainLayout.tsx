@@ -3,12 +3,14 @@ import { useState } from "react";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import { cn } from "@/lib/utils";
+import { CompanyProvider } from "@/lib/CompanyContext";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
+    <CompanyProvider>
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Desktop Sidebar */}
       <div className="hidden md:flex shrink-0">
@@ -46,5 +48,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         </main>
       </div>
     </div>
+    </CompanyProvider>
   );
 }

@@ -14,7 +14,7 @@ import { auditLogs, users } from "@/lib/data";
 import { formatDateTime, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { Company } from "@/lib/types";
-import { useCompanies } from "@/lib/useCompanies";
+import { useCompanyContext } from "@/lib/CompanyContext";
 
 const emptyCompany = (): Omit<Company, "id" | "createdAt"> => ({
   name: "", industry: "", address: "", phone: "", email: "", website: "", logo: ""
@@ -23,7 +23,7 @@ const emptyCompany = (): Omit<Company, "id" | "createdAt"> => ({
 export default function AdminPage() {
   const [brandName, setBrandName] = useState("PHIDTECH MS");
   const [primaryColor, setPrimaryColor] = useState("#2563eb");
-  const { companiesList, activeCompanyId, setActiveCompanyId, addCompany, editCompany } = useCompanies();
+  const { companiesList, activeCompanyId, setActiveCompanyId, addCompany, editCompany } = useCompanyContext();
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Company | null>(null);
   const [form, setForm] = useState(emptyCompany());
