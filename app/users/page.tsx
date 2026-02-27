@@ -134,7 +134,8 @@ export default function UsersPage() {
   const [customDept, setCustomDept] = useState("");
   const [deptsList, setDeptsList] = useState<string[]>(DEFAULT_DEPARTMENTS);
   const [usersList, setUsersList] = useState<StaffUser[]>([]);
-  const { activeCompanyId, activeCompany, hydrated } = useCompanyContext();
+  const [resolvedCompanyId, setResolvedCompanyId] = useState<string>("");
+  const { activeCompanyId, activeCompany } = useCompanyContext();
 
   useEffect(() => {
     try {
@@ -142,8 +143,18 @@ export default function UsersPage() {
       if (stored) setUsersList(JSON.parse(stored));
       const storedDepts = localStorage.getItem("phidtech_departments");
       if (storedDepts) setDeptsList(JSON.parse(storedDepts));
-    } catch {}
+      // Read companyId directly from localStorage to avoid context race
+      const active = localStorage.getItem("phidtech_active_company");
+      setResolvedCompanyId(active ?? activeCompanyId);
+    } catch {
+      setResolvedCompanyId(activeCompanyId);
+    }
   }, []);
+
+  // Keep in sync when user switches company via header
+  useEffect(() => {
+    if (activeCompanyId) setResolvedCompanyId(activeCompanyId);
+  }, [activeCompanyId]);
 
   const saveUsers = (list: StaffUser[]) => {
     setUsersList(list);
@@ -155,7 +166,9 @@ export default function UsersPage() {
     try { localStorage.setItem("phidtech_departments", JSON.stringify(list)); } catch {}
   };
 
-  const companyUsers = hydrated ? usersList.filter(u => u.companyId === activeCompanyId) : [];
+  const companyUsers = resolvedCompanyId
+    ? usersList.filter(u => u.companyId === resolvedCompanyId)
+    : [];
 
   const filtered = companyUsers.filter(u => {
     const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -217,7 +230,7 @@ export default function UsersPage() {
       setShowEditDialog(false);
     } else {
       const newUser: StaffUser = {
-        id: `u${Date.now()}`, companyId: activeCompanyId,
+        id: `u${Date.now()}`, companyId: resolvedCompanyId || activeCompanyId,
         name: form.name, email: form.email, password: form.password,
         phone: form.phone, department: form.department,
         position: form.position, role: form.position,
