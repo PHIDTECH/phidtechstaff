@@ -1,41 +1,28 @@
 version: "3.8"
 
 services:
-  boms:
+  boms-app:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: boms-app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3002:3000"
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
     env_file:
       - .env.production
-    networks:
-      - boms-network
-
-  nginx:
-    image: nginx:alpine
-    container_name: boms-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      - nginx-logs:/var/log/nginx
-    depends_on:
-      - boms
+      - boms_uploads_data:/app/public/uploads
     networks:
-      - boms-network
+      - boms_default
 
 networks:
-  boms-network:
+  boms_default:
     driver: bridge
 
 volumes:
-  nginx-logs:
+  boms_uploads_data:
+    driver: local
