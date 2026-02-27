@@ -18,19 +18,38 @@ interface CompanyContextType {
 
 const CompanyContext = createContext<CompanyContextType | null>(null);
 
+function readLS<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const v = localStorage.getItem(key);
+    return v ? (JSON.parse(v) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function readLSString(key: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+}
+
 export function CompanyProvider({ children }: { children: ReactNode }) {
-  const [companiesList, setCompaniesList] = useState<Company[]>(defaultCompanies);
-  const [activeCompanyId, setActiveCompanyIdState] = useState<string>(defaultCompanies[0]?.id ?? "c1");
-  const [hydrated, setHydrated] = useState(false);
+  const [companiesList, setCompaniesList] = useState<Company[]>(
+    () => readLS<Company[]>(STORAGE_KEY, defaultCompanies)
+  );
+  const [activeCompanyId, setActiveCompanyIdState] = useState<string>(
+    () => readLSString(ACTIVE_KEY, defaultCompanies[0]?.id ?? "c1")
+  );
+  const [hydrated, setHydrated] = useState(true);
 
   useEffect(() => {
+    // Re-read on mount in case SSR gave wrong values
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) setCompaniesList(JSON.parse(stored));
       const active = localStorage.getItem(ACTIVE_KEY);
       if (active) setActiveCompanyIdState(active);
     } catch {}
-    setHydrated(true);
   }, []);
 
   const persist = (list: Company[]) => {
