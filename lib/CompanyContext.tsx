@@ -60,8 +60,16 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   );
 }
 
+const fallback: CompanyContextType = {
+  companiesList: defaultCompanies,
+  activeCompanyId: defaultCompanies[0]?.id ?? "c1",
+  activeCompany: defaultCompanies[0],
+  setActiveCompanyId: () => {},
+  addCompany: (c) => ({ ...c, id: "c1", createdAt: "" }),
+  editCompany: () => {},
+};
+
 export function useCompanyContext() {
   const ctx = useContext(CompanyContext);
-  if (!ctx) throw new Error("useCompanyContext must be used within CompanyProvider");
-  return ctx;
+  return ctx ?? fallback;
 }
