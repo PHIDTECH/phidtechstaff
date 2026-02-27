@@ -60,7 +60,7 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
               {companiesList.map((c) => (
                 <button
                   key={c.id}
-                  onClick={() => { setActiveCompanyId(c.id); setShowCompanySwitcher(false); }}
+                  onClick={() => { setActiveCompanyId(c.id); setShowCompanySwitcher(false); window.dispatchEvent(new Event("phidtech_companies_updated")); }}
                   className="flex items-center gap-3 w-full px-3 py-2 hover:bg-gray-50 text-left"
                 >
                   <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
