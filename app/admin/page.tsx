@@ -7,19 +7,57 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  Settings, Shield, Database, Bell, Palette, Users,
-  Building2, Activity, RefreshCw, Download, Eye, CheckCircle, AlertTriangle
+  Settings, Users, Building2, Activity, RefreshCw, Download,
+  CheckCircle, AlertTriangle, Database, Pencil, ArrowLeftRight, X, Plus
 } from "lucide-react";
-import { auditLogs, companies, users } from "@/lib/data";
+import { auditLogs, companies as initialCompanies, users } from "@/lib/data";
 import { formatDateTime, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import type { Company } from "@/lib/types";
+
+const emptyCompany = (): Omit<Company, "id" | "createdAt"> => ({
+  name: "", industry: "", address: "", phone: "", email: "", website: "", logo: ""
+});
 
 export default function AdminPage() {
-  const [brandName, setBrandName] = useState("BOMS");
+  const [brandName, setBrandName] = useState("PHIDTECH MS");
   const [primaryColor, setPrimaryColor] = useState("#2563eb");
+  const [companiesList, setCompaniesList] = useState<Company[]>(initialCompanies);
+  const [activeCompanyId, setActiveCompanyId] = useState(initialCompanies[0]?.id ?? "c1");
+  const [showModal, setShowModal] = useState(false);
+  const [editTarget, setEditTarget] = useState<Company | null>(null);
+  const [form, setForm] = useState(emptyCompany());
+  const [formError, setFormError] = useState("");
+
+  const openAdd = () => {
+    setEditTarget(null);
+    setForm(emptyCompany());
+    setFormError("");
+    setShowModal(true);
+  };
+
+  const openEdit = (company: Company) => {
+    setEditTarget(company);
+    setForm({ name: company.name, industry: company.industry, address: company.address, phone: company.phone, email: company.email, website: company.website ?? "", logo: company.logo ?? "" });
+    setFormError("");
+    setShowModal(true);
+  };
+
+  const saveCompany = () => {
+    if (!form.name.trim()) { setFormError("Company name is required."); return; }
+    if (!form.email.trim()) { setFormError("Email is required."); return; }
+    if (editTarget) {
+      setCompaniesList(prev => prev.map(c => c.id === editTarget.id ? { ...editTarget, ...form } : c));
+    } else {
+      const newId = `c${Date.now()}`;
+      setCompaniesList(prev => [...prev, { id: newId, createdAt: new Date().toISOString().slice(0, 10), ...form }]);
+      setActiveCompanyId(newId);
+    }
+    setShowModal(false);
+  };
 
   const systemStats = [
-    { label: "Total Companies", value: companies.length, icon: Building2, color: "text-blue-600", bg: "bg-blue-50" },
+    { label: "Total Companies", value: companiesList.length, icon: Building2, color: "text-blue-600", bg: "bg-blue-50" },
     { label: "Total Users", value: users.length, icon: Users, color: "text-purple-600", bg: "bg-purple-50" },
     { label: "Active Users", value: users.filter(u => u.status === "active").length, icon: CheckCircle, color: "text-green-600", bg: "bg-green-50" },
     { label: "Audit Events", value: auditLogs.length, icon: Activity, color: "text-orange-600", bg: "bg-orange-50" },
@@ -91,35 +129,43 @@ export default function AdminPage() {
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
               <h3 className="font-semibold text-gray-900">Registered Companies</h3>
-              <Button size="sm">
-                <Building2 className="w-4 h-4 mr-2" /> Add Company
+              <Button size="sm" onClick={openAdd}>
+                <Plus className="w-4 h-4 mr-2" /> Add Company
               </Button>
             </div>
             <div className="divide-y divide-gray-50">
-              {companies.map(company => {
+              {companiesList.map(company => {
                 const companyUsers = users.filter(u => u.companyId === company.id);
+                const isActive = company.id === activeCompanyId;
                 return (
-                  <div key={company.id} className="px-5 py-4 flex items-center justify-between hover:bg-gray-50">
+                  <div key={company.id} className={`px-5 py-4 flex items-center justify-between hover:bg-gray-50 ${isActive ? "bg-blue-50/40" : ""}`}>
                     <div className="flex items-center gap-4">
-                      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold">
-                        {company.name.charAt(0)}
+                      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg">
+                        {company.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900">{company.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-gray-900">{company.name}</p>
+                          {isActive && <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-medium">Active</span>}
+                        </div>
                         <p className="text-xs text-gray-400">{company.industry} · {company.address}</p>
                         <p className="text-xs text-gray-400">{company.email} · {company.phone}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-4">
                       <div className="text-center">
                         <p className="text-lg font-bold text-gray-900">{companyUsers.length}</p>
                         <p className="text-xs text-gray-400">Users</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium">Active</span>
-                        <Button variant="ghost" size="icon">
-                          <Eye className="w-4 h-4 text-gray-400" />
+                        <Button variant="outline" size="sm" onClick={() => openEdit(company)}>
+                          <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
                         </Button>
+                        {!isActive && (
+                          <Button size="sm" onClick={() => setActiveCompanyId(company.id)}>
+                            <ArrowLeftRight className="w-3.5 h-3.5 mr-1" /> Switch
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -426,6 +472,64 @@ export default function AdminPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Add / Edit Company Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+                  <Building2 className="w-5 h-5 text-blue-600" />
+                </div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {editTarget ? "Edit Company" : "Add New Company"}
+                </h2>
+              </div>
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {formError && (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700">{formError}</div>
+              )}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Company Name <span className="text-red-500">*</span></label>
+                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. PHID Technologies Ltd" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Industry</label>
+                <Input value={form.industry} onChange={e => setForm(f => ({ ...f, industry: e.target.value }))} placeholder="e.g. Technology, Logistics, Retail" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Email <span className="text-red-500">*</span></label>
+                <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="info@company.co.tz" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Phone</label>
+                <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+255 700 000 000" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Address</label>
+                <Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Dar es Salaam, Tanzania" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Website</label>
+                <Input value={form.website} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} placeholder="www.company.co.tz" />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => setShowModal(false)}>Cancel</Button>
+              <Button onClick={saveCompany}>
+                {editTarget ? "Save Changes" : "Add Company"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </MainLayout>
   );
 }
