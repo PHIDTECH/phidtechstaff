@@ -10,10 +10,11 @@ import {
   Settings, Users, Building2, Activity, RefreshCw, Download,
   CheckCircle, AlertTriangle, Database, Pencil, ArrowLeftRight, X, Plus
 } from "lucide-react";
-import { auditLogs, companies as initialCompanies, users } from "@/lib/data";
+import { auditLogs, users } from "@/lib/data";
 import { formatDateTime, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { Company } from "@/lib/types";
+import { useCompanies } from "@/lib/useCompanies";
 
 const emptyCompany = (): Omit<Company, "id" | "createdAt"> => ({
   name: "", industry: "", address: "", phone: "", email: "", website: "", logo: ""
@@ -22,8 +23,7 @@ const emptyCompany = (): Omit<Company, "id" | "createdAt"> => ({
 export default function AdminPage() {
   const [brandName, setBrandName] = useState("PHIDTECH MS");
   const [primaryColor, setPrimaryColor] = useState("#2563eb");
-  const [companiesList, setCompaniesList] = useState<Company[]>(initialCompanies);
-  const [activeCompanyId, setActiveCompanyId] = useState(initialCompanies[0]?.id ?? "c1");
+  const { companiesList, activeCompanyId, setActiveCompanyId, addCompany, editCompany } = useCompanies();
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Company | null>(null);
   const [form, setForm] = useState(emptyCompany());
@@ -47,11 +47,9 @@ export default function AdminPage() {
     if (!form.name.trim()) { setFormError("Company name is required."); return; }
     if (!form.email.trim()) { setFormError("Email is required."); return; }
     if (editTarget) {
-      setCompaniesList(prev => prev.map(c => c.id === editTarget.id ? { ...editTarget, ...form } : c));
+      editCompany(editTarget.id, form);
     } else {
-      const newId = `c${Date.now()}`;
-      setCompaniesList(prev => [...prev, { id: newId, createdAt: new Date().toISOString().slice(0, 10), ...form }]);
-      setActiveCompanyId(newId);
+      addCompany(form);
     }
     setShowModal(false);
   };

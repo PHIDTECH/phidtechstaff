@@ -2,8 +2,9 @@
 import { Bell, Search, Menu, ChevronDown, Building2, LogOut, User, Settings } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
-import { notifications, companies, currentUser } from "@/lib/data";
+import { notifications, currentUser } from "@/lib/data";
 import { getInitials, formatDateTime } from "@/lib/utils";
+import { useCompanies } from "@/lib/useCompanies";
 
 interface HeaderProps {
   onMobileMenuOpen: () => void;
@@ -13,6 +14,7 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showCompanySwitcher, setShowCompanySwitcher] = useState(false);
+  const { companiesList, activeCompanyId, activeCompany, setActiveCompanyId } = useCompanies();
 
   const unread = notifications.filter((n) => !n.read).length;
 
@@ -34,27 +36,27 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-50 border border-gray-100 text-sm"
           >
             <Building2 className="w-4 h-4 text-blue-600" />
-            <span className="font-medium text-gray-700 hidden sm:block">Phid Technologies Ltd</span>
+            <span className="font-medium text-gray-700 hidden sm:block">{activeCompany?.name ?? "Select Company"}</span>
             <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
           </button>
 
           {showCompanySwitcher && (
             <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
               <p className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Switch Company</p>
-              {companies.map((c) => (
+              {companiesList.map((c) => (
                 <button
                   key={c.id}
-                  onClick={() => setShowCompanySwitcher(false)}
+                  onClick={() => { setActiveCompanyId(c.id); setShowCompanySwitcher(false); }}
                   className="flex items-center gap-3 w-full px-3 py-2 hover:bg-gray-50 text-left"
                 >
                   <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
-                    {c.name.charAt(0)}
+                    {c.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-800">{c.name}</p>
                     <p className="text-xs text-gray-400">{c.industry}</p>
                   </div>
-                  {c.id === "c1" && (
+                  {c.id === activeCompanyId && (
                     <span className="ml-auto text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">Active</span>
                   )}
                 </button>
