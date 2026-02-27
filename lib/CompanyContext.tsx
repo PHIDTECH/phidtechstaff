@@ -10,6 +10,7 @@ interface CompanyContextType {
   companiesList: Company[];
   activeCompanyId: string;
   activeCompany: Company | undefined;
+  hydrated: boolean;
   setActiveCompanyId: (id: string) => void;
   addCompany: (c: Omit<Company, "id" | "createdAt">) => Company;
   editCompany: (id: string, c: Omit<Company, "id" | "createdAt">) => void;
@@ -20,6 +21,7 @@ const CompanyContext = createContext<CompanyContextType | null>(null);
 export function CompanyProvider({ children }: { children: ReactNode }) {
   const [companiesList, setCompaniesList] = useState<Company[]>(defaultCompanies);
   const [activeCompanyId, setActiveCompanyIdState] = useState<string>(defaultCompanies[0]?.id ?? "c1");
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     try {
@@ -28,6 +30,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       const active = localStorage.getItem(ACTIVE_KEY);
       if (active) setActiveCompanyIdState(active);
     } catch {}
+    setHydrated(true);
   }, []);
 
   const persist = (list: Company[]) => {
@@ -54,7 +57,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const activeCompany = companiesList.find(c => c.id === activeCompanyId) ?? companiesList[0];
 
   return (
-    <CompanyContext.Provider value={{ companiesList, activeCompanyId, activeCompany, setActiveCompanyId, addCompany, editCompany }}>
+    <CompanyContext.Provider value={{ companiesList, activeCompanyId, activeCompany, hydrated, setActiveCompanyId, addCompany, editCompany }}>
       {children}
     </CompanyContext.Provider>
   );
@@ -64,6 +67,7 @@ const fallback: CompanyContextType = {
   companiesList: defaultCompanies,
   activeCompanyId: defaultCompanies[0]?.id ?? "c1",
   activeCompany: defaultCompanies[0],
+  hydrated: false,
   setActiveCompanyId: () => {},
   addCompany: (c) => ({ ...c, id: "c1", createdAt: "" }),
   editCompany: () => {},

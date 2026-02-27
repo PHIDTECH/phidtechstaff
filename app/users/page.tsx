@@ -134,7 +134,7 @@ export default function UsersPage() {
   const [customDept, setCustomDept] = useState("");
   const [deptsList, setDeptsList] = useState<string[]>(DEFAULT_DEPARTMENTS);
   const [usersList, setUsersList] = useState<StaffUser[]>([]);
-  const { activeCompanyId, activeCompany } = useCompanyContext();
+  const { activeCompanyId, activeCompany, hydrated } = useCompanyContext();
 
   useEffect(() => {
     try {
@@ -155,7 +155,7 @@ export default function UsersPage() {
     try { localStorage.setItem("phidtech_departments", JSON.stringify(list)); } catch {}
   };
 
-  const companyUsers = usersList.filter(u => u.companyId === activeCompanyId);
+  const companyUsers = hydrated ? usersList.filter(u => u.companyId === activeCompanyId) : [];
 
   const filtered = companyUsers.filter(u => {
     const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
