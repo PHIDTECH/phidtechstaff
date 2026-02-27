@@ -20,7 +20,6 @@ import {
   UserCheck, Edit, Eye, Lock, CheckSquare, Square, X, Plus, Trash2
 } from "lucide-react";
 import { formatDate, formatCurrency, getInitials, getStatusColor } from "@/lib/utils";
-import { useCompanyContext } from "@/lib/CompanyContext";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface StaffUser {
@@ -96,6 +95,8 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
 };
 
 const USERS_KEY = "phidtech_users";
+const ACTIVE_KEY = "phidtech_active_company";
+const COMPANIES_KEY = "phidtech_companies";
 
 function positionColor(pos: string) {
   const found = STAFF_POSITIONS.find(p => p.value === pos);
@@ -115,11 +116,20 @@ function positionLabel(pos: string) {
   return STAFF_POSITIONS.find(p => p.value === pos)?.label ?? pos;
 }
 
-const emptyForm = () => ({
+const emptyForm = (companyId = "") => ({
   name: "", email: "", password: "", phone: "",
   department: "", position: "staff", salary: "",
   status: "active", permissions: DEFAULT_PERMISSIONS["staff"],
+  companyId,
 });
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function lsGet<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
+}
+function lsStr(key: string, fallback = ""): string {
+  try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+}
 
 // ── Component ───────────────────────────────────────────────────────────────
 export default function UsersPage() {
@@ -134,27 +144,33 @@ export default function UsersPage() {
   const [customDept, setCustomDept] = useState("");
   const [deptsList, setDeptsList] = useState<string[]>(DEFAULT_DEPARTMENTS);
   const [usersList, setUsersList] = useState<StaffUser[]>([]);
-  const [resolvedCompanyId, setResolvedCompanyId] = useState<string>("");
-  const { activeCompanyId, activeCompany } = useCompanyContext();
+  const [activeCompanyId, setActiveCompanyId] = useState<string>("");
+  const [companiesList, setCompaniesList] = useState<Array<{id:string;name:string;industry?:string}>>([]);
+
+  // Load everything directly from localStorage — no context race
+  const reload = () => {
+    setUsersList(lsGet<StaffUser[]>(USERS_KEY, []));
+    setDeptsList(lsGet<string[]>("phidtech_departments", DEFAULT_DEPARTMENTS));
+    setCompaniesList(lsGet(COMPANIES_KEY, []));
+    setActiveCompanyId(lsStr(ACTIVE_KEY));
+  };
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(USERS_KEY);
-      if (stored) setUsersList(JSON.parse(stored));
-      const storedDepts = localStorage.getItem("phidtech_departments");
-      if (storedDepts) setDeptsList(JSON.parse(storedDepts));
-      // Read companyId directly from localStorage to avoid context race
-      const active = localStorage.getItem("phidtech_active_company");
-      setResolvedCompanyId(active ?? activeCompanyId);
-    } catch {
-      setResolvedCompanyId(activeCompanyId);
-    }
+    reload();
+    // Listen for company switches from the header
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === ACTIVE_KEY || e.key === USERS_KEY || e.key === COMPANIES_KEY) reload();
+    };
+    const onCustom = () => reload();
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("phidtech_companies_updated", onCustom);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("phidtech_companies_updated", onCustom);
+    };
   }, []);
 
-  // Keep in sync when user switches company via header
-  useEffect(() => {
-    if (activeCompanyId) setResolvedCompanyId(activeCompanyId);
-  }, [activeCompanyId]);
+  const activeCompany = companiesList.find(c => c.id === activeCompanyId) ?? companiesList[0];
 
   const saveUsers = (list: StaffUser[]) => {
     setUsersList(list);
@@ -166,8 +182,8 @@ export default function UsersPage() {
     try { localStorage.setItem("phidtech_departments", JSON.stringify(list)); } catch {}
   };
 
-  const companyUsers = resolvedCompanyId
-    ? usersList.filter(u => u.companyId === resolvedCompanyId)
+  const companyUsers = activeCompanyId
+    ? usersList.filter(u => u.companyId === activeCompanyId)
     : [];
 
   const filtered = companyUsers.filter(u => {
@@ -182,13 +198,13 @@ export default function UsersPage() {
   const managerCount = companyUsers.filter(u => u.position === "manager").length;
   const deptCount = [...new Set(companyUsers.map(u => u.department))].length;
 
-  const openAdd = () => { setForm(emptyForm()); setFormError(""); setShowAddDialog(true); };
+  const openAdd = () => { setForm(emptyForm(activeCompanyId)); setFormError(""); setShowAddDialog(true); };
 
   const openEdit = (u: StaffUser) => {
     setEditUser(u);
     setForm({ name: u.name, email: u.email, password: u.password, phone: u.phone,
       department: u.department, position: u.position, salary: String(u.salary),
-      status: u.status, permissions: [...u.permissions] });
+      status: u.status, permissions: [...u.permissions], companyId: u.companyId });
     setFormError("");
     setShowEditDialog(true);
   };
@@ -213,6 +229,7 @@ export default function UsersPage() {
   };
 
   const saveUser = (isEdit = false) => {
+    if (!isEdit && !form.companyId) { setFormError("Please select a company."); return; }
     if (!form.name.trim()) { setFormError("Full name is required."); return; }
     if (!form.email.trim()) { setFormError("Email is required."); return; }
     if (!isEdit && !form.password.trim()) { setFormError("Password is required."); return; }
@@ -230,7 +247,7 @@ export default function UsersPage() {
       setShowEditDialog(false);
     } else {
       const newUser: StaffUser = {
-        id: `u${Date.now()}`, companyId: resolvedCompanyId || activeCompanyId,
+        id: `u${Date.now()}`, companyId: form.companyId || activeCompanyId,
         name: form.name, email: form.email, password: form.password,
         phone: form.phone, department: form.department,
         position: form.position, role: form.position,
@@ -252,7 +269,7 @@ export default function UsersPage() {
     <MainLayout>
       <PageHeader
         title="Users & Role Management"
-        subtitle={`Managing staff for: ${activeCompany?.name ?? "Your Company"}`}
+        subtitle={`Managing staff for: ${activeCompany?.name ?? "Select a company"}`}
         icon={Users}
         actions={
           <Button size="sm" onClick={openAdd}>
@@ -512,6 +529,19 @@ export default function UsersPage() {
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Company <span className="text-red-500">*</span></label>
+                <Select value={form.companyId} onValueChange={v => setForm(f => ({ ...f, companyId: v }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select company" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companiesList.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="col-span-2">
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Full Name <span className="text-red-500">*</span></label>
                 <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. John Mwalimu" />
