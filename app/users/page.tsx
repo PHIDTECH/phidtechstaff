@@ -1,12 +1,11 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -17,231 +16,415 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Users, UserPlus, Search, Filter, MoreVertical, Mail,
-  Phone, Building2, Shield, UserCheck, UserX, Edit, Eye
+  Users, UserPlus, Search, Mail, Phone, Building2, Shield,
+  UserCheck, Edit, Eye, Lock, CheckSquare, Square, X, Plus, Trash2
 } from "lucide-react";
-import { users, departments } from "@/lib/data";
 import { formatDate, formatCurrency, getInitials, getStatusColor } from "@/lib/utils";
 import { useCompanyContext } from "@/lib/CompanyContext";
 
+// ── Types ──────────────────────────────────────────────────────────────────
+interface StaffUser {
+  id: string;
+  companyId: string;
+  name: string;
+  email: string;
+  password: string;
+  phone: string;
+  department: string;
+  position: string;
+  role: string;          // admin | manager | accountant | hr | sales | staff | ...
+  salary: number;
+  joinDate: string;
+  status: string;
+  permissions: string[];
+}
+
+// ── Constants ───────────────────────────────────────────────────────────────
+const DEFAULT_DEPARTMENTS = [
+  "Administration", "Human Resources", "Finance & Accounting", "Sales & Marketing",
+  "Information Technology", "Operations", "Customer Service", "Procurement",
+  "Legal & Compliance", "Research & Development", "Logistics", "Production",
+];
+
+const STAFF_POSITIONS = [
+  { value: "admin",             label: "System Admin",        color: "red" },
+  { value: "manager",           label: "Manager / HOD",       color: "purple" },
+  { value: "accountant",        label: "Accountant",          color: "green" },
+  { value: "hr",                label: "HR Officer",          color: "orange" },
+  { value: "sales",             label: "Sales & Marketing",   color: "blue" },
+  { value: "it",                label: "IT Officer",          color: "cyan" },
+  { value: "procurement",       label: "Procurement Officer", color: "yellow" },
+  { value: "customer_service",  label: "Customer Service",    color: "pink" },
+  { value: "legal",             label: "Legal Officer",       color: "indigo" },
+  { value: "logistics",         label: "Logistics Officer",   color: "teal" },
+  { value: "staff",             label: "General Staff",       color: "gray" },
+];
+
+const ALL_PERMISSIONS = [
+  { key: "dashboard",    label: "Dashboard" },
+  { key: "users",        label: "Users & Roles" },
+  { key: "attendance",   label: "Attendance" },
+  { key: "leave",        label: "Leave Management" },
+  { key: "payroll",      label: "Payroll & Salary" },
+  { key: "tasks",        label: "Tasks" },
+  { key: "kpis",         label: "KPIs & Reports" },
+  { key: "assets",       label: "Assets" },
+  { key: "expenses",     label: "Expenses" },
+  { key: "accounting",   label: "Accounting" },
+  { key: "invoices",     label: "Invoices" },
+  { key: "sales",        label: "Sales" },
+  { key: "inventory",    label: "Inventory" },
+  { key: "customers",    label: "Customers" },
+  { key: "vendors",      label: "Vendors" },
+  { key: "documents",    label: "Documents" },
+  { key: "reports",      label: "Reports" },
+  { key: "admin",        label: "Admin Panel" },
+];
+
+const DEFAULT_PERMISSIONS: Record<string, string[]> = {
+  admin:            ALL_PERMISSIONS.map(p => p.key),
+  manager:          ["dashboard","attendance","leave","payroll","tasks","kpis","expenses","reports"],
+  accountant:       ["dashboard","accounting","invoices","expenses","payroll","reports"],
+  hr:               ["dashboard","users","attendance","leave","payroll","reports"],
+  sales:            ["dashboard","sales","customers","invoices","tasks","reports"],
+  it:               ["dashboard","tasks","assets","documents","reports"],
+  procurement:      ["dashboard","vendors","inventory","expenses","tasks"],
+  customer_service: ["dashboard","customers","tasks"],
+  legal:            ["dashboard","documents","reports"],
+  logistics:        ["dashboard","inventory","vendors","tasks"],
+  staff:            ["dashboard","attendance","leave","expenses"],
+};
+
+const USERS_KEY = "phidtech_users";
+
+function positionColor(pos: string) {
+  const found = STAFF_POSITIONS.find(p => p.value === pos);
+  const c = found?.color ?? "gray";
+  const map: Record<string, string> = {
+    red: "bg-red-50 text-red-700", purple: "bg-purple-50 text-purple-700",
+    green: "bg-green-50 text-green-700", orange: "bg-orange-50 text-orange-700",
+    blue: "bg-blue-50 text-blue-700", cyan: "bg-cyan-50 text-cyan-700",
+    yellow: "bg-yellow-50 text-yellow-700", pink: "bg-pink-50 text-pink-700",
+    indigo: "bg-indigo-50 text-indigo-700", teal: "bg-teal-50 text-teal-700",
+    gray: "bg-gray-100 text-gray-700",
+  };
+  return map[c] ?? map.gray;
+}
+
+function positionLabel(pos: string) {
+  return STAFF_POSITIONS.find(p => p.value === pos)?.label ?? pos;
+}
+
+const emptyForm = () => ({
+  name: "", email: "", password: "", phone: "",
+  department: "", position: "staff", salary: "",
+  status: "active", permissions: DEFAULT_PERMISSIONS["staff"],
+});
+
+// ── Component ───────────────────────────────────────────────────────────────
 export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<typeof users[0] | null>(null);
-  const { activeCompanyId } = useCompanyContext();
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<StaffUser | null>(null);
+  const [editUser, setEditUser] = useState<StaffUser | null>(null);
+  const [form, setForm] = useState(emptyForm());
+  const [formError, setFormError] = useState("");
+  const [customDept, setCustomDept] = useState("");
+  const [deptsList, setDeptsList] = useState<string[]>(DEFAULT_DEPARTMENTS);
+  const [usersList, setUsersList] = useState<StaffUser[]>([]);
+  const { activeCompanyId, activeCompany } = useCompanyContext();
 
-  const companyUsers = users.filter(u => u.companyId === activeCompanyId || u.companyId === "c1");
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(USERS_KEY);
+      if (stored) setUsersList(JSON.parse(stored));
+      const storedDepts = localStorage.getItem("phidtech_departments");
+      if (storedDepts) setDeptsList(JSON.parse(storedDepts));
+    } catch {}
+  }, []);
+
+  const saveUsers = (list: StaffUser[]) => {
+    setUsersList(list);
+    try { localStorage.setItem(USERS_KEY, JSON.stringify(list)); } catch {}
+  };
+
+  const saveDepts = (list: string[]) => {
+    setDeptsList(list);
+    try { localStorage.setItem("phidtech_departments", JSON.stringify(list)); } catch {}
+  };
+
+  const companyUsers = usersList.filter(u => u.companyId === activeCompanyId);
+
   const filtered = companyUsers.filter(u => {
     const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase()) ||
       u.department.toLowerCase().includes(search.toLowerCase());
-    const matchRole = roleFilter === "all" || u.role === roleFilter;
+    const matchRole = roleFilter === "all" || u.position === roleFilter;
     return matchSearch && matchRole;
   });
 
-  const adminCount = companyUsers.filter(u => u.role === "admin").length;
-  const managerCount = companyUsers.filter(u => u.role === "manager").length;
-  const staffCount = companyUsers.filter(u => u.role === "staff").length;
   const activeCount = companyUsers.filter(u => u.status === "active").length;
+  const managerCount = companyUsers.filter(u => u.position === "manager").length;
+  const deptCount = [...new Set(companyUsers.map(u => u.department))].length;
+
+  const openAdd = () => { setForm(emptyForm()); setFormError(""); setShowAddDialog(true); };
+
+  const openEdit = (u: StaffUser) => {
+    setEditUser(u);
+    setForm({ name: u.name, email: u.email, password: u.password, phone: u.phone,
+      department: u.department, position: u.position, salary: String(u.salary),
+      status: u.status, permissions: [...u.permissions] });
+    setFormError("");
+    setShowEditDialog(true);
+  };
+
+  const handlePositionChange = (pos: string) => {
+    setForm(f => ({ ...f, position: pos, permissions: DEFAULT_PERMISSIONS[pos] ?? DEFAULT_PERMISSIONS.staff }));
+  };
+
+  const togglePerm = (key: string) => {
+    setForm(f => ({
+      ...f,
+      permissions: f.permissions.includes(key)
+        ? f.permissions.filter(p => p !== key)
+        : [...f.permissions, key],
+    }));
+  };
+
+  const addCustomDept = () => {
+    if (!customDept.trim() || deptsList.includes(customDept.trim())) return;
+    saveDepts([...deptsList, customDept.trim()]);
+    setCustomDept("");
+  };
+
+  const saveUser = (isEdit = false) => {
+    if (!form.name.trim()) { setFormError("Full name is required."); return; }
+    if (!form.email.trim()) { setFormError("Email is required."); return; }
+    if (!isEdit && !form.password.trim()) { setFormError("Password is required."); return; }
+    if (!isEdit && form.password.length < 6) { setFormError("Password must be at least 6 characters."); return; }
+    if (!form.department) { setFormError("Department is required."); return; }
+    if (isEdit && editUser) {
+      const updated = usersList.map(u => u.id === editUser.id ? {
+        ...u, name: form.name, email: form.email,
+        password: form.password || u.password,
+        phone: form.phone, department: form.department,
+        position: form.position, salary: Number(form.salary) || 0,
+        status: form.status, permissions: form.permissions,
+      } : u);
+      saveUsers(updated);
+      setShowEditDialog(false);
+    } else {
+      const newUser: StaffUser = {
+        id: `u${Date.now()}`, companyId: activeCompanyId,
+        name: form.name, email: form.email, password: form.password,
+        phone: form.phone, department: form.department,
+        position: form.position, role: form.position,
+        salary: Number(form.salary) || 0,
+        joinDate: new Date().toISOString().slice(0, 10),
+        status: form.status, permissions: form.permissions,
+      };
+      saveUsers([...usersList, newUser]);
+      setShowAddDialog(false);
+    }
+  };
+
+  const deleteUser = (id: string) => {
+    if (!confirm("Delete this employee?")) return;
+    saveUsers(usersList.filter(u => u.id !== id));
+  };
 
   return (
     <MainLayout>
       <PageHeader
         title="Users & Role Management"
-        subtitle="Manage staff profiles, roles, and permissions"
+        subtitle={`Managing staff for: ${activeCompany?.name ?? "Your Company"}`}
         icon={Users}
         actions={
-          <>
-            <Button variant="outline" size="sm">
-              <Filter className="w-4 h-4 mr-2" /> Export
-            </Button>
-            <Button size="sm" onClick={() => setShowAddDialog(true)}>
-              <UserPlus className="w-4 h-4 mr-2" /> Add User
-            </Button>
-          </>
+          <Button size="sm" onClick={openAdd}>
+            <UserPlus className="w-4 h-4 mr-2" /> Add Employee
+          </Button>
         }
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Total Staff" value={companyUsers.length} icon={Users} iconBg="bg-blue-50" iconColor="text-blue-600" subtitle="All companies" />
+        <StatCard title="Total Staff" value={companyUsers.length} icon={Users} iconBg="bg-blue-50" iconColor="text-blue-600" subtitle={activeCompany?.name} />
         <StatCard title="Active" value={activeCount} icon={UserCheck} iconBg="bg-green-50" iconColor="text-green-600" subtitle="Currently active" />
-        <StatCard title="Managers" value={managerCount} icon={Shield} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="Team leads" />
-        <StatCard title="Departments" value={departments.filter(d => d.companyId === "c1").length} icon={Building2} iconBg="bg-orange-50" iconColor="text-orange-600" subtitle="Active depts" />
+        <StatCard title="Managers" value={managerCount} icon={Shield} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="HODs & Managers" />
+        <StatCard title="Departments" value={deptCount} icon={Building2} iconBg="bg-orange-50" iconColor="text-orange-600" subtitle="Active depts" />
       </div>
 
       <Tabs defaultValue="list">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <TabsList>
             <TabsTrigger value="list">Staff List</TabsTrigger>
-            <TabsTrigger value="roles">Roles & Permissions</TabsTrigger>
+            <TabsTrigger value="roles">Positions & Permissions</TabsTrigger>
             <TabsTrigger value="departments">Departments</TabsTrigger>
           </TabsList>
           <div className="flex items-center gap-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                placeholder="Search staff..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 w-56"
-              />
+              <Input placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 w-56" />
             </div>
             <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="w-36">
-                <SelectValue placeholder="Filter by role" />
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="All Positions" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Roles</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="manager">Manager</SelectItem>
-                <SelectItem value="staff">Staff</SelectItem>
+                <SelectItem value="all">All Positions</SelectItem>
+                {STAFF_POSITIONS.map(p => (
+                  <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
         </div>
 
+        {/* ── Staff List ── */}
         <TabsContent value="list">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Salary</TableHead>
-                  <TableHead>Join Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-9 h-9">
-                          <AvatarFallback className="text-xs">{getInitials(user.name)}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium text-gray-900">{user.name}</p>
-                          <p className="text-xs text-gray-400">{user.email}</p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="text-sm text-gray-700">{user.department}</p>
-                        <p className="text-xs text-gray-400">{user.position}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                        user.role === "admin" ? "bg-red-50 text-red-700" :
-                        user.role === "manager" ? "bg-purple-50 text-purple-700" :
-                        "bg-blue-50 text-blue-700"
-                      }`}>
-                        {user.role}
-                      </span>
-                    </TableCell>
-                    <TableCell className="font-medium text-gray-800">{formatCurrency(user.salary)}</TableCell>
-                    <TableCell className="text-gray-500 text-sm">{formatDate(user.joinDate)}</TableCell>
-                    <TableCell>
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(user.status)}`}>
-                        {user.status}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => setSelectedUser(user)}>
-                          <Eye className="w-4 h-4 text-gray-400" />
-                        </Button>
-                        <Button variant="ghost" size="icon">
-                          <Edit className="w-4 h-4 text-gray-400" />
-                        </Button>
-                        <Button variant="ghost" size="icon">
-                          <MoreVertical className="w-4 h-4 text-gray-400" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="roles">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { role: "Admin", color: "red", count: adminCount, desc: "Full system access", perms: ["All modules", "User management", "System settings", "Audit logs", "Backup/restore"] },
-              { role: "Manager", color: "purple", count: managerCount, desc: "Department level access", perms: ["Own department data", "Approve leave/expenses", "View reports", "Manage tasks", "KPI tracking"] },
-              { role: "Staff", color: "blue", count: staffCount, desc: "Limited personal access", perms: ["Own profile", "Submit leave", "View tasks", "Expense claims", "Attendance records"] },
-            ].map((r) => (
-              <div key={r.role} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                    r.color === "red" ? "bg-red-50" : r.color === "purple" ? "bg-purple-50" : "bg-blue-50"
-                  }`}>
-                    <Shield className={`w-5 h-5 ${
-                      r.color === "red" ? "text-red-600" : r.color === "purple" ? "text-purple-600" : "text-blue-600"
-                    }`} />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">{r.role}</p>
-                    <p className="text-xs text-gray-400">{r.count} users</p>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-500 mb-3">{r.desc}</p>
-                <div className="space-y-1.5">
-                  {r.perms.map((p) => (
-                    <div key={p} className="flex items-center gap-2 text-sm text-gray-600">
-                      <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                      {p}
-                    </div>
-                  ))}
-                </div>
+            {companyUsers.length === 0 ? (
+              <div className="py-16 text-center text-gray-400">
+                <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p className="font-medium">No employees yet</p>
+                <p className="text-sm mt-1">Click "Add Employee" to create the first staff account</p>
               </div>
-            ))}
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Position</TableHead>
+                    <TableHead>Salary</TableHead>
+                    <TableHead>Join Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map(user => (
+                    <TableRow key={user.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="w-9 h-9">
+                            <AvatarFallback className="text-xs">{getInitials(user.name)}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium text-gray-900">{user.name}</p>
+                            <p className="text-xs text-gray-400">{user.email}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-700">{user.department}</TableCell>
+                      <TableCell>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${positionColor(user.position)}`}>
+                          {positionLabel(user.position)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-medium text-gray-800">{formatCurrency(user.salary)}</TableCell>
+                      <TableCell className="text-gray-500 text-sm">{formatDate(user.joinDate)}</TableCell>
+                      <TableCell>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(user.status)}`}>
+                          {user.status}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => setSelectedUser(user)}>
+                            <Eye className="w-4 h-4 text-gray-400" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => openEdit(user)}>
+                            <Edit className="w-4 h-4 text-gray-400" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => deleteUser(user.id)}>
+                            <Trash2 className="w-4 h-4 text-red-400" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </div>
         </TabsContent>
 
-        <TabsContent value="departments">
+        {/* ── Positions & Permissions ── */}
+        <TabsContent value="roles">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {departments.filter(d => d.companyId === "c1").map((dept) => {
-              const manager = users.find(u => u.id === dept.managerId);
-              const deptUsers = users.filter(u => u.department === dept.name && u.companyId === "c1");
+            {STAFF_POSITIONS.map(pos => {
+              const count = companyUsers.filter(u => u.position === pos.value).length;
+              const perms = DEFAULT_PERMISSIONS[pos.value] ?? [];
               return (
-                <div key={dept.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <div key={pos.value} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                      <Shield className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">{pos.label}</p>
+                      <p className="text-xs text-gray-400">{count} employee{count !== 1 ? "s" : ""}</p>
+                    </div>
+                    <span className={`ml-auto text-xs px-2 py-0.5 rounded-full font-medium ${positionColor(pos.value)}`}>
+                      {pos.value}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 mt-3">
+                    {ALL_PERMISSIONS.map(p => (
+                      <div key={p.key} className="flex items-center gap-2 text-xs text-gray-600">
+                        {perms.includes(p.key)
+                          ? <CheckSquare className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                          : <Square className="w-3.5 h-3.5 text-gray-300 shrink-0" />}
+                        {p.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </TabsContent>
+
+        {/* ── Departments ── */}
+        <TabsContent value="departments">
+          <div className="mb-4 flex items-center gap-2">
+            <Input
+              placeholder="Add new department name..."
+              value={customDept}
+              onChange={e => setCustomDept(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && addCustomDept()}
+              className="max-w-xs"
+            />
+            <Button size="sm" onClick={addCustomDept} variant="outline">
+              <Plus className="w-4 h-4 mr-1" /> Add
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {deptsList.map(dept => {
+              const deptUsers = companyUsers.filter(u => u.department === dept);
+              return (
+                <div key={dept} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <h3 className="font-semibold text-gray-900">{dept.name}</h3>
-                      <p className="text-xs text-gray-400 mt-0.5">{deptUsers.length} members</p>
+                      <h3 className="font-semibold text-gray-900">{dept}</h3>
+                      <p className="text-xs text-gray-400 mt-0.5">{deptUsers.length} member{deptUsers.length !== 1 ? "s" : ""}</p>
                     </div>
-                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">{dept.headCount} headcount</span>
+                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">{deptUsers.length} staff</span>
                   </div>
-                  {manager && (
-                    <div className="flex items-center gap-2 mb-3 p-2 bg-gray-50 rounded-lg">
-                      <Avatar className="w-7 h-7">
-                        <AvatarFallback className="text-xs">{getInitials(manager.name)}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="text-xs font-medium text-gray-800">{manager.name}</p>
-                        <p className="text-xs text-gray-400">Department Head</p>
-                      </div>
-                    </div>
-                  )}
                   <div className="flex flex-wrap gap-1.5">
-                    {deptUsers.slice(0, 4).map((u) => (
+                    {deptUsers.slice(0, 5).map(u => (
                       <Avatar key={u.id} className="w-7 h-7">
                         <AvatarFallback className="text-[10px]">{getInitials(u.name)}</AvatarFallback>
                       </Avatar>
                     ))}
-                    {deptUsers.length > 4 && (
+                    {deptUsers.length > 5 && (
                       <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-medium text-gray-500">
-                        +{deptUsers.length - 4}
+                        +{deptUsers.length - 5}
                       </div>
                     )}
+                    {deptUsers.length === 0 && <p className="text-xs text-gray-400 italic">No staff assigned</p>}
                   </div>
                 </div>
               );
@@ -250,12 +433,10 @@ export default function UsersPage() {
         </TabsContent>
       </Tabs>
 
-      {/* View User Dialog */}
+      {/* ── View Employee Dialog ── */}
       <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>
         <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Employee Profile</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Employee Profile</DialogTitle></DialogHeader>
           {selectedUser && (
             <div className="space-y-4">
               <div className="flex items-center gap-4">
@@ -264,90 +445,154 @@ export default function UsersPage() {
                 </Avatar>
                 <div>
                   <h3 className="font-bold text-gray-900 text-lg">{selectedUser.name}</h3>
-                  <p className="text-gray-500">{selectedUser.position}</p>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(selectedUser.status)}`}>{selectedUser.status}</span>
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${positionColor(selectedUser.position)}`}>
+                    {positionLabel(selectedUser.position)}
+                  </span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 {[
-                  { label: "Email", value: selectedUser.email, icon: Mail },
-                  { label: "Phone", value: selectedUser.phone, icon: Phone },
-                  { label: "Department", value: selectedUser.department, icon: Building2 },
-                  { label: "Role", value: selectedUser.role, icon: Shield },
-                  { label: "Salary", value: formatCurrency(selectedUser.salary), icon: null },
-                  { label: "Join Date", value: formatDate(selectedUser.joinDate), icon: null },
-                ].map((item) => (
+                  { label: "Email", value: selectedUser.email },
+                  { label: "Phone", value: selectedUser.phone },
+                  { label: "Department", value: selectedUser.department },
+                  { label: "Status", value: selectedUser.status },
+                  { label: "Salary", value: formatCurrency(selectedUser.salary) },
+                  { label: "Join Date", value: formatDate(selectedUser.joinDate) },
+                ].map(item => (
                   <div key={item.label} className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-gray-400 mb-1">{item.label}</p>
                     <p className="font-medium text-gray-800">{item.value}</p>
                   </div>
                 ))}
               </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Permissions</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedUser.permissions.map(p => (
+                    <span key={p} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{p}</span>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setSelectedUser(null)}>Close</Button>
-            <Button>Edit Profile</Button>
+            <Button onClick={() => { if (selectedUser) { openEdit(selectedUser); setSelectedUser(null); } }}>Edit</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Add User Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add New Employee</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Full Name</label>
-              <Input placeholder="Enter full name" />
+      {/* ── Add / Edit Employee Dialog ── */}
+      {[{ open: showAddDialog, onClose: () => setShowAddDialog(false), isEdit: false },
+        { open: showEditDialog, onClose: () => setShowEditDialog(false), isEdit: true }
+      ].map(({ open, onClose, isEdit }) => (
+        <Dialog key={isEdit ? "edit" : "add"} open={open} onOpenChange={onClose}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{isEdit ? "Edit Employee" : "Add New Employee"}</DialogTitle>
+            </DialogHeader>
+
+            {formError && (
+              <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700 flex items-center gap-2">
+                <X className="w-4 h-4 shrink-0" /> {formError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Full Name <span className="text-red-500">*</span></label>
+                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. John Mwalimu" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Email Address <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Input className="pl-9" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="staff@company.co.tz" />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                  Login Password {isEdit ? "(leave blank to keep)" : <span className="text-red-500">*</span>}
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Input className="pl-9" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder={isEdit ? "Leave blank to keep current" : "Min. 6 characters"} />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Phone Number</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Input className="pl-9" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+255 7XX XXX XXX" />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Department <span className="text-red-500">*</span></label>
+                <Select value={form.department} onValueChange={v => setForm(f => ({ ...f, department: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                  <SelectContent>
+                    {deptsList.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Position / Role <span className="text-red-500">*</span></label>
+                <Select value={form.position} onValueChange={handlePositionChange}>
+                  <SelectTrigger><SelectValue placeholder="Select position" /></SelectTrigger>
+                  <SelectContent>
+                    {STAFF_POSITIONS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Basic Salary (TZS)</label>
+                <Input type="number" value={form.salary} onChange={e => setForm(f => ({ ...f, salary: e.target.value }))} placeholder="0" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Status</label>
+                <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="suspended">Suspended</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Email</label>
-              <Input placeholder="email@company.co.tz" type="email" />
+
+            {/* Permissions */}
+            <div className="mt-2">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-gray-700">Module Permissions</p>
+                <div className="flex gap-2">
+                  <button className="text-xs text-blue-600 hover:underline" onClick={() => setForm(f => ({ ...f, permissions: ALL_PERMISSIONS.map(p => p.key) }))}>Select All</button>
+                  <span className="text-gray-300">|</span>
+                  <button className="text-xs text-gray-500 hover:underline" onClick={() => setForm(f => ({ ...f, permissions: [] }))}>Clear All</button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                {ALL_PERMISSIONS.map(p => (
+                  <button key={p.key} onClick={() => togglePerm(p.key)}
+                    className={`flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg transition-colors ${form.permissions.includes(p.key) ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-500 hover:bg-gray-100"}`}>
+                    {form.permissions.includes(p.key)
+                      ? <CheckSquare className="w-3.5 h-3.5 shrink-0 text-blue-600" />
+                      : <Square className="w-3.5 h-3.5 shrink-0 text-gray-400" />}
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Phone</label>
-              <Input placeholder="+255 7XX XXX XXX" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Department</label>
-              <Select>
-                <SelectTrigger><SelectValue placeholder="Select dept" /></SelectTrigger>
-                <SelectContent>
-                  {departments.filter(d => d.companyId === "c1").map(d => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Role</label>
-              <Select>
-                <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="staff">Staff</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Position</label>
-              <Input placeholder="Job title" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Basic Salary (TZS)</label>
-              <Input placeholder="0" type="number" />
-            </div>
-          </div>
-          <DialogFooter className="mt-2">
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>Cancel</Button>
-            <Button onClick={() => setShowAddDialog(false)}>Add Employee</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
+            <DialogFooter className="mt-2">
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+              <Button onClick={() => saveUser(isEdit)}>
+                {isEdit ? "Save Changes" : "Add Employee"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ))}
     </MainLayout>
   );
 }
