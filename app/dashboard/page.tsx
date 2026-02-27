@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-dynamic";
 import MainLayout from "@/components/layout/MainLayout";
 import StatCard from "@/components/shared/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
