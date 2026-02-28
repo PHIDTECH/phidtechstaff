@@ -36,7 +36,7 @@ export default function AdminPage() {
   const [primaryColor, setPrimaryColor] = useState("#2563eb");
   const [companiesList, setCompaniesList] = useState<Company[]>([]);
   const [activeCompanyId, setActiveCompanyIdState] = useState("");
-  const [staffUsers, setStaffUsers] = useState<{id:string;companyId:string;status:string}[]>([]);
+  const [staffUsers, setStaffUsers] = useState<{id:string;companyId:string;status:string;name:string}[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Company | null>(null);
   const [form, setForm] = useState(emptyCompany());
@@ -483,7 +483,7 @@ export default function AdminPage() {
               </TableHeader>
               <TableBody>
                 {auditLogs.map(log => {
-                  const user = staffUsers.find((u: {id:string;companyId:string;status:string} & {name?:string}) => u.id === log.userId);
+                  const user = staffUsers.find(u => u.id === log.userId);
                   return (
                     <TableRow key={log.id}>
                       <TableCell>
