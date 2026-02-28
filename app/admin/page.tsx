@@ -1,6 +1,6 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,21 @@ import {
   Settings, Users, Building2, Activity, RefreshCw, Download,
   CheckCircle, AlertTriangle, Database, Pencil, ArrowLeftRight, X, Plus
 } from "lucide-react";
-import { auditLogs, users } from "@/lib/data";
+import { auditLogs } from "@/lib/data";
 import { formatDateTime, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { Company } from "@/lib/types";
-import { useCompanyContext } from "@/lib/CompanyContext";
+
+const COMPANIES_KEY = "phidtech_companies";
+const ACTIVE_KEY = "phidtech_active_company";
+const USERS_KEY = "phidtech_users";
+
+function lsGet<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
+}
+function lsStr(key: string, fallback = ""): string {
+  try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+}
 
 const emptyCompany = (): Omit<Company, "id" | "createdAt"> => ({
   name: "", industry: "", address: "", phone: "", email: "", website: "", logo: ""
@@ -24,11 +34,49 @@ const emptyCompany = (): Omit<Company, "id" | "createdAt"> => ({
 export default function AdminPage() {
   const [brandName, setBrandName] = useState("PHIDTECH MS");
   const [primaryColor, setPrimaryColor] = useState("#2563eb");
-  const { companiesList, activeCompanyId, setActiveCompanyId, addCompany, editCompany } = useCompanyContext();
+  const [companiesList, setCompaniesList] = useState<Company[]>([]);
+  const [activeCompanyId, setActiveCompanyIdState] = useState("");
+  const [staffUsers, setStaffUsers] = useState<{id:string;companyId:string;status:string}[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Company | null>(null);
   const [form, setForm] = useState(emptyCompany());
   const [formError, setFormError] = useState("");
+
+  const reload = () => {
+    setCompaniesList(lsGet<Company[]>(COMPANIES_KEY, []));
+    setActiveCompanyIdState(lsStr(ACTIVE_KEY));
+    setStaffUsers(lsGet(USERS_KEY, []));
+  };
+
+  useEffect(() => {
+    reload();
+    const onCustom = () => reload();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === COMPANIES_KEY || e.key === ACTIVE_KEY || e.key === USERS_KEY) reload();
+    };
+    window.addEventListener("phidtech_companies_updated", onCustom);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("phidtech_companies_updated", onCustom);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
+  const persistCompanies = (list: Company[]) => {
+    setCompaniesList(list);
+    try {
+      localStorage.setItem(COMPANIES_KEY, JSON.stringify(list));
+      window.dispatchEvent(new Event("phidtech_companies_updated"));
+    } catch {}
+  };
+
+  const setActiveCompanyId = (id: string) => {
+    setActiveCompanyIdState(id);
+    try {
+      localStorage.setItem(ACTIVE_KEY, id);
+      window.dispatchEvent(new Event("phidtech_companies_updated"));
+    } catch {}
+  };
 
   const openAdd = () => {
     setEditTarget(null);
@@ -48,17 +96,20 @@ export default function AdminPage() {
     if (!form.name.trim()) { setFormError("Company name is required."); return; }
     if (!form.email.trim()) { setFormError("Email is required."); return; }
     if (editTarget) {
-      editCompany(editTarget.id, form);
+      persistCompanies(companiesList.map(c => c.id === editTarget.id ? { ...c, ...form } : c));
     } else {
-      addCompany(form);
+      const newCompany: Company = { ...form, id: `c${Date.now()}`, createdAt: new Date().toISOString().slice(0, 10) };
+      const updated = [...companiesList, newCompany];
+      persistCompanies(updated);
+      setActiveCompanyId(newCompany.id);
     }
     setShowModal(false);
   };
 
   const systemStats = [
     { label: "Total Companies", value: companiesList.length, icon: Building2, color: "text-blue-600", bg: "bg-blue-50" },
-    { label: "Total Users", value: users.length, icon: Users, color: "text-purple-600", bg: "bg-purple-50" },
-    { label: "Active Users", value: users.filter(u => u.status === "active").length, icon: CheckCircle, color: "text-green-600", bg: "bg-green-50" },
+    { label: "Total Users", value: staffUsers.length, icon: Users, color: "text-purple-600", bg: "bg-purple-50" },
+    { label: "Active Users", value: staffUsers.filter(u => u.status === "active").length, icon: CheckCircle, color: "text-green-600", bg: "bg-green-50" },
     { label: "Audit Events", value: auditLogs.length, icon: Activity, color: "text-orange-600", bg: "bg-orange-50" },
   ];
 
@@ -134,7 +185,7 @@ export default function AdminPage() {
             </div>
             <div className="divide-y divide-gray-50">
               {companiesList.map(company => {
-                const companyUsers = users.filter(u => u.companyId === company.id);
+                const companyUsers = staffUsers.filter(u => u.companyId === company.id);
                 const isActive = company.id === activeCompanyId;
                 return (
                   <div key={company.id} className={`px-5 py-4 flex items-center justify-between hover:bg-gray-50 ${isActive ? "bg-blue-50/40" : ""}`}>
@@ -432,7 +483,7 @@ export default function AdminPage() {
               </TableHeader>
               <TableBody>
                 {auditLogs.map(log => {
-                  const user = users.find(u => u.id === log.userId);
+                  const user = staffUsers.find((u: {id:string;companyId:string;status:string} & {name?:string}) => u.id === log.userId);
                   return (
                     <TableRow key={log.id}>
                       <TableCell>
