@@ -4,7 +4,16 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { notifications, currentUser } from "@/lib/data";
 import { getInitials, formatDateTime } from "@/lib/utils";
-import { useCompanyContext } from "@/lib/CompanyContext";
+
+const COMPANIES_KEY = "phidtech_companies";
+const ACTIVE_KEY = "phidtech_active_company";
+
+function lsGet<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
+}
+function lsStr(key: string, fallback = ""): string {
+  try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+}
 
 interface HeaderProps {
   onMobileMenuOpen: () => void;
@@ -14,11 +23,18 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showCompanySwitcher, setShowCompanySwitcher] = useState(false);
-  const { companiesList, activeCompanyId, activeCompany, setActiveCompanyId } = useCompanyContext();
+  const [companiesList, setCompaniesList] = useState<{id:string;name:string;industry?:string}[]>([]);
+  const [activeCompanyId, setActiveCompanyIdState] = useState("");
   const [profileName, setProfileName] = useState(currentUser.name);
   const [profilePhoto, setProfilePhoto] = useState("");
 
+  const reloadCompanies = () => {
+    setCompaniesList(lsGet(COMPANIES_KEY, []));
+    setActiveCompanyIdState(lsStr(ACTIVE_KEY));
+  };
+
   useEffect(() => {
+    reloadCompanies();
     try {
       const stored = localStorage.getItem("phidtech_profile");
       if (stored) {
@@ -28,7 +44,26 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
       const photo = localStorage.getItem("phidtech_profile_photo");
       if (photo) setProfilePhoto(photo);
     } catch {}
+
+    const onCustom = () => reloadCompanies();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === COMPANIES_KEY || e.key === ACTIVE_KEY) reloadCompanies();
+    };
+    window.addEventListener("phidtech_companies_updated", onCustom);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("phidtech_companies_updated", onCustom);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
+
+  const activeCompany = companiesList.find(c => c.id === activeCompanyId) ?? companiesList[0];
+
+  const setActiveCompanyId = (id: string) => {
+    setActiveCompanyIdState(id);
+    try { localStorage.setItem(ACTIVE_KEY, id); } catch {}
+    window.dispatchEvent(new Event("phidtech_companies_updated"));
+  };
 
   const unread = notifications.filter((n) => !n.read).length;
 
