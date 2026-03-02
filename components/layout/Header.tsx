@@ -2,11 +2,12 @@
 import { Bell, Search, Menu, ChevronDown, Building2, LogOut, User, Settings } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { notifications, currentUser } from "@/lib/data";
 import { getInitials, formatDateTime } from "@/lib/utils";
 
 const COMPANIES_KEY = "phidtech_companies";
-const ACTIVE_KEY = "phidtech_active_company";
+const ACTIVE_KEY    = "phidtech_active_company";
+const SESSION_KEY   = "phidtech_session";
+const NOTIF_KEY     = "phidtech_notifications";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -26,9 +27,11 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
   const [companiesList, setCompaniesList] = useState<{id:string;name:string;industry?:string}[]>([]);
   const [activeCompanyId, setActiveCompanyIdState] = useState("");
   const [isSuperAdmin, setIsSuperAdmin] = useState(true);
-  const [profileName, setProfileName] = useState(currentUser.name);
+  const [profileName, setProfileName] = useState("");
   const [profileRole, setProfileRole] = useState("Admin");
   const [profilePhoto, setProfilePhoto] = useState("");
+  const [myCompanyId, setMyCompanyId] = useState(""); // staff's own company
+  const [notifList, setNotifList] = useState<{id:string;userId:string;message:string;read:boolean;createdAt:string}[]>([]);
 
   const reloadCompanies = () => {
     setCompaniesList(lsGet(COMPANIES_KEY, []));
@@ -37,12 +40,17 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
 
   const reloadSession = () => {
     try {
-      const s = localStorage.getItem("phidtech_session");
+      const s = localStorage.getItem(SESSION_KEY);
       if (s) {
         const sess = JSON.parse(s);
-        setProfileName(sess.name ?? currentUser.name);
+        setProfileName(sess.name ?? "");
         setProfileRole(sess.position ?? sess.role ?? "Admin");
         setIsSuperAdmin(sess.isSuperAdmin === true);
+        setMyCompanyId(sess.companyId ?? "");
+        // Load this user's notifications
+        const uid = sess.id ?? "";
+        const allNotifs = lsGet<{id:string;userId:string;message:string;read:boolean;createdAt:string}[]>(NOTIF_KEY, []);
+        setNotifList(allNotifs.filter(n => n.userId === uid).sort((a,b) => b.createdAt.localeCompare(a.createdAt)));
       }
       const stored = localStorage.getItem("phidtech_profile");
       if (stored) {
@@ -74,7 +82,10 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
     };
   }, []);
 
-  const activeCompany = companiesList.find(c => c.id === activeCompanyId) ?? companiesList[0];
+  // Superadmin sees the currently switched company; staff always see their own company
+  const activeCompany = isSuperAdmin
+    ? (companiesList.find(c => c.id === activeCompanyId) ?? companiesList[0])
+    : (companiesList.find(c => c.id === myCompanyId) ?? companiesList[0]);
 
   const setActiveCompanyId = (id: string) => {
     setActiveCompanyIdState(id);
@@ -82,7 +93,7 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
     window.dispatchEvent(new Event("phidtech_companies_updated"));
   };
 
-  const unread = notifications.filter((n) => !n.read).length;
+  const unread = notifList.filter(n => !n.read).length;
 
   return (
     <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 md:px-6 shrink-0 z-40 relative">
@@ -169,23 +180,20 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
             <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-100 z-50">
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                 <h3 className="font-semibold text-gray-900">Notifications</h3>
-                <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full font-medium">{unread} new</span>
+                {unread > 0 && <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full font-medium">{unread} new</span>}
               </div>
               <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
-                {notifications.slice(0, 6).map((notif) => (
+                {notifList.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-xs text-gray-400">No notifications yet</div>
+                ) : notifList.slice(0, 6).map((notif) => (
                   <div
                     key={notif.id}
                     className={`px-4 py-3 hover:bg-gray-50 cursor-pointer ${!notif.read ? "bg-blue-50/30" : ""}`}
                   >
                     <div className="flex items-start gap-3">
-                      <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                        notif.type === "success" ? "bg-green-500" :
-                        notif.type === "error" ? "bg-red-500" :
-                        notif.type === "warning" ? "bg-yellow-500" : "bg-blue-500"
-                      }`} />
+                      <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${!notif.read ? "bg-blue-500" : "bg-gray-300"}`} />
                       <div>
-                        <p className="text-sm font-medium text-gray-800">{notif.title}</p>
-                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{notif.message}</p>
+                        <p className="text-sm text-gray-700 line-clamp-2">{notif.message}</p>
                         <p className="text-xs text-gray-400 mt-1">{formatDateTime(notif.createdAt)}</p>
                       </div>
                     </div>

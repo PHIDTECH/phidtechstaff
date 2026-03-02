@@ -11,7 +11,12 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const SESSION_KEY = "phidtech_session";
+const SESSION_KEY   = "phidtech_session";
+const COMPANIES_KEY = "phidtech_companies";
+
+function lsGet<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
+}
 
 // Map permission keys to route prefixes
 const PERM_ROUTES: Record<string, string[]> = {
@@ -122,18 +127,30 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, onToggle, mobile, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const [session, setSession] = useState<{name:string;role:string;position:string;isSuperAdmin:boolean;permissions?:string[]} | null>(null);
+  const [session, setSession] = useState<{id:string;name:string;role:string;position:string;isSuperAdmin:boolean;companyId?:string;permissions?:string[]} | null>(null);
+  const [myCompanyName, setMyCompanyName] = useState("");
 
   useEffect(() => {
     const load = () => {
       try {
         const s = localStorage.getItem(SESSION_KEY);
-        if (s) setSession(JSON.parse(s));
+        if (s) {
+          const sess = JSON.parse(s);
+          setSession(sess);
+          if (!sess.isSuperAdmin && sess.companyId) {
+            const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+            setMyCompanyName(companies.find(c => c.id === sess.companyId)?.name ?? "");
+          }
+        }
       } catch {}
     };
     load();
     window.addEventListener("phidtech_session_updated", load);
-    return () => window.removeEventListener("phidtech_session_updated", load);
+    window.addEventListener("phidtech_companies_updated", load);
+    return () => {
+      window.removeEventListener("phidtech_session_updated", load);
+      window.removeEventListener("phidtech_companies_updated", load);
+    };
   }, []);
 
   const isSuperAdmin = session?.isSuperAdmin === true;
@@ -256,6 +273,9 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
             <div className="min-w-0">
               <p className="text-sm font-medium text-white truncate">{session?.name ?? "System Administrator"}</p>
               <p className="text-xs text-gray-400 truncate capitalize">{session?.position ?? session?.role ?? "Admin"}</p>
+              {!session?.isSuperAdmin && myCompanyName && (
+                <p className="text-[10px] text-gray-500 truncate mt-0.5">{myCompanyName}</p>
+              )}
             </div>
           </div>
         </div>
