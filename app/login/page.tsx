@@ -4,20 +4,15 @@ import { useRouter } from "next/navigation";
 import { Building2, Eye, EyeOff, Lock, Mail, ArrowLeft, KeyRound, CheckCircle2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import emailjs from "@emailjs/browser";
-
 const ADMIN_EMAIL      = "phidtechnology@gmail.com";
 const ADMIN_PASSWORD   = "Kaijage@@2023";
 const USERS_KEY        = "phidtech_users";
 const SESSION_KEY      = "phidtech_session";
 const RESET_TOKENS_KEY = "phidtech_reset_tokens";
 
-// EmailJS credentials — replace with your real IDs from emailjs.com
-const EMAILJS_SERVICE_ID  = "service_phidtech";
-const EMAILJS_TEMPLATE_ID = "template_pwreset";
-const EMAILJS_PUBLIC_KEY  = "YOUR_EMAILJS_PUBLIC_KEY";
-
-const APP_URL = "https://www.phidtechstaff.co.tz";
+const APP_URL = typeof window !== "undefined"
+  ? window.location.origin
+  : "https://www.phidtechstaff.co.tz";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -68,22 +63,24 @@ export default function LoginPage() {
 
       const resetLink = `${APP_URL}/reset-password?token=${token}`;
 
-      await emailjs.send(
-        EMAILJS_SERVICE_ID,
-        EMAILJS_TEMPLATE_ID,
-        {
+      const res = await fetch("/api/send-reset-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           to_email:   ADMIN_EMAIL,
           to_name:    "System Administrator",
           reset_link: resetLink,
           expires_in: "1 hour",
-          app_name:   "PHIDTECH Management System",
-        },
-        EMAILJS_PUBLIC_KEY
-      );
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to send email");
+      }
 
       setForgotSent(true);
-    } catch {
-      setForgotError("Failed to send reset email. Check your EmailJS configuration or try again.");
+    } catch (err: unknown) {
+      setForgotError(err instanceof Error ? err.message : "Failed to send reset email. Please try again.");
     } finally {
       setForgotSending(false);
     }
