@@ -1,6 +1,6 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -10,26 +10,193 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DollarSign, Plus, Search, CheckCircle, Clock, Download, Eye, FileText } from "lucide-react";
-import { payrolls, salaryAdvances, users } from "@/lib/data";
-import { formatDate, formatCurrency, getStatusColor, getInitials } from "@/lib/utils";
+import { DollarSign, Plus, Search, CheckCircle, Download, Eye, FileText, AlertCircle, Building2 } from "lucide-react";
+import { formatCurrency, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-export default function PayrollPage() {
-  const [search, setSearch] = useState("");
-  const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
-  const [showSlipDialog, setShowSlipDialog] = useState<typeof payrolls[0] | null>(null);
+const ACTIVE_KEY = "phidtech_active_company";
+const USERS_KEY = "phidtech_users";
+const PAYROLL_KEY = "phidtech_payroll";
+const ADVANCES_KEY = "phidtech_advances";
+const COMPANIES_KEY = "phidtech_companies";
 
-  const companyPayrolls = payrolls.filter(p => p.companyId === "c1");
-  const filtered = companyPayrolls.filter(p => {
-    const emp = users.find(u => u.id === p.userId);
-    return emp?.name.toLowerCase().includes(search.toLowerCase()) || false;
+function lsGet<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
+}
+function lsSet(key: string, val: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+function lsStr(key: string, fallback = "") {
+  try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+}
+
+interface StaffUser {
+  id: string; name: string; email: string; position: string;
+  department: string; salary: number; status: string; companyId: string;
+}
+interface Allowance { name: string; amount: number; }
+interface Deduction { name: string; amount: number; }
+interface PayrollEntry {
+  id: string; staffId: string; companyId: string;
+  month: string; year: number;
+  basicSalary: number; allowances: Allowance[]; deductions: Deduction[];
+  grossSalary: number; netSalary: number;
+  status: "draft" | "paid";
+  generatedAt: string;
+}
+interface SalaryAdvance {
+  id: string; staffId: string; companyId: string;
+  amount: number; reason: string; requestDate: string;
+  repaymentDate: string; status: "pending" | "approved" | "rejected";
+}
+
+const MONTHS = ["January","February","March","April","May","June",
+  "July","August","September","October","November","December"];
+
+function calcPAYE(gross: number): number {
+  if (gross <= 270000) return 0;
+  if (gross <= 520000) return (gross - 270000) * 0.09;
+  if (gross <= 760000) return 22500 + (gross - 520000) * 0.20;
+  if (gross <= 1000000) return 70500 + (gross - 760000) * 0.25;
+  return 130500 + (gross - 1000000) * 0.30;
+}
+function calcNSSF(gross: number): number { return Math.round(gross * 0.10); }
+function calcSDL(gross: number): number { return Math.round(gross * 0.04); }
+
+export default function PayrollPage() {
+  const now = new Date();
+  const [search, setSearch] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [activeCompanyId, setActiveCompanyId] = useState("");
+  const [activeCompanyName, setActiveCompanyName] = useState("");
+  const [staffList, setStaffList] = useState<StaffUser[]>([]);
+  const [payrollEntries, setPayrollEntries] = useState<PayrollEntry[]>([]);
+  const [advances, setAdvances] = useState<SalaryAdvance[]>([]);
+  const [showSlipDialog, setShowSlipDialog] = useState<PayrollEntry | null>(null);
+  const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
+  const [advForm, setAdvForm] = useState({ staffId: "", amount: "", reason: "", repaymentDate: "" });
+  const [advError, setAdvError] = useState("");
+  const [runConfirm, setRunConfirm] = useState(false);
+
+  const reload = () => {
+    const cid = lsStr(ACTIVE_KEY);
+    setActiveCompanyId(cid);
+    const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+    setActiveCompanyName(companies.find(c => c.id === cid)?.name ?? "");
+    const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
+    setStaffList(allStaff.filter(u => u.companyId === cid));
+    setPayrollEntries(lsGet<PayrollEntry[]>(PAYROLL_KEY, []));
+    setAdvances(lsGet<SalaryAdvance[]>(ADVANCES_KEY, []));
+  };
+
+  useEffect(() => {
+    reload();
+    window.addEventListener("phidtech_companies_updated", reload);
+    return () => window.removeEventListener("phidtech_companies_updated", reload);
+  }, []);
+
+  const monthKey = `${selectedMonth}-${selectedYear}`;
+  const companyEntries = payrollEntries.filter(
+    p => p.companyId === activeCompanyId && p.month === selectedMonth && p.year === selectedYear
+  );
+  const filtered = companyEntries.filter(p => {
+    const emp = staffList.find(u => u.id === p.staffId);
+    return emp?.name.toLowerCase().includes(search.toLowerCase()) ?? false;
   });
 
-  const totalGross = companyPayrolls.reduce((s, p) => s + p.grossSalary, 0);
-  const totalNet = companyPayrolls.reduce((s, p) => s + p.netSalary, 0);
+  const totalGross = companyEntries.reduce((s, p) => s + p.grossSalary, 0);
+  const totalNet = companyEntries.reduce((s, p) => s + p.netSalary, 0);
   const totalDeductions = totalGross - totalNet;
-  const paidCount = companyPayrolls.filter(p => p.status === "paid").length;
+  const paidCount = companyEntries.filter(p => p.status === "paid").length;
+
+  const alreadyRun = companyEntries.length > 0;
+
+  const runPayroll = () => {
+    const activeStaff = staffList.filter(u => u.status === "active" && u.salary > 0);
+    if (activeStaff.length === 0) { setRunConfirm(false); return; }
+    const newEntries: PayrollEntry[] = activeStaff.map(emp => {
+      const basic = emp.salary;
+      const transport = Math.round(basic * 0.10);
+      const housing  = Math.round(basic * 0.15);
+      const gross = basic + transport + housing;
+      const paye = Math.round(calcPAYE(gross));
+      const nssf = calcNSSF(gross);
+      const sdl  = calcSDL(gross);
+      const totalDed = paye + nssf + sdl;
+      const net = gross - totalDed;
+      return {
+        id: `pr-${emp.id}-${monthKey}-${Date.now()}`,
+        staffId: emp.id, companyId: activeCompanyId,
+        month: selectedMonth, year: selectedYear,
+        basicSalary: basic,
+        allowances: [
+          { name: "Transport Allowance", amount: transport },
+          { name: "Housing Allowance", amount: housing },
+        ],
+        deductions: [
+          { name: "PAYE", amount: paye },
+          { name: "NSSF (10%)", amount: nssf },
+          { name: "SDL (4%)", amount: sdl },
+        ],
+        grossSalary: gross, netSalary: net,
+        status: "draft",
+        generatedAt: new Date().toISOString(),
+      };
+    });
+    const other = payrollEntries.filter(
+      p => !(p.companyId === activeCompanyId && p.month === selectedMonth && p.year === selectedYear)
+    );
+    const updated = [...other, ...newEntries];
+    lsSet(PAYROLL_KEY, updated);
+    setPayrollEntries(updated);
+    setRunConfirm(false);
+  };
+
+  const markPaid = (id: string) => {
+    const updated = payrollEntries.map(p => p.id === id ? { ...p, status: "paid" as const } : p);
+    lsSet(PAYROLL_KEY, updated);
+    setPayrollEntries(updated);
+  };
+
+  const markAllPaid = () => {
+    const updated = payrollEntries.map(p =>
+      p.companyId === activeCompanyId && p.month === selectedMonth && p.year === selectedYear
+        ? { ...p, status: "paid" as const } : p
+    );
+    lsSet(PAYROLL_KEY, updated);
+    setPayrollEntries(updated);
+  };
+
+  const saveAdvance = () => {
+    if (!advForm.staffId) { setAdvError("Select an employee."); return; }
+    if (!advForm.amount || isNaN(Number(advForm.amount)) || Number(advForm.amount) <= 0) {
+      setAdvError("Enter a valid amount."); return;
+    }
+    if (!advForm.reason.trim()) { setAdvError("Enter a reason."); return; }
+    const adv: SalaryAdvance = {
+      id: `adv-${Date.now()}`,
+      staffId: advForm.staffId, companyId: activeCompanyId,
+      amount: Number(advForm.amount), reason: advForm.reason.trim(),
+      requestDate: new Date().toISOString().slice(0, 10),
+      repaymentDate: advForm.repaymentDate,
+      status: "pending",
+    };
+    const updated = [...advances, adv];
+    lsSet(ADVANCES_KEY, updated);
+    setAdvances(updated);
+    setAdvForm({ staffId: "", amount: "", reason: "", repaymentDate: "" });
+    setAdvError("");
+    setShowAdvanceDialog(false);
+  };
+
+  const updateAdvStatus = (id: string, status: "approved" | "rejected") => {
+    const updated = advances.map(a => a.id === id ? { ...a, status } : a);
+    lsSet(ADVANCES_KEY, updated);
+    setAdvances(updated);
+  };
+
+  const years = [now.getFullYear(), now.getFullYear() - 1];
 
   return (
     <MainLayout>
@@ -39,10 +206,10 @@ export default function PayrollPage() {
         icon={DollarSign}
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => setShowAdvanceDialog(true)}>
+            <Button variant="outline" size="sm" onClick={() => { setAdvForm({ staffId: "", amount: "", reason: "", repaymentDate: "" }); setAdvError(""); setShowAdvanceDialog(true); }}>
               <Plus className="w-4 h-4 mr-2" /> Salary Advance
             </Button>
-            <Button size="sm">
+            <Button size="sm" onClick={() => setRunConfirm(true)} disabled={staffList.filter(u=>u.status==="active").length === 0}>
               <FileText className="w-4 h-4 mr-2" /> Run Payroll
             </Button>
           </>
@@ -50,10 +217,10 @@ export default function PayrollPage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Total Gross" value={formatCurrency(totalGross)} icon={DollarSign} iconBg="bg-blue-50" iconColor="text-blue-600" subtitle="February 2026" />
+        <StatCard title="Total Gross" value={formatCurrency(totalGross)} icon={DollarSign} iconBg="bg-blue-50" iconColor="text-blue-600" subtitle={`${selectedMonth} ${selectedYear}`} />
         <StatCard title="Total Net Pay" value={formatCurrency(totalNet)} icon={CheckCircle} iconBg="bg-green-50" iconColor="text-green-600" subtitle="After deductions" />
-        <StatCard title="Total Deductions" value={formatCurrency(totalDeductions)} icon={DollarSign} iconBg="bg-red-50" iconColor="text-red-500" subtitle="PAYE, NSSF, etc." />
-        <StatCard title="Paid Staff" value={`${paidCount}/${companyPayrolls.length}`} icon={CheckCircle} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="This month" />
+        <StatCard title="Total Deductions" value={formatCurrency(totalDeductions)} icon={DollarSign} iconBg="bg-red-50" iconColor="text-red-500" subtitle="PAYE, NSSF, SDL" />
+        <StatCard title="Paid Staff" value={`${paidCount}/${companyEntries.length}`} icon={CheckCircle} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="This month" />
       </div>
 
       <Tabs defaultValue="payroll">
@@ -65,175 +232,230 @@ export default function PayrollPage() {
           <div className="flex items-center gap-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input placeholder="Search employee..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 w-52" />
+              <Input placeholder="Search employee..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 w-48" />
             </div>
-            <Select defaultValue="feb-2026">
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="feb-2026">February 2026</SelectItem>
-                <SelectItem value="jan-2026">January 2026</SelectItem>
-                <SelectItem value="dec-2025">December 2025</SelectItem>
-              </SelectContent>
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+              <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(Number(v))}>
+              <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+              <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
             </Select>
           </div>
         </div>
 
         <TabsContent value="payroll">
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Basic Salary</TableHead>
-                  <TableHead>Allowances</TableHead>
-                  <TableHead>Gross Salary</TableHead>
-                  <TableHead>Deductions</TableHead>
-                  <TableHead>Net Salary</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Payslip</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((payroll) => {
-                  const emp = users.find(u => u.id === payroll.userId);
-                  const totalAllowances = payroll.allowances.reduce((s, a) => s + a.amount, 0);
-                  const totalDeducAmt = payroll.deductions.reduce((s, d) => s + d.amount, 0);
-                  return (
-                    <TableRow key={payroll.id}>
-                      <TableCell>
-                        {emp && (
+          {!alreadyRun ? (
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col items-center justify-center py-20 text-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center">
+                <FileText className="w-7 h-7 text-blue-500" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-800">No payroll for {selectedMonth} {selectedYear}</p>
+                <p className="text-sm text-gray-400 mt-1">Click <strong>Run Payroll</strong> to generate payslips for all active staff.</p>
+              </div>
+              <Button onClick={() => setRunConfirm(true)} disabled={staffList.filter(u=>u.status==="active").length === 0}>
+                <FileText className="w-4 h-4 mr-2" /> Run Payroll
+              </Button>
+              {staffList.filter(u=>u.status==="active").length === 0 && (
+                <p className="text-xs text-red-500">No active staff found for this company. Add staff first.</p>
+              )}
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm font-semibold text-gray-700">{activeCompanyName} — {selectedMonth} {selectedYear}</span>
+                </div>
+                {paidCount < companyEntries.length && (
+                  <Button size="sm" variant="outline" onClick={markAllPaid} className="text-green-700 border-green-200 hover:bg-green-50">
+                    <CheckCircle className="w-4 h-4 mr-1.5" /> Mark All Paid
+                  </Button>
+                )}
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Basic Salary</TableHead>
+                    <TableHead>Allowances</TableHead>
+                    <TableHead>Gross Salary</TableHead>
+                    <TableHead>Deductions</TableHead>
+                    <TableHead>Net Salary</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((payroll) => {
+                    const emp = staffList.find(u => u.id === payroll.staffId);
+                    const totalAllowances = payroll.allowances.reduce((s, a) => s + a.amount, 0);
+                    const totalDeducAmt = payroll.deductions.reduce((s, d) => s + d.amount, 0);
+                    return (
+                      <TableRow key={payroll.id}>
+                        <TableCell>
                           <div className="flex items-center gap-2">
                             <Avatar className="w-8 h-8">
-                              <AvatarFallback className="text-xs">{getInitials(emp.name)}</AvatarFallback>
+                              <AvatarFallback className="text-xs">{getInitials(emp?.name ?? "?")}</AvatarFallback>
                             </Avatar>
                             <div>
-                              <p className="font-medium text-gray-900 text-sm">{emp.name}</p>
-                              <p className="text-xs text-gray-400">{emp.position}</p>
+                              <p className="font-medium text-gray-900 text-sm">{emp?.name ?? "Unknown"}</p>
+                              <p className="text-xs text-gray-400">{emp?.position}</p>
                             </div>
                           </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-medium text-gray-800">{formatCurrency(payroll.basicSalary)}</TableCell>
-                      <TableCell className="text-green-700 font-medium">+{formatCurrency(totalAllowances)}</TableCell>
-                      <TableCell className="font-semibold text-gray-900">{formatCurrency(payroll.grossSalary)}</TableCell>
-                      <TableCell className="text-red-600 font-medium">-{formatCurrency(totalDeducAmt)}</TableCell>
-                      <TableCell className="font-bold text-blue-700">{formatCurrency(payroll.netSalary)}</TableCell>
-                      <TableCell>
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(payroll.status)}`}>
-                          {payroll.status}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => setShowSlipDialog(payroll)}>
-                            <Eye className="w-4 h-4 text-gray-400" />
-                          </Button>
-                          <Button variant="ghost" size="icon">
-                            <Download className="w-4 h-4 text-gray-400" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-            {/* Summary Footer */}
-            <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-              <span className="text-sm font-semibold text-gray-700">Totals ({companyPayrolls.length} employees)</span>
-              <div className="flex items-center gap-6 text-sm">
-                <span className="text-gray-600">Gross: <strong className="text-gray-900">{formatCurrency(totalGross)}</strong></span>
-                <span className="text-gray-600">Deductions: <strong className="text-red-600">-{formatCurrency(totalDeductions)}</strong></span>
-                <span className="text-gray-600">Net: <strong className="text-blue-700">{formatCurrency(totalNet)}</strong></span>
+                        </TableCell>
+                        <TableCell className="font-medium text-gray-800">{formatCurrency(payroll.basicSalary)}</TableCell>
+                        <TableCell className="text-green-700 font-medium">+{formatCurrency(totalAllowances)}</TableCell>
+                        <TableCell className="font-semibold text-gray-900">{formatCurrency(payroll.grossSalary)}</TableCell>
+                        <TableCell className="text-red-600 font-medium">-{formatCurrency(totalDeducAmt)}</TableCell>
+                        <TableCell className="font-bold text-blue-700">{formatCurrency(payroll.netSalary)}</TableCell>
+                        <TableCell>
+                          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                            payroll.status === "paid" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                          }`}>{payroll.status}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => setShowSlipDialog(payroll)} title="View Payslip">
+                              <Eye className="w-4 h-4 text-gray-400" />
+                            </Button>
+                            {payroll.status === "draft" && (
+                              <Button variant="ghost" size="sm" className="text-green-600 text-xs h-7 px-2" onClick={() => markPaid(payroll.id)}>
+                                Pay
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                <span className="text-sm font-semibold text-gray-700">Totals ({companyEntries.length} employees)</span>
+                <div className="flex items-center gap-6 text-sm">
+                  <span className="text-gray-600">Gross: <strong className="text-gray-900">{formatCurrency(totalGross)}</strong></span>
+                  <span className="text-gray-600">Deductions: <strong className="text-red-600">-{formatCurrency(totalDeductions)}</strong></span>
+                  <span className="text-gray-600">Net: <strong className="text-blue-700">{formatCurrency(totalNet)}</strong></span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </TabsContent>
 
         <TabsContent value="advances">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Request Date</TableHead>
-                  <TableHead>Repayment Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Approved By</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {salaryAdvances.filter(a => a.companyId === "c1").map((adv) => {
-                  const emp = users.find(u => u.id === adv.userId);
-                  const approver = users.find(u => u.id === adv.approvedBy);
-                  return (
-                    <TableRow key={adv.id}>
-                      <TableCell>
-                        {emp && (
+            {advances.filter(a => a.companyId === activeCompanyId).length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <AlertCircle className="w-10 h-10 text-gray-300 mb-3" />
+                <p className="text-sm text-gray-500">No salary advances yet</p>
+                <Button size="sm" variant="outline" className="mt-3" onClick={() => setShowAdvanceDialog(true)}>
+                  <Plus className="w-4 h-4 mr-1.5" /> Add Advance
+                </Button>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Request Date</TableHead>
+                    <TableHead>Repayment</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {advances.filter(a => a.companyId === activeCompanyId).map((adv) => {
+                    const emp = staffList.find(u => u.id === adv.staffId);
+                    return (
+                      <TableRow key={adv.id}>
+                        <TableCell>
                           <div className="flex items-center gap-2">
                             <Avatar className="w-8 h-8">
-                              <AvatarFallback className="text-xs">{getInitials(emp.name)}</AvatarFallback>
+                              <AvatarFallback className="text-xs">{getInitials(emp?.name ?? "?")}</AvatarFallback>
                             </Avatar>
-                            <p className="font-medium text-gray-900 text-sm">{emp.name}</p>
+                            <p className="font-medium text-gray-900 text-sm">{emp?.name ?? "Unknown"}</p>
                           </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-semibold text-gray-900">{formatCurrency(adv.amount)}</TableCell>
-                      <TableCell className="text-sm text-gray-500">{adv.reason}</TableCell>
-                      <TableCell className="text-sm text-gray-600">{formatDate(adv.requestDate)}</TableCell>
-                      <TableCell className="text-sm text-gray-600">{adv.repaymentDate ? formatDate(adv.repaymentDate) : "—"}</TableCell>
-                      <TableCell>
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(adv.status)}`}>
-                          {adv.status}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-sm text-gray-500">{approver?.name || "—"}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          {adv.status === "pending" && (
-                            <>
-                              <Button variant="ghost" size="sm" className="text-green-600 text-xs">Approve</Button>
-                              <Button variant="ghost" size="sm" className="text-red-500 text-xs">Reject</Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                        </TableCell>
+                        <TableCell className="font-semibold text-gray-900">{formatCurrency(adv.amount)}</TableCell>
+                        <TableCell className="text-sm text-gray-500">{adv.reason}</TableCell>
+                        <TableCell className="text-sm text-gray-600">{adv.requestDate}</TableCell>
+                        <TableCell className="text-sm text-gray-600">{adv.repaymentDate || "—"}</TableCell>
+                        <TableCell>
+                          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                            adv.status === "approved" ? "bg-green-100 text-green-700" :
+                            adv.status === "rejected" ? "bg-red-100 text-red-600" : "bg-yellow-100 text-yellow-700"
+                          }`}>{adv.status}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
+                            {adv.status === "pending" && (
+                              <>
+                                <Button variant="ghost" size="sm" className="text-green-600 text-xs" onClick={() => updateAdvStatus(adv.id, "approved")}>Approve</Button>
+                                <Button variant="ghost" size="sm" className="text-red-500 text-xs" onClick={() => updateAdvStatus(adv.id, "rejected")}>Reject</Button>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Run Payroll Confirm */}
+      <Dialog open={runConfirm} onOpenChange={setRunConfirm}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Run Payroll — {selectedMonth} {selectedYear}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <p className="text-sm text-gray-600">This will generate payslips for <strong>{staffList.filter(u=>u.status==="active").length} active staff</strong> in <strong>{activeCompanyName}</strong>.</p>
+            {alreadyRun && (
+              <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-100 rounded-lg p-3">
+                <AlertCircle className="w-4 h-4 text-yellow-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-yellow-700">Payroll already exists for this month. Running again will <strong>replace</strong> existing entries.</p>
+              </div>
+            )}
+            <p className="text-xs text-gray-400">Deductions applied: PAYE (Tanzania rates), NSSF 10%, SDL 4%</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRunConfirm(false)}>Cancel</Button>
+            <Button onClick={runPayroll}><FileText className="w-4 h-4 mr-2" />Confirm & Run</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Payslip Dialog */}
       <Dialog open={!!showSlipDialog} onOpenChange={() => setShowSlipDialog(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Payslip – {showSlipDialog?.month} {showSlipDialog?.year}</DialogTitle>
+            <DialogTitle>Payslip — {showSlipDialog?.month} {showSlipDialog?.year}</DialogTitle>
           </DialogHeader>
           {showSlipDialog && (() => {
-            const emp = users.find(u => u.id === showSlipDialog.userId);
+            const emp = staffList.find(u => u.id === showSlipDialog.staffId);
             return (
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
                   <div>
-                    <p className="font-bold text-gray-900">{emp?.name}</p>
+                    <p className="font-bold text-gray-900">{emp?.name ?? "Unknown"}</p>
                     <p className="text-xs text-gray-500">{emp?.position} · {emp?.department}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-gray-400">Period</p>
-                    <p className="font-semibold text-gray-800">{showSlipDialog.month} {showSlipDialog.year}</p>
+                    <p className="text-xs text-gray-400">Company</p>
+                    <p className="font-semibold text-gray-800 text-sm">{activeCompanyName}</p>
+                    <p className="text-xs text-gray-500">{showSlipDialog.month} {showSlipDialog.year}</p>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Earnings</p>
                     <div className="space-y-1.5">
@@ -264,60 +486,68 @@ export default function PayrollPage() {
                       ))}
                       <div className="flex justify-between text-sm font-bold border-t border-gray-100 pt-1.5 mt-1">
                         <span>Total Deductions</span>
-                        <span className="text-red-600">-{formatCurrency(showSlipDialog.deductions.reduce((s, d) => s + d.amount, 0))}</span>
+                        <span className="text-red-600">-{formatCurrency(showSlipDialog.deductions.reduce((s,d)=>s+d.amount,0))}</span>
                       </div>
                     </div>
                   </div>
                 </div>
-
                 <div className="p-3 bg-green-50 rounded-lg border border-green-100 flex justify-between items-center">
                   <span className="font-bold text-gray-900">Net Pay</span>
                   <span className="text-xl font-bold text-green-700">{formatCurrency(showSlipDialog.netSalary)}</span>
                 </div>
+                <p className="text-center text-xs text-gray-400">Generated by PHIDTECH MS · {new Date(showSlipDialog.generatedAt).toLocaleDateString()}</p>
               </div>
             );
           })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSlipDialog(null)}>Close</Button>
-            <Button><Download className="w-4 h-4 mr-2" />Download PDF</Button>
+            <Button onClick={() => window.print()}>
+              <Download className="w-4 h-4 mr-2" />Print / Save PDF
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Advance Dialog */}
+      {/* Salary Advance Dialog */}
       <Dialog open={showAdvanceDialog} onOpenChange={setShowAdvanceDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Request Salary Advance</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {advError && (
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                <p className="text-sm text-red-600">{advError}</p>
+              </div>
+            )}
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Employee</label>
-              <Select>
+              <Select value={advForm.staffId} onValueChange={v => setAdvForm(f => ({...f, staffId: v}))}>
                 <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
                 <SelectContent>
-                  {users.filter(u => u.companyId === "c1").map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                  {staffList.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.name} — {u.position}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Amount (TZS)</label>
-              <Input type="number" placeholder="0" />
+              <Input type="number" placeholder="e.g. 200000" value={advForm.amount} onChange={e => setAdvForm(f => ({...f, amount: e.target.value}))} />
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Repayment Date</label>
-              <Input type="date" />
+              <Input type="date" value={advForm.repaymentDate} onChange={e => setAdvForm(f => ({...f, repaymentDate: e.target.value}))} />
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Reason</label>
-              <Input placeholder="Reason for advance" />
+              <Input placeholder="Reason for advance" value={advForm.reason} onChange={e => setAdvForm(f => ({...f, reason: e.target.value}))} />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAdvanceDialog(false)}>Cancel</Button>
-            <Button onClick={() => setShowAdvanceDialog(false)}>Submit Request</Button>
+            <Button onClick={saveAdvance}>Submit Request</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
