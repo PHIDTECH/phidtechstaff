@@ -25,6 +25,7 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
   const [showCompanySwitcher, setShowCompanySwitcher] = useState(false);
   const [companiesList, setCompaniesList] = useState<{id:string;name:string;industry?:string}[]>([]);
   const [activeCompanyId, setActiveCompanyIdState] = useState("");
+  const [isSuperAdmin, setIsSuperAdmin] = useState(true);
   const [profileName, setProfileName] = useState(currentUser.name);
   const [profileRole, setProfileRole] = useState("Admin");
   const [profilePhoto, setProfilePhoto] = useState("");
@@ -41,6 +42,7 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
         const sess = JSON.parse(s);
         setProfileName(sess.name ?? currentUser.name);
         setProfileRole(sess.position ?? sess.role ?? "Admin");
+        setIsSuperAdmin(sess.isSuperAdmin === true);
       }
       const stored = localStorage.getItem("phidtech_profile");
       if (stored) {
@@ -93,38 +95,46 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
           <Menu className="w-5 h-5 text-gray-600" />
         </button>
 
-        {/* Company Switcher */}
+        {/* Company Switcher — superadmin only */}
         <div className="relative">
-          <button
-            onClick={() => { setShowCompanySwitcher(!showCompanySwitcher); setShowNotifications(false); setShowProfile(false); }}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-50 border border-gray-100 text-sm"
-          >
-            <Building2 className="w-4 h-4 text-blue-600" />
-            <span className="font-medium text-gray-700 hidden sm:block">{activeCompany?.name ?? "Select Company"}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-          </button>
-
-          {showCompanySwitcher && (
-            <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
-              <p className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Switch Company</p>
-              {companiesList.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => { setActiveCompanyId(c.id); setShowCompanySwitcher(false); window.dispatchEvent(new Event("phidtech_companies_updated")); }}
-                  className="flex items-center gap-3 w-full px-3 py-2 hover:bg-gray-50 text-left"
-                >
-                  <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
-                    {c.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{c.name}</p>
-                    <p className="text-xs text-gray-400">{c.industry}</p>
-                  </div>
-                  {c.id === activeCompanyId && (
-                    <span className="ml-auto text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">Active</span>
-                  )}
-                </button>
-              ))}
+          {isSuperAdmin ? (
+            <>
+              <button
+                onClick={() => { setShowCompanySwitcher(!showCompanySwitcher); setShowNotifications(false); setShowProfile(false); }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-50 border border-gray-100 text-sm"
+              >
+                <Building2 className="w-4 h-4 text-blue-600" />
+                <span className="font-medium text-gray-700 hidden sm:block">{activeCompany?.name ?? "Select Company"}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+              </button>
+              {showCompanySwitcher && (
+                <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
+                  <p className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Switch Company</p>
+                  {companiesList.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => { setActiveCompanyId(c.id); setShowCompanySwitcher(false); window.dispatchEvent(new Event("phidtech_companies_updated")); }}
+                      className="flex items-center gap-3 w-full px-3 py-2 hover:bg-gray-50 text-left"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
+                        {c.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{c.name}</p>
+                        <p className="text-xs text-gray-400">{c.industry}</p>
+                      </div>
+                      {c.id === activeCompanyId && (
+                        <span className="ml-auto text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">Active</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-100 text-sm bg-gray-50">
+              <Building2 className="w-4 h-4 text-blue-600" />
+              <span className="font-medium text-gray-700 hidden sm:block">{activeCompany?.name ?? ""}</span>
             </div>
           )}
         </div>
