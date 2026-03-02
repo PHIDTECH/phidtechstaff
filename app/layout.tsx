@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BOMS – Business Operations Management System",
+  title: "PHIDTECH MS – Management System",
   description: "Unified Business Operations Management System by Phid Technologies",
 };
 

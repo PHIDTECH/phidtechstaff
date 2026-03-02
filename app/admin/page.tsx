@@ -344,7 +344,7 @@ export default function AdminPage() {
                   <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center">
                     <Building2 className="w-4 h-4 text-white" />
                   </div>
-                  <p className="font-bold text-white">{brandName || "BOMS"}</p>
+                  <p className="font-bold text-white">{brandName || "PHIDTECH MS"}</p>
                 </div>
                 <div className="p-4 bg-gray-50">
                   <div className="grid grid-cols-2 gap-3 mb-3">
