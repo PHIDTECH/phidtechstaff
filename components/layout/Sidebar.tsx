@@ -7,7 +7,7 @@ import {
   BookOpen, UserCheck, Target, Bell, Settings, ChevronDown,
   ChevronRight, Building2, ShoppingCart, Megaphone, Package,
   Receipt, BarChart3, FileText, Warehouse, TrendingUp, Briefcase,
-  Clock, HelpCircle, X, Menu
+  Clock, HelpCircle, X, Menu, Percent
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -33,6 +33,7 @@ const PERM_ROUTES: Record<string, string[]> = {
   invoices:    ["/invoices", "/petty-cash"],
   customers:   ["/customers"],
   sales:       ["/sales", "/quotations", "/tickets"],
+  commissions: ["/commissions"],
   marketing:   ["/marketing"],
   inventory:   ["/inventory", "/vendors"],
   documents:   ["/documents"],
@@ -78,6 +79,7 @@ const ALL_NAV = [
     items: [
       { label: "Customers", href: "/customers", icon: UserCheck },
       { label: "Sales Pipeline", href: "/sales", icon: TrendingUp },
+      { label: "Commissions", href: "/commissions", icon: Percent },
       { label: "Quotations", href: "/quotations", icon: FileText },
       { label: "Support Tickets", href: "/tickets", icon: HelpCircle },
     ]

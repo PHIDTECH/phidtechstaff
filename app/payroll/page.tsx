@@ -14,12 +14,13 @@ import { DollarSign, Plus, Search, CheckCircle, Download, Eye, FileText, AlertCi
 import { formatCurrency, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-const ACTIVE_KEY   = "phidtech_active_company";
-const USERS_KEY    = "phidtech_users";
-const PAYROLL_KEY  = "phidtech_payroll";
-const ADVANCES_KEY = "phidtech_advances";
-const COMPANIES_KEY = "phidtech_companies";
-const SESSION_KEY  = "phidtech_session";
+const ACTIVE_KEY      = "phidtech_active_company";
+const USERS_KEY       = "phidtech_users";
+const PAYROLL_KEY     = "phidtech_payroll";
+const ADVANCES_KEY    = "phidtech_advances";
+const COMPANIES_KEY   = "phidtech_companies";
+const SESSION_KEY     = "phidtech_session";
+const COMMISSIONS_KEY = "phidtech_commissions";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -42,6 +43,10 @@ interface StaffUser {
 }
 interface Allowance { name: string; amount: number; }
 interface Deduction { name: string; amount: number; }
+interface StoredCommission {
+  id: string; staffId: string; companyId: string;
+  month: string; year: number; commissionAmount: number; status: string;
+}
 interface PayrollEntry {
   id: string; staffId: string; companyId: string;
   month: string; year: number;
@@ -127,11 +132,22 @@ export default function PayrollPage() {
   const runPayroll = () => {
     const activeStaff = staffList.filter(u => u.status === "active" && u.salary > 0);
     if (activeStaff.length === 0) { setRunConfirm(false); return; }
+    const allCommissions = lsGet<StoredCommission[]>(COMMISSIONS_KEY, []);
     const newEntries: PayrollEntry[] = activeStaff.map(emp => {
       const basic = emp.salary;
       // Use staff's manually set allowances; fall back to empty if none set
       const staffAllowances = (emp.allowances ?? []).filter(a => a.name.trim() && a.amount > 0);
-      const totalAllowanceAmt = staffAllowances.reduce((s, a) => s + a.amount, 0);
+      // Add commissions for this staff for the selected month/year
+      const empCommissions = allCommissions.filter(
+        c => c.staffId === emp.id && c.companyId === activeCompanyId &&
+             c.month === selectedMonth && c.year === selectedYear
+      );
+      const totalCommAmt = empCommissions.reduce((s, c) => s + c.commissionAmount, 0);
+      const commissionAllowances: Allowance[] = totalCommAmt > 0
+        ? [{ name: `Sales Commission (${selectedMonth})`, amount: totalCommAmt }]
+        : [];
+      const combinedAllowances = [...staffAllowances, ...commissionAllowances];
+      const totalAllowanceAmt = combinedAllowances.reduce((s, a) => s + a.amount, 0);
       const gross = basic + totalAllowanceAmt;
       const paye = Math.round(calcPAYE(gross));
       const nssf = calcNSSF(gross);
@@ -143,7 +159,7 @@ export default function PayrollPage() {
         staffId: emp.id, companyId: activeCompanyId,
         month: selectedMonth, year: selectedYear,
         basicSalary: basic,
-        allowances: staffAllowances,
+        allowances: combinedAllowances,
         deductions: [
           { name: "PAYE", amount: paye },
           { name: "NSSF (10%)", amount: nssf },
