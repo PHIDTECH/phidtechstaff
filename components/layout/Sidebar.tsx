@@ -110,7 +110,7 @@ const ALL_NAV = [
     title: "System",
     items: [
       { label: "Documents", href: "/documents", icon: FileText },
-      { label: "Notifications", href: "/notifications", icon: Bell },
+      { label: "Messages & Notifications", href: "/notifications", icon: Bell },
       { label: "Reports", href: "/reports", icon: BarChart3 },
       { label: "Admin Panel", href: "/admin", icon: Settings },
     ]
