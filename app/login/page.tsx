@@ -1,59 +1,92 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Eye, EyeOff, Lock, Mail, ArrowLeft, KeyRound, CheckCircle2 } from "lucide-react";
+import { Building2, Eye, EyeOff, Lock, Mail, ArrowLeft, KeyRound, CheckCircle2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import emailjs from "@emailjs/browser";
 
-const ADMIN_EMAIL = "phidtechnology@gmail.com";
-const ADMIN_PASSWORD = "Kaijage@@2023";
-const USERS_KEY = "phidtech_users";
-const SESSION_KEY = "phidtech_session";
+const ADMIN_EMAIL      = "phidtechnology@gmail.com";
+const ADMIN_PASSWORD   = "Kaijage@@2023";
+const USERS_KEY        = "phidtech_users";
+const SESSION_KEY      = "phidtech_session";
+const RESET_TOKENS_KEY = "phidtech_reset_tokens";
+
+// EmailJS credentials — replace with your real IDs from emailjs.com
+const EMAILJS_SERVICE_ID  = "service_phidtech";
+const EMAILJS_TEMPLATE_ID = "template_pwreset";
+const EMAILJS_PUBLIC_KEY  = "YOUR_EMAILJS_PUBLIC_KEY";
+
+const APP_URL = "https://www.phidtechstaff.co.tz";
+
+function lsGet<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
+}
+function lsSet(key: string, val: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
+interface ResetToken { token: string; email: string; expiresAt: number; used: boolean; }
 
 export default function LoginPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState("");
+  const [email, setEmail]     = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError]     = useState("");
 
   // Forgot password state
-  const [forgotMode, setForgotMode] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [forgotError, setForgotError] = useState("");
-  const [forgotResult, setForgotResult] = useState<{ name: string; password: string; hint?: string } | null>(null);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotMode, setForgotMode]     = useState(false);
+  const [forgotEmail, setForgotEmail]   = useState("");
+  const [forgotError, setForgotError]   = useState("");
+  const [forgotSending, setForgotSending] = useState(false);
+  const [forgotSent, setForgotSent]     = useState(false);
 
-  const handleForgot = (e: React.FormEvent) => {
+  const handleForgot = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotError("");
-    setForgotResult(null);
     if (!forgotEmail.trim() || !forgotEmail.includes("@")) {
       setForgotError("Please enter a valid email address.");
       return;
     }
-    // Check superadmin
-    if (forgotEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-      setForgotResult({ name: "System Administrator", password: ADMIN_PASSWORD });
+    // Only superadmin can use forgot password
+    if (forgotEmail.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+      setForgotError("Only the system administrator can reset their password here. Staff passwords are reset by the administrator in the Users section.");
       return;
     }
-    // Check staff users
+
+    setForgotSending(true);
     try {
-      const stored = localStorage.getItem(USERS_KEY);
-      if (stored) {
-        const users = JSON.parse(stored);
-        const match = users.find(
-          (u: { email: string; name: string; password: string }) =>
-            u.email.toLowerCase() === forgotEmail.toLowerCase()
-        );
-        if (match) {
-          setForgotResult({ name: match.name, password: match.password });
-          return;
-        }
-      }
-    } catch {}
-    setForgotError("No account found with that email address.");
+      // Generate a secure token valid for 1 hour
+      const token = `rst_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+      const expiresAt = Date.now() + 60 * 60 * 1000; // 1 hour
+      const tokens = lsGet<ResetToken[]>(RESET_TOKENS_KEY, []);
+      // Invalidate old unused tokens for this email
+      const cleaned = tokens.filter(t => t.email !== ADMIN_EMAIL || t.used);
+      lsSet(RESET_TOKENS_KEY, [...cleaned, { token, email: ADMIN_EMAIL, expiresAt, used: false }]);
+
+      const resetLink = `${APP_URL}/reset-password?token=${token}`;
+
+      await emailjs.send(
+        EMAILJS_SERVICE_ID,
+        EMAILJS_TEMPLATE_ID,
+        {
+          to_email:   ADMIN_EMAIL,
+          to_name:    "System Administrator",
+          reset_link: resetLink,
+          expires_in: "1 hour",
+          app_name:   "PHIDTECH Management System",
+        },
+        EMAILJS_PUBLIC_KEY
+      );
+
+      setForgotSent(true);
+    } catch {
+      setForgotError("Failed to send reset email. Check your EmailJS configuration or try again.");
+    } finally {
+      setForgotSending(false);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -69,8 +102,10 @@ export default function LoginPage() {
       return;
     }
 
-    // Check superadmin first
-    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+    // Check superadmin first (also accept overridden password set via reset flow)
+    const adminPwOverride = lsGet<string>("phidtech_admin_password_override", "");
+    const validAdminPw = adminPwOverride || ADMIN_PASSWORD;
+    if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase() && password === validAdminPw) {
       setLoading(true);
       await new Promise((r) => setTimeout(r, 700));
       localStorage.setItem(SESSION_KEY, JSON.stringify({
@@ -138,7 +173,7 @@ export default function LoginPage() {
             <>
               <div className="mb-6">
                 <button
-                  onClick={() => { setForgotMode(false); setForgotEmail(""); setForgotError(""); setForgotResult(null); setShowForgotPassword(false); }}
+                  onClick={() => { setForgotMode(false); setForgotEmail(""); setForgotError(""); setForgotSent(false); }}
                   className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium mb-4"
                 >
                   <ArrowLeft className="w-4 h-4" /> Back to Sign In
@@ -149,46 +184,23 @@ export default function LoginPage() {
                   </div>
                   <div>
                     <h2 className="text-xl font-bold text-gray-900">Forgot Password?</h2>
-                    <p className="text-gray-500 text-sm">Enter your email to retrieve your password</p>
+                    <p className="text-gray-500 text-sm">Superadmin only — a reset link will be sent to your Gmail</p>
                   </div>
                 </div>
               </div>
 
-              {/* Result panel */}
-              {forgotResult ? (
+              {/* Sent confirmation */}
+              {forgotSent ? (
                 <div className="space-y-4">
-                  <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
-                    <div className="flex items-center gap-2 mb-3">
-                      <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
-                      <p className="text-sm font-semibold text-green-800">Account found — {forgotResult.name}</p>
-                    </div>
+                  <div className="p-4 bg-green-50 border border-green-200 rounded-xl flex flex-col items-center gap-3 text-center">
+                    <CheckCircle2 className="w-10 h-10 text-green-500" />
                     <div>
-                      <p className="text-xs text-green-700 mb-1.5 font-medium">Your password:</p>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-white border border-green-200 rounded-lg px-3 py-2 font-mono text-sm text-gray-800 tracking-widest">
-                          {showForgotPassword ? forgotResult.password : "•".repeat(forgotResult.password.length)}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowForgotPassword(v => !v)}
-                          className="p-2 rounded-lg bg-white border border-green-200 text-gray-500 hover:text-gray-700 transition-colors"
-                        >
-                          {showForgotPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
+                      <p className="font-semibold text-green-800">Reset link sent!</p>
+                      <p className="text-sm text-green-700 mt-1">Check your Gmail inbox at <strong>{ADMIN_EMAIL}</strong>.<br />The link expires in <strong>1 hour</strong>.</p>
                     </div>
                   </div>
-                  <Button
-                    className="w-full h-11 text-sm font-semibold"
-                    onClick={() => {
-                      setEmail(forgotEmail);
-                      setPassword(forgotResult.password);
-                      setForgotMode(false);
-                      setForgotResult(null);
-                      setShowForgotPassword(false);
-                    }}
-                  >
-                    Sign In with This Password
+                  <Button variant="outline" className="w-full" onClick={() => { setForgotMode(false); setForgotEmail(""); setForgotSent(false); }}>
+                    Back to Sign In
                   </Button>
                 </div>
               ) : (
@@ -201,8 +213,12 @@ export default function LoginPage() {
                       <p className="text-sm text-red-700">{forgotError}</p>
                     </div>
                   )}
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                    <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-700">Password reset is only available for the <strong>System Administrator</strong> account. Staff passwords are managed by the administrator in the Users section.</p>
+                  </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Administrator Email</label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <Input
@@ -210,13 +226,18 @@ export default function LoginPage() {
                         value={forgotEmail}
                         onChange={e => { setForgotEmail(e.target.value); setForgotError(""); }}
                         className="pl-10"
-                        placeholder="you@company.co.tz"
+                        placeholder={ADMIN_EMAIL}
                         autoFocus
                       />
                     </div>
                   </div>
-                  <Button type="submit" className="w-full h-11 text-sm font-semibold">
-                    Retrieve Password
+                  <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={forgotSending}>
+                    {forgotSending ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Sending reset link...
+                      </div>
+                    ) : "Send Reset Link to Gmail"}
                   </Button>
                 </form>
               )}
@@ -260,7 +281,7 @@ export default function LoginPage() {
                   <label className="block text-sm font-medium text-gray-700">Password</label>
                   <button
                     type="button"
-                    onClick={() => { setForgotMode(true); setForgotEmail(email); setForgotError(""); setForgotResult(null); }}
+                    onClick={() => { setForgotMode(true); setForgotEmail(email); setForgotError(""); setForgotSent(false); }}
                     className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                   >
                     Forgot password?
