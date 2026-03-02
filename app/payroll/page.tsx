@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DollarSign, Plus, Search, CheckCircle, Download, Eye, FileText, AlertCircle, Building2 } from "lucide-react";
+import { DollarSign, Plus, Search, CheckCircle, Download, Eye, FileText, AlertCircle, Building2, Edit, Trash2 } from "lucide-react";
 import { formatCurrency, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -84,6 +84,9 @@ export default function PayrollPage() {
   const [advForm, setAdvForm] = useState({ staffId: "", amount: "", reason: "", repaymentDate: "" });
   const [advError, setAdvError] = useState("");
   const [runConfirm, setRunConfirm] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [editEntry, setEditEntry] = useState<PayrollEntry | null>(null);
+  const [editForm, setEditForm] = useState<{ basicSalary: string; allowances: Allowance[] } | null>(null);
   const [session, setSession] = useState<Session | null>(null);
 
   const reload = () => {
@@ -196,6 +199,49 @@ export default function PayrollPage() {
     setAdvForm({ staffId: "", amount: "", reason: "", repaymentDate: "" });
     setAdvError("");
     setShowAdvanceDialog(false);
+  };
+
+  const deletePayrollEntry = (id: string) => {
+    const updated = payrollEntries.filter(p => p.id !== id);
+    lsSet(PAYROLL_KEY, updated);
+    setPayrollEntries(updated);
+    setDeleteConfirmId(null);
+  };
+
+  const openEditEntry = (entry: PayrollEntry) => {
+    setEditEntry(entry);
+    setEditForm({
+      basicSalary: String(entry.basicSalary),
+      allowances: entry.allowances.map(a => ({ ...a })),
+    });
+  };
+
+  const saveEditEntry = () => {
+    if (!editEntry || !editForm) return;
+    const basic = Number(editForm.basicSalary) || 0;
+    const alws = editForm.allowances.filter(a => a.name.trim() && a.amount > 0);
+    const totalAlw = alws.reduce((s, a) => s + a.amount, 0);
+    const gross = basic + totalAlw;
+    const paye = Math.round(calcPAYE(gross));
+    const nssf = calcNSSF(gross);
+    const sdl  = calcSDL(gross);
+    const net  = gross - paye - nssf - sdl;
+    const updated = payrollEntries.map(p => p.id === editEntry.id ? {
+      ...p,
+      basicSalary: basic,
+      allowances: alws,
+      deductions: [
+        { name: "PAYE", amount: paye },
+        { name: "NSSF (10%)", amount: nssf },
+        { name: "SDL (4%)", amount: sdl },
+      ],
+      grossSalary: gross,
+      netSalary: net,
+    } : p);
+    lsSet(PAYROLL_KEY, updated);
+    setPayrollEntries(updated);
+    setEditEntry(null);
+    setEditForm(null);
   };
 
   const updateAdvStatus = (id: string, status: "approved" | "rejected") => {
@@ -551,6 +597,16 @@ export default function PayrollPage() {
                                 Pay
                               </Button>
                             )}
+                            {session?.isSuperAdmin && (
+                              <>
+                                <Button variant="ghost" size="icon" title="Edit Entry" onClick={() => openEditEntry(payroll)}>
+                                  <Edit className="w-4 h-4 text-blue-400" />
+                                </Button>
+                                <Button variant="ghost" size="icon" title="Delete Entry" onClick={() => setDeleteConfirmId(payroll.id)}>
+                                  <Trash2 className="w-4 h-4 text-red-400" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -772,6 +828,138 @@ export default function PayrollPage() {
             <Button variant="outline" onClick={() => setShowSlipDialog(null)}>Close</Button>
             <Button onClick={() => window.print()}>
               <Download className="w-4 h-4 mr-2" />Print / Save PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Payroll Entry Dialog (superadmin only) ── */}
+      <Dialog open={!!editEntry} onOpenChange={() => { setEditEntry(null); setEditForm(null); }}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Payroll Entry</DialogTitle>
+          </DialogHeader>
+          {editEntry && editForm && (() => {
+            const emp = staffList.find(u => u.id === editEntry.staffId);
+            const previewBasic = Number(editForm.basicSalary) || 0;
+            const previewAlwTotal = editForm.allowances.reduce((s, a) => s + (a.amount || 0), 0);
+            const previewGross = previewBasic + previewAlwTotal;
+            const previewNet = previewGross - Math.round(calcPAYE(previewGross)) - calcNSSF(previewGross) - calcSDL(previewGross);
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                  <Avatar className="w-9 h-9">
+                    <AvatarFallback className="text-xs">{getInitials(emp?.name ?? "?")}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-semibold text-gray-900 text-sm">{emp?.name}</p>
+                    <p className="text-xs text-gray-500">{emp?.position} · {editEntry.month} {editEntry.year}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">Basic Salary (TZS)</label>
+                  <Input
+                    type="number"
+                    value={editForm.basicSalary}
+                    onChange={e => setEditForm(f => f ? { ...f, basicSalary: e.target.value } : f)}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">Allowances</p>
+                    <Button size="sm" variant="outline" type="button"
+                      onClick={() => setEditForm(f => f ? { ...f, allowances: [...f.allowances, { name: "", amount: 0 }] } : f)}>
+                      <Plus className="w-3.5 h-3.5 mr-1" /> Add
+                    </Button>
+                  </div>
+                  {editForm.allowances.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic">No allowances.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {editForm.allowances.map((alw, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <Input
+                            placeholder="Name (e.g. Transport)"
+                            value={alw.name}
+                            onChange={e => setEditForm(f => f ? { ...f, allowances: f.allowances.map((a, i) => i === idx ? { ...a, name: e.target.value } : a) } : f)}
+                            className="flex-1"
+                          />
+                          <Input
+                            type="number"
+                            placeholder="Amount"
+                            value={alw.amount || ""}
+                            onChange={e => setEditForm(f => f ? { ...f, allowances: f.allowances.map((a, i) => i === idx ? { ...a, amount: Number(e.target.value) } : a) } : f)}
+                            className="w-32"
+                          />
+                          <button type="button"
+                            onClick={() => setEditForm(f => f ? { ...f, allowances: f.allowances.filter((_, i) => i !== idx) } : f)}
+                            className="p-1.5 hover:bg-red-50 rounded-lg text-red-400">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Live preview */}
+                <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-sm space-y-1">
+                  <div className="flex justify-between text-gray-600">
+                    <span>Gross Salary</span>
+                    <span className="font-medium">{formatCurrency(previewGross)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>PAYE</span>
+                    <span className="text-red-500">-{formatCurrency(Math.round(calcPAYE(previewGross)))}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>NSSF (10%)</span>
+                    <span className="text-red-500">-{formatCurrency(calcNSSF(previewGross))}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>SDL (4%)</span>
+                    <span className="text-red-500">-{formatCurrency(calcSDL(previewGross))}</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t border-gray-200 pt-1 mt-1">
+                    <span>Net Pay</span>
+                    <span className="text-green-700">{formatCurrency(previewNet)}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setEditEntry(null); setEditForm(null); }}>Cancel</Button>
+            <Button onClick={saveEditEntry}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Confirm Dialog (superadmin only) ── */}
+      <Dialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Payroll Entry</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-sm text-gray-600">Are you sure you want to delete this payroll entry? This action <strong>cannot be undone</strong>.</p>
+            {deleteConfirmId && (() => {
+              const entry = payrollEntries.find(p => p.id === deleteConfirmId);
+              const emp = staffList.find(u => u.id === entry?.staffId);
+              return entry ? (
+                <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-100 text-sm">
+                  <p className="font-semibold text-red-800">{emp?.name ?? "Unknown"}</p>
+                  <p className="text-red-600">{entry.month} {entry.year} — Net: {formatCurrency(entry.netSalary)}</p>
+                </div>
+              ) : null;
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteConfirmId && deletePayrollEntry(deleteConfirmId)}>
+              <Trash2 className="w-4 h-4 mr-2" /> Delete
             </Button>
           </DialogFooter>
         </DialogContent>
