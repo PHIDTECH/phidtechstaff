@@ -336,7 +336,8 @@ export default function UsersPage() {
                     <TableHead>Employee</TableHead>
                     <TableHead>Department</TableHead>
                     <TableHead>Position</TableHead>
-                    <TableHead>Salary</TableHead>
+                    <TableHead>Basic Salary</TableHead>
+                    <TableHead>Allowances</TableHead>
                     <TableHead>Join Date</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -363,6 +364,25 @@ export default function UsersPage() {
                         </span>
                       </TableCell>
                       <TableCell className="font-medium text-gray-800">{formatCurrency(user.salary)}</TableCell>
+                      <TableCell>
+                        {user.allowances && user.allowances.length > 0 ? (
+                          <div className="group relative cursor-default inline-block">
+                            <span className="font-medium text-green-700">
+                              +{formatCurrency(user.allowances.reduce((s, a) => s + a.amount, 0))}
+                            </span>
+                            <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover:block bg-white border border-gray-100 shadow-lg rounded-lg p-2 min-w-[180px]">
+                              {user.allowances.map((a, i) => (
+                                <div key={i} className="flex justify-between gap-4 text-xs py-0.5">
+                                  <span className="text-gray-600">{a.name}</span>
+                                  <span className="font-medium text-gray-800">{formatCurrency(a.amount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-gray-500 text-sm">{formatDate(user.joinDate)}</TableCell>
                       <TableCell>
                         <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(user.status)}`}>
