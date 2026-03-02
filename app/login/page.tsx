@@ -61,6 +61,7 @@ export default function LoginPage() {
           localStorage.setItem(SESSION_KEY, JSON.stringify({
             id: match.id, name: match.name, email: match.email,
             role: match.role, position: match.position,
+            permissions: match.permissions ?? [],
             companyId: match.companyId, isSuperAdmin: false,
           }));
           router.push("/dashboard");

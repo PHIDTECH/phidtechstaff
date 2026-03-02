@@ -1,5 +1,5 @@
 "use client";
-import { cn } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -9,9 +9,33 @@ import {
   Receipt, BarChart3, FileText, Warehouse, TrendingUp, Briefcase,
   Clock, HelpCircle, X, Menu
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-const navigation = [
+const SESSION_KEY = "phidtech_session";
+
+// Map permission keys to route prefixes
+const PERM_ROUTES: Record<string, string[]> = {
+  dashboard:   ["/dashboard"],
+  users:       ["/users"],
+  attendance:  ["/attendance"],
+  leave:       ["/leave"],
+  payroll:     ["/payroll"],
+  tasks:       ["/tasks"],
+  kpis:        ["/kpis"],
+  assets:      ["/assets"],
+  expenses:    ["/expenses"],
+  accounting:  ["/accounting"],
+  invoices:    ["/invoices", "/petty-cash"],
+  customers:   ["/customers"],
+  sales:       ["/sales", "/quotations", "/tickets"],
+  marketing:   ["/marketing"],
+  inventory:   ["/inventory", "/vendors"],
+  documents:   ["/documents"],
+  reports:     ["/reports"],
+  admin:       ["/admin", "/notifications"],
+};
+
+const ALL_NAV = [
   {
     title: "Overview",
     items: [
@@ -79,6 +103,16 @@ const navigation = [
   },
 ];
 
+function canAccess(href: string, perms: string[] | null): boolean {
+  if (!perms) return true; // superadmin sees everything
+  for (const [perm, routes] of Object.entries(PERM_ROUTES)) {
+    if (routes.some(r => href === r || href.startsWith(r + "/"))) {
+      return perms.includes(perm);
+    }
+  }
+  return true; // routes not in map are always visible
+}
+
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
@@ -88,7 +122,28 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, onToggle, mobile, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const [expandedGroups, setExpandedGroups] = useState<string[]>(navigation.map(n => n.title));
+  const [session, setSession] = useState<{name:string;role:string;position:string;isSuperAdmin:boolean;permissions?:string[]} | null>(null);
+
+  useEffect(() => {
+    const load = () => {
+      try {
+        const s = localStorage.getItem(SESSION_KEY);
+        if (s) setSession(JSON.parse(s));
+      } catch {}
+    };
+    load();
+    window.addEventListener("phidtech_session_updated", load);
+    return () => window.removeEventListener("phidtech_session_updated", load);
+  }, []);
+
+  const perms: string[] | null = session?.isSuperAdmin ? null : (session?.permissions ?? null);
+
+  const navigation = ALL_NAV.map(group => ({
+    ...group,
+    items: group.items.filter(item => canAccess(item.href, perms)),
+  })).filter(group => group.items.length > 0);
+
+  const [expandedGroups, setExpandedGroups] = useState<string[]>(ALL_NAV.map(n => n.title));
 
   const toggleGroup = (title: string) => {
     setExpandedGroups(prev =>
@@ -192,11 +247,11 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
         <div className="border-t border-gray-800 p-4 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
-              JM
+              {getInitials(session?.name ?? "SA")}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-white truncate">John Mwalimu</p>
-              <p className="text-xs text-gray-400 truncate">System Administrator</p>
+              <p className="text-sm font-medium text-white truncate">{session?.name ?? "System Administrator"}</p>
+              <p className="text-xs text-gray-400 truncate capitalize">{session?.position ?? session?.role ?? "Admin"}</p>
             </div>
           </div>
         </div>

@@ -26,6 +26,7 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
   const [companiesList, setCompaniesList] = useState<{id:string;name:string;industry?:string}[]>([]);
   const [activeCompanyId, setActiveCompanyIdState] = useState("");
   const [profileName, setProfileName] = useState(currentUser.name);
+  const [profileRole, setProfileRole] = useState("Admin");
   const [profilePhoto, setProfilePhoto] = useState("");
 
   const reloadCompanies = () => {
@@ -33,9 +34,14 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
     setActiveCompanyIdState(lsStr(ACTIVE_KEY));
   };
 
-  useEffect(() => {
-    reloadCompanies();
+  const reloadSession = () => {
     try {
+      const s = localStorage.getItem("phidtech_session");
+      if (s) {
+        const sess = JSON.parse(s);
+        setProfileName(sess.name ?? currentUser.name);
+        setProfileRole(sess.position ?? sess.role ?? "Admin");
+      }
       const stored = localStorage.getItem("phidtech_profile");
       if (stored) {
         const p = JSON.parse(stored);
@@ -44,15 +50,24 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
       const photo = localStorage.getItem("phidtech_profile_photo");
       if (photo) setProfilePhoto(photo);
     } catch {}
+  };
+
+  useEffect(() => {
+    reloadCompanies();
+    reloadSession();
 
     const onCustom = () => reloadCompanies();
     const onStorage = (e: StorageEvent) => {
       if (e.key === COMPANIES_KEY || e.key === ACTIVE_KEY) reloadCompanies();
+      if (e.key === "phidtech_session") reloadSession();
     };
+    const onSession = () => reloadSession();
     window.addEventListener("phidtech_companies_updated", onCustom);
+    window.addEventListener("phidtech_session_updated", onSession);
     window.addEventListener("storage", onStorage);
     return () => {
       window.removeEventListener("phidtech_companies_updated", onCustom);
+      window.removeEventListener("phidtech_session_updated", onSession);
       window.removeEventListener("storage", onStorage);
     };
   }, []);
@@ -194,7 +209,7 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
             </div>
             <div className="hidden md:block text-left">
               <p className="text-sm font-medium text-gray-800 leading-none">{profileName}</p>
-              <p className="text-xs text-gray-400 mt-0.5 capitalize">{currentUser.role}</p>
+              <p className="text-xs text-gray-400 mt-0.5 capitalize">{profileRole}</p>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-gray-400 hidden md:block" />
           </button>
