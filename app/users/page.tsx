@@ -22,6 +22,10 @@ import {
 import { formatDate, formatCurrency, getInitials, getStatusColor } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────
+interface Allowance {
+  name: string;
+  amount: number;
+}
 interface StaffUser {
   id: string;
   companyId: string;
@@ -33,6 +37,7 @@ interface StaffUser {
   position: string;
   role: string;          // admin | manager | accountant | hr | sales | staff | ...
   salary: number;
+  allowances: Allowance[];
   joinDate: string;
   status: string;
   permissions: string[];
@@ -119,8 +124,9 @@ function positionLabel(pos: string) {
 const emptyForm = (companyId = "") => ({
   name: "", email: "", password: "", phone: "",
   department: "", position: "staff", salary: "",
-  status: "active", permissions: DEFAULT_PERMISSIONS["staff"],
+  status: "active", permissions: DEFAULT_PERMISSIONS["staff"] as string[],
   companyId,
+  allowances: [] as Allowance[],
 });
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -204,7 +210,8 @@ export default function UsersPage() {
     setEditUser(u);
     setForm({ name: u.name, email: u.email, password: u.password, phone: u.phone,
       department: u.department, position: u.position, salary: String(u.salary),
-      status: u.status, permissions: [...u.permissions], companyId: u.companyId });
+      status: u.status, permissions: [...u.permissions], companyId: u.companyId,
+      allowances: u.allowances ? [...u.allowances] : [] });
     setFormError("");
     setShowEditDialog(true);
   };
@@ -242,6 +249,7 @@ export default function UsersPage() {
         phone: form.phone, department: form.department,
         position: form.position, salary: Number(form.salary) || 0,
         status: form.status, permissions: form.permissions,
+        allowances: form.allowances,
       } : u);
       saveUsers(updated);
       setShowEditDialog(false);
@@ -252,6 +260,7 @@ export default function UsersPage() {
         phone: form.phone, department: form.department,
         position: form.position, role: form.position,
         salary: Number(form.salary) || 0,
+        allowances: form.allowances,
         joinDate: new Date().toISOString().slice(0, 10),
         status: form.status, permissions: form.permissions,
       };
@@ -602,6 +611,42 @@ export default function UsersPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* Allowances */}
+            <div className="mt-2">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-gray-700">Allowances</p>
+                <Button size="sm" variant="outline" type="button" onClick={() => setForm(f => ({ ...f, allowances: [...f.allowances, { name: "", amount: 0 }] }))}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Allowance
+                </Button>
+              </div>
+              {form.allowances.length === 0 ? (
+                <p className="text-xs text-gray-400 italic py-2">No allowances set. Click "Add Allowance" to add one.</p>
+              ) : (
+                <div className="space-y-2">
+                  {form.allowances.map((alw, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Input
+                        placeholder="Allowance name (e.g. Transport)"
+                        value={alw.name}
+                        onChange={e => setForm(f => ({ ...f, allowances: f.allowances.map((a, i) => i === idx ? { ...a, name: e.target.value } : a) }))}
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Amount"
+                        value={alw.amount || ""}
+                        onChange={e => setForm(f => ({ ...f, allowances: f.allowances.map((a, i) => i === idx ? { ...a, amount: Number(e.target.value) } : a) }))}
+                        className="w-36"
+                      />
+                      <button type="button" onClick={() => setForm(f => ({ ...f, allowances: f.allowances.filter((_, i) => i !== idx) }))} className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Permissions */}

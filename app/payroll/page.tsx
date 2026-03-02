@@ -38,6 +38,7 @@ interface Session {
 interface StaffUser {
   id: string; name: string; email: string; position: string;
   department: string; salary: number; status: string; companyId: string;
+  allowances?: { name: string; amount: number }[];
 }
 interface Allowance { name: string; amount: number; }
 interface Deduction { name: string; amount: number; }
@@ -125,9 +126,10 @@ export default function PayrollPage() {
     if (activeStaff.length === 0) { setRunConfirm(false); return; }
     const newEntries: PayrollEntry[] = activeStaff.map(emp => {
       const basic = emp.salary;
-      const transport = Math.round(basic * 0.10);
-      const housing  = Math.round(basic * 0.15);
-      const gross = basic + transport + housing;
+      // Use staff's manually set allowances; fall back to empty if none set
+      const staffAllowances = (emp.allowances ?? []).filter(a => a.name.trim() && a.amount > 0);
+      const totalAllowanceAmt = staffAllowances.reduce((s, a) => s + a.amount, 0);
+      const gross = basic + totalAllowanceAmt;
       const paye = Math.round(calcPAYE(gross));
       const nssf = calcNSSF(gross);
       const sdl  = calcSDL(gross);
@@ -138,10 +140,7 @@ export default function PayrollPage() {
         staffId: emp.id, companyId: activeCompanyId,
         month: selectedMonth, year: selectedYear,
         basicSalary: basic,
-        allowances: [
-          { name: "Transport Allowance", amount: transport },
-          { name: "Housing Allowance", amount: housing },
-        ],
+        allowances: staffAllowances,
         deductions: [
           { name: "PAYE", amount: paye },
           { name: "NSSF (10%)", amount: nssf },
