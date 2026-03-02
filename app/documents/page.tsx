@@ -14,10 +14,11 @@ import { FileText, Search, Download, Eye, Upload, FolderOpen, Shield, AlertCircl
 import { formatDateTime, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-const SESSION_KEY  = "phidtech_session";
-const ACTIVE_KEY   = "phidtech_active_company";
-const DOCS_KEY     = "phidtech_documents";
-const USERS_KEY    = "phidtech_users";
+const SESSION_KEY    = "phidtech_session";
+const ACTIVE_KEY     = "phidtech_active_company";
+const DOCS_KEY       = "phidtech_documents";
+const USERS_KEY      = "phidtech_users";
+const COMPANIES_KEY  = "phidtech_companies";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -33,6 +34,7 @@ interface Doc {
   size: string; version: number; dataUrl?: string;
 }
 interface StaffUser { id: string; name: string; companyId: string; department?: string; position?: string; status?: string; }
+interface Company { id: string; name: string; }
 
 const CATEGORIES = ["HR Policy","Financial","Technical","Sales","Legal","Marketing","Operations","Other"];
 
@@ -74,6 +76,7 @@ const emptyForm = () => ({ category: "", permissions: "all", assignedTo: "", ass
 export default function DocumentsPage() {
   const [docs, setDocs]                 = useState<Doc[]>([]);
   const [staff, setStaff]               = useState<StaffUser[]>([]);
+  const [companies, setCompanies]       = useState<Company[]>([]);
   const [cid, setCid]                   = useState("");
   const cidRef                          = useRef("");
   const [session, setSession]           = useState<Session | null>(null);
@@ -96,12 +99,22 @@ export default function DocumentsPage() {
     setCid(c); cidRef.current = c;
     setDocs(lsGet<Doc[]>(DOCS_KEY, []));
     setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
+    setCompanies(lsGet<Company[]>(COMPANIES_KEY, []));
   };
 
   useEffect(() => { reload(); }, []);
 
   const co         = cidRef.current || cid;
   const coStaff    = (co ? staff.filter(u => u.companyId === co && u.status !== "inactive") : staff);
+  // For specific staff picker: ALL active staff across ALL companies, grouped by company
+  const allActiveStaff = staff.filter(u => u.status !== "inactive");
+  const staffByCompany = companies.map(c => ({
+    company: c,
+    members: allActiveStaff.filter(u => u.companyId === c.id),
+  })).filter(g => g.members.length > 0);
+  // Staff not belonging to any known company
+  const knownCompanyIds = new Set(companies.map(c => c.id));
+  const ungroupedStaff  = allActiveStaff.filter(u => !knownCompanyIds.has(u.companyId));
   const coDocs   = (co ? docs.filter(d => d.companyId === co) : docs)
                      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
   const categories = [...new Set(coDocs.map(d => d.category))];
@@ -421,12 +434,24 @@ export default function DocumentsPage() {
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Select Staff Member <span className="text-red-500">*</span></label>
                 <Select value={form.assignedTo} onValueChange={v => {
-                  const u = coStaff.find(s => s.id === v);
+                  const u = allActiveStaff.find(s => s.id === v);
                   sf({ assignedTo: v, assignedToName: u?.name ?? "" });
                 }}>
                   <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
-                  <SelectContent>
-                    {coStaff.map(u => (
+                  <SelectContent className="max-h-64">
+                    {staffByCompany.map(group => (
+                      <div key={group.company.id}>
+                        <div className="px-2 py-1.5 text-xs font-bold text-gray-400 uppercase tracking-wider bg-gray-50 sticky top-0">
+                          🏢 {group.company.name}
+                        </div>
+                        {group.members.map(u => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.name}{u.department ? ` – ${u.department}` : ""}{u.position ? ` (${u.position})` : ""}
+                          </SelectItem>
+                        ))}
+                      </div>
+                    ))}
+                    {ungroupedStaff.map(u => (
                       <SelectItem key={u.id} value={u.id}>
                         {u.name}{u.department ? ` – ${u.department}` : ""}{u.position ? ` (${u.position})` : ""}
                       </SelectItem>
