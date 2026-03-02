@@ -7,7 +7,7 @@ import {
   BookOpen, UserCheck, Target, Bell, Settings, ChevronDown,
   ChevronRight, Building2, ShoppingCart, Megaphone, Package,
   Receipt, BarChart3, FileText, Warehouse, TrendingUp, Briefcase,
-  Clock, HelpCircle, X, Menu, Percent
+  Clock, HelpCircle, X, Menu, Percent, Wrench
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -38,6 +38,7 @@ const PERM_ROUTES: Record<string, string[]> = {
   inventory:   ["/inventory", "/vendors"],
   documents:   ["/documents"],
   reports:     ["/reports"],
+  services:    ["/services"],
   admin:       ["/admin", "/notifications"],
 };
 
@@ -97,6 +98,12 @@ const ALL_NAV = [
       { label: "Stock", href: "/inventory/stock", icon: Warehouse },
       { label: "Purchase Orders", href: "/inventory/orders", icon: ShoppingCart },
       { label: "Vendors", href: "/vendors", icon: Building2 },
+    ]
+  },
+  {
+    title: "Services",
+    items: [
+      { label: "Services & Pricing", href: "/services", icon: Wrench },
     ]
   },
   {
