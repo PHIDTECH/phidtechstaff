@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DollarSign, Plus, Search, CheckCircle, Download, Eye, FileText, AlertCircle, Building2, Edit, Trash2 } from "lucide-react";
+import { DollarSign, Plus, Search, CheckCircle, Download, Eye, FileText, AlertCircle, Building2, Edit, Trash2, Printer, Sheet } from "lucide-react";
 import { formatCurrency, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -244,6 +244,113 @@ export default function PayrollPage() {
     setEditForm(null);
   };
 
+  const exportCSV = () => {
+    const rows: string[][] = [
+      ["Employee", "Position", "Department", "Basic Salary", "Total Allowances", "Gross Salary", "PAYE", "NSSF (10%)", "SDL (4%)", "Total Deductions", "Net Salary", "Status"],
+    ];
+    companyEntries.forEach(p => {
+      const emp = staffList.find(u => u.id === p.staffId);
+      const totalAlw = p.allowances.reduce((s, a) => s + a.amount, 0);
+      const totalDed = p.deductions.reduce((s, d) => s + d.amount, 0);
+      const paye  = p.deductions.find(d => d.name === "PAYE")?.amount ?? 0;
+      const nssf  = p.deductions.find(d => d.name.startsWith("NSSF"))?.amount ?? 0;
+      const sdl   = p.deductions.find(d => d.name.startsWith("SDL"))?.amount ?? 0;
+      rows.push([
+        emp?.name ?? "Unknown",
+        emp?.position ?? "",
+        emp?.department ?? "",
+        String(p.basicSalary),
+        String(totalAlw),
+        String(p.grossSalary),
+        String(paye),
+        String(nssf),
+        String(sdl),
+        String(totalDed),
+        String(p.netSalary),
+        p.status,
+      ]);
+    });
+    // Totals row
+    rows.push([
+      `TOTAL (${companyEntries.length} staff)`, "", "",
+      String(companyEntries.reduce((s, p) => s + p.basicSalary, 0)),
+      String(companyEntries.reduce((s, p) => s + p.allowances.reduce((x, a) => x + a.amount, 0), 0)),
+      String(totalGross),
+      "", "", "",
+      String(totalDeductions),
+      String(totalNet),
+      "",
+    ]);
+    const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Payroll_${activeCompanyName.replace(/\s+/g, "_")}_${selectedMonth}_${selectedYear}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printReport = () => {
+    const rows = companyEntries.map(p => {
+      const emp = staffList.find(u => u.id === p.staffId);
+      const totalAlw = p.allowances.reduce((s, a) => s + a.amount, 0);
+      const totalDed = p.deductions.reduce((s, d) => s + d.amount, 0);
+      return `<tr>
+        <td>${emp?.name ?? "Unknown"}</td>
+        <td>${emp?.position ?? ""}</td>
+        <td style="text-align:right">${p.basicSalary.toLocaleString()}</td>
+        <td style="text-align:right;color:#16a34a">+${totalAlw.toLocaleString()}</td>
+        <td style="text-align:right;font-weight:600">${p.grossSalary.toLocaleString()}</td>
+        <td style="text-align:right;color:#dc2626">-${totalDed.toLocaleString()}</td>
+        <td style="text-align:right;font-weight:700;color:#1d4ed8">${p.netSalary.toLocaleString()}</td>
+        <td style="text-align:center"><span style="padding:2px 8px;border-radius:20px;font-size:11px;background:${p.status === "paid" ? "#dcfce7" : "#fef9c3"};color:${p.status === "paid" ? "#15803d" : "#a16207"}">${p.status}</span></td>
+      </tr>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+      <title>Payroll Report — ${selectedMonth} ${selectedYear}</title>
+      <style>
+        body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 20px; }
+        h1 { font-size: 18px; margin: 0 0 2px; } h2 { font-size: 13px; color: #555; font-weight: normal; margin: 0 0 16px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        th { background: #1e3a8a; color: #fff; padding: 7px 10px; text-align: left; font-size: 11px; }
+        th:nth-child(n+3) { text-align: right; }
+        td { padding: 6px 10px; border-bottom: 1px solid #e5e7eb; }
+        tfoot td { font-weight: 700; background: #f1f5f9; border-top: 2px solid #1e3a8a; }
+        .summary { display: flex; gap: 30px; margin-top: 16px; padding: 10px 14px; background: #eff6ff; border-radius: 8px; }
+        .summary span { font-size: 11px; color: #555; } .summary strong { display: block; font-size: 14px; }
+        @media print { button { display: none; } }
+      </style></head><body>
+      <h1>${activeCompanyName}</h1>
+      <h2>Payroll Register — ${selectedMonth} ${selectedYear} &nbsp;|&nbsp; Generated: ${new Date().toLocaleDateString()}</h2>
+      <div class="summary">
+        <div><span>Total Gross</span><strong>TZS ${totalGross.toLocaleString()}</strong></div>
+        <div><span>Total Deductions</span><strong style="color:#dc2626">TZS ${totalDeductions.toLocaleString()}</strong></div>
+        <div><span>Total Net Pay</span><strong style="color:#1d4ed8">TZS ${totalNet.toLocaleString()}</strong></div>
+        <div><span>Staff Count</span><strong>${companyEntries.length}</strong></div>
+        <div><span>Paid</span><strong style="color:#16a34a">${paidCount} / ${companyEntries.length}</strong></div>
+      </div>
+      <table><thead><tr>
+        <th>Employee</th><th>Position</th><th>Basic Salary</th><th>Allowances</th><th>Gross</th><th>Deductions</th><th>Net Pay</th><th>Status</th>
+      </tr></thead><tbody>${rows}</tbody>
+      <tfoot><tr>
+        <td colspan="2">TOTAL (${companyEntries.length} employees)</td>
+        <td style="text-align:right">${companyEntries.reduce((s,p)=>s+p.basicSalary,0).toLocaleString()}</td>
+        <td style="text-align:right">${companyEntries.reduce((s,p)=>s+p.allowances.reduce((x,a)=>x+a.amount,0),0).toLocaleString()}</td>
+        <td style="text-align:right">${totalGross.toLocaleString()}</td>
+        <td style="text-align:right;color:#dc2626">-${totalDeductions.toLocaleString()}</td>
+        <td style="text-align:right;color:#1d4ed8">${totalNet.toLocaleString()}</td>
+        <td></td>
+      </tr></tfoot></table>
+      <p style="margin-top:24px;font-size:10px;color:#9ca3af">PHIDTECH Management System — Confidential</p>
+      <script>window.onload=()=>window.print();</script>
+      </body></html>`;
+
+    const w = window.open("", "_blank", "width=1000,height=750");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
   const updateAdvStatus = (id: string, status: "approved" | "rejected") => {
     const updated = advances.map(a => a.id === id ? { ...a, status } : a);
     lsSet(ADVANCES_KEY, updated);
@@ -475,6 +582,16 @@ export default function PayrollPage() {
             <Button variant="outline" size="sm" onClick={() => { setAdvForm({ staffId: "", amount: "", reason: "", repaymentDate: "" }); setAdvError(""); setShowAdvanceDialog(true); }}>
               <Plus className="w-4 h-4 mr-2" /> Salary Advance
             </Button>
+            {alreadyRun && (
+              <>
+                <Button variant="outline" size="sm" onClick={exportCSV} title="Export to CSV/Excel">
+                  <Sheet className="w-4 h-4 mr-2" /> Export CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={printReport} title="Print / Save as PDF">
+                  <Printer className="w-4 h-4 mr-2" /> Print PDF
+                </Button>
+              </>
+            )}
             <Button size="sm" onClick={() => setRunConfirm(true)} disabled={staffList.filter(u=>u.status==="active").length === 0}>
               <FileText className="w-4 h-4 mr-2" /> Run Payroll
             </Button>
