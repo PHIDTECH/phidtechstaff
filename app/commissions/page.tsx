@@ -246,11 +246,11 @@ export default function CommissionsPage() {
         </div>
         <Select value={filterMonth} onValueChange={setFilterMonth}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-          <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+          <SelectContent position="popper">{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
         </Select>
         <Select value={String(filterYear)} onValueChange={v => setFilterYear(Number(v))}>
           <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-          <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+          <SelectContent position="popper">{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
         </Select>
       </div>
 
@@ -381,14 +381,14 @@ export default function CommissionsPage() {
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Month</label>
                 <Select value={form.month} onValueChange={v => setForm(f => ({...f, month: v}))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                  <SelectContent position="popper">{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Year</label>
                 <Select value={String(form.year)} onValueChange={v => setForm(f => ({...f, year: Number(v)}))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+                  <SelectContent position="popper">{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
