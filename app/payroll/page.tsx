@@ -14,11 +14,12 @@ import { DollarSign, Plus, Search, CheckCircle, Download, Eye, FileText, AlertCi
 import { formatCurrency, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-const ACTIVE_KEY = "phidtech_active_company";
-const USERS_KEY = "phidtech_users";
-const PAYROLL_KEY = "phidtech_payroll";
+const ACTIVE_KEY   = "phidtech_active_company";
+const USERS_KEY    = "phidtech_users";
+const PAYROLL_KEY  = "phidtech_payroll";
 const ADVANCES_KEY = "phidtech_advances";
 const COMPANIES_KEY = "phidtech_companies";
+const SESSION_KEY  = "phidtech_session";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -30,6 +31,10 @@ function lsStr(key: string, fallback = "") {
   try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
 }
 
+interface Session {
+  id: string; name: string; role: string; position: string;
+  isSuperAdmin: boolean; companyId: string;
+}
 interface StaffUser {
   id: string; name: string; email: string; position: string;
   department: string; salary: number; status: string; companyId: string;
@@ -78,9 +83,12 @@ export default function PayrollPage() {
   const [advForm, setAdvForm] = useState({ staffId: "", amount: "", reason: "", repaymentDate: "" });
   const [advError, setAdvError] = useState("");
   const [runConfirm, setRunConfirm] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
 
   const reload = () => {
-    const cid = lsStr(ACTIVE_KEY);
+    const sess = lsGet<Session>(SESSION_KEY, null as never);
+    setSession(sess);
+    const cid = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setActiveCompanyId(cid);
     const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
     setActiveCompanyName(companies.find(c => c.id === cid)?.name ?? "");
@@ -168,15 +176,16 @@ export default function PayrollPage() {
     setPayrollEntries(updated);
   };
 
-  const saveAdvance = () => {
-    if (!advForm.staffId) { setAdvError("Select an employee."); return; }
+  const saveAdvance = (staffIdOverride?: string) => {
+    const sid = staffIdOverride ?? advForm.staffId;
+    if (!sid) { setAdvError("Select an employee."); return; }
     if (!advForm.amount || isNaN(Number(advForm.amount)) || Number(advForm.amount) <= 0) {
       setAdvError("Enter a valid amount."); return;
     }
     if (!advForm.reason.trim()) { setAdvError("Enter a reason."); return; }
     const adv: SalaryAdvance = {
       id: `adv-${Date.now()}`,
-      staffId: advForm.staffId, companyId: activeCompanyId,
+      staffId: sid, companyId: activeCompanyId,
       amount: Number(advForm.amount), reason: advForm.reason.trim(),
       requestDate: new Date().toISOString().slice(0, 10),
       repaymentDate: advForm.repaymentDate,
@@ -198,6 +207,218 @@ export default function PayrollPage() {
 
   const years = [now.getFullYear(), now.getFullYear() - 1];
 
+  // Role check: superadmin or accountant (position/role contains "accountant")
+  const canManage = session?.isSuperAdmin === true ||
+    session?.role?.toLowerCase().includes("accountant") ||
+    session?.position?.toLowerCase().includes("accountant");
+
+  // Staff personal data
+  const myEntry = companyEntries.find(p => p.staffId === session?.id);
+  const myAdvances = advances.filter(a => a.staffId === session?.id && a.companyId === activeCompanyId);
+  const myStaff = staffList.find(u => u.id === session?.id);
+
+  // ─────────────────────────────────────────────
+  // STAFF VIEW (non-admin, non-accountant)
+  // ─────────────────────────────────────────────
+  if (session && !canManage) {
+    return (
+      <MainLayout>
+        <PageHeader
+          title="My Payslip"
+          subtitle="View your salary details and apply for advances"
+          icon={DollarSign}
+          actions={
+            <Button size="sm" onClick={() => { setAdvForm({ staffId: session.id, amount: "", reason: "", repaymentDate: "" }); setAdvError(""); setShowAdvanceDialog(true); }}>
+              <Plus className="w-4 h-4 mr-2" /> Apply Salary Advance
+            </Button>
+          }
+        />
+
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          <StatCard title="My Net Salary" value={myEntry ? formatCurrency(myEntry.netSalary) : "—"} icon={DollarSign} iconBg="bg-blue-50" iconColor="text-blue-600" subtitle={`${selectedMonth} ${selectedYear}`} />
+          <StatCard title="Payslip Status" value={myEntry?.status === "paid" ? "Paid" : myEntry ? "Pending" : "Not Run"} icon={CheckCircle} iconBg={myEntry?.status === "paid" ? "bg-green-50" : "bg-yellow-50"} iconColor={myEntry?.status === "paid" ? "text-green-600" : "text-yellow-600"} subtitle="This month" />
+          <StatCard title="Salary Advances" value={myAdvances.length} icon={FileText} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="All time" />
+        </div>
+
+        {/* Month selector */}
+        <div className="flex items-center gap-2 mb-4">
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(Number(v))}>
+            <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+            <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+
+        <Tabs defaultValue="payslip">
+          <TabsList className="mb-4">
+            <TabsTrigger value="payslip">My Payslip</TabsTrigger>
+            <TabsTrigger value="advances">My Advances</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="payslip">
+            {!myEntry ? (
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col items-center justify-center py-20 text-center gap-3">
+                <FileText className="w-10 h-10 text-gray-300" />
+                <p className="font-medium text-gray-600">No payslip for {selectedMonth} {selectedYear}</p>
+                <p className="text-sm text-gray-400">Payroll has not been processed yet for this month.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm max-w-xl mx-auto">
+                {/* Payslip header */}
+                <div className="px-6 py-5 border-b border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-gray-900 text-lg">{myStaff?.name ?? session.name}</p>
+                      <p className="text-sm text-gray-500">{myStaff?.position} · {myStaff?.department}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-400">Company</p>
+                      <p className="font-semibold text-gray-800 text-sm">{activeCompanyName}</p>
+                      <p className="text-xs text-gray-500">{myEntry.month} {myEntry.year}</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium mt-1 inline-block ${
+                        myEntry.status === "paid" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                      }`}>{myEntry.status}</span>
+                    </div>
+                  </div>
+                </div>
+                {/* Earnings & Deductions */}
+                <div className="px-6 py-4 grid grid-cols-2 gap-6">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Earnings</p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Basic Salary</span>
+                        <span className="font-medium">{formatCurrency(myEntry.basicSalary)}</span>
+                      </div>
+                      {myEntry.allowances.map(a => (
+                        <div key={a.name} className="flex justify-between text-sm">
+                          <span className="text-gray-500">{a.name}</span>
+                          <span className="text-green-700">+{formatCurrency(a.amount)}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between text-sm font-bold border-t pt-2 mt-1">
+                        <span>Gross</span>
+                        <span>{formatCurrency(myEntry.grossSalary)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Deductions</p>
+                    <div className="space-y-2">
+                      {myEntry.deductions.map(d => (
+                        <div key={d.name} className="flex justify-between text-sm">
+                          <span className="text-gray-500">{d.name}</span>
+                          <span className="text-red-600">-{formatCurrency(d.amount)}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between text-sm font-bold border-t pt-2 mt-1">
+                        <span>Total</span>
+                        <span className="text-red-600">-{formatCurrency(myEntry.deductions.reduce((s,d)=>s+d.amount,0))}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* Net pay */}
+                <div className="mx-6 mb-4 p-4 bg-green-50 rounded-xl border border-green-100 flex items-center justify-between">
+                  <span className="font-bold text-gray-900">Net Pay</span>
+                  <span className="text-2xl font-bold text-green-700">{formatCurrency(myEntry.netSalary)}</span>
+                </div>
+                <p className="text-center text-xs text-gray-400 pb-4">Generated by PHIDTECH MS · {new Date(myEntry.generatedAt).toLocaleDateString()}</p>
+                {/* Actions */}
+                <div className="px-6 pb-5 flex justify-end">
+                  <Button onClick={() => window.print()}>
+                    <Download className="w-4 h-4 mr-2" /> Download / Print PDF
+                  </Button>
+                </div>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="advances">
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              {myAdvances.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+                  <AlertCircle className="w-10 h-10 text-gray-300" />
+                  <p className="text-sm text-gray-500">No salary advances requested</p>
+                  <Button size="sm" variant="outline" onClick={() => { setAdvForm({ staffId: session.id, amount: "", reason: "", repaymentDate: "" }); setAdvError(""); setShowAdvanceDialog(true); }}>
+                    <Plus className="w-4 h-4 mr-1.5" /> Apply Now
+                  </Button>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Request Date</TableHead>
+                      <TableHead>Repayment</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {myAdvances.map(adv => (
+                      <TableRow key={adv.id}>
+                        <TableCell className="font-semibold text-gray-900">{formatCurrency(adv.amount)}</TableCell>
+                        <TableCell className="text-sm text-gray-500">{adv.reason}</TableCell>
+                        <TableCell className="text-sm text-gray-600">{adv.requestDate}</TableCell>
+                        <TableCell className="text-sm text-gray-600">{adv.repaymentDate || "—"}</TableCell>
+                        <TableCell>
+                          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                            adv.status === "approved" ? "bg-green-100 text-green-700" :
+                            adv.status === "rejected" ? "bg-red-100 text-red-600" : "bg-yellow-100 text-yellow-700"
+                          }`}>{adv.status}</span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        {/* Staff Advance Request Dialog */}
+        <Dialog open={showAdvanceDialog} onOpenChange={setShowAdvanceDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Apply for Salary Advance</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              {advError && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                  <p className="text-sm text-red-600">{advError}</p>
+                </div>
+              )}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Amount (TZS)</label>
+                <Input type="number" placeholder="e.g. 200000" value={advForm.amount} onChange={e => setAdvForm(f => ({...f, amount: e.target.value}))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Repayment Date</label>
+                <Input type="date" value={advForm.repaymentDate} onChange={e => setAdvForm(f => ({...f, repaymentDate: e.target.value}))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Reason</label>
+                <Input placeholder="Reason for advance" value={advForm.reason} onChange={e => setAdvForm(f => ({...f, reason: e.target.value}))} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAdvanceDialog(false)}>Cancel</Button>
+              <Button onClick={() => saveAdvance(session.id)}>Submit Request</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </MainLayout>
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // ADMIN / ACCOUNTANT VIEW
+  // ─────────────────────────────────────────────
   return (
     <MainLayout>
       <PageHeader
@@ -215,6 +436,11 @@ export default function PayrollPage() {
           </>
         }
       />
+      {/* Access notice */}
+      <div className="mb-4 flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-sm text-blue-700">
+        <Building2 className="w-4 h-4 shrink-0" />
+        <span>You are viewing as <strong>{session?.isSuperAdmin ? "Super Admin" : "Accountant"}</strong> — full payroll access for <strong>{activeCompanyName}</strong></span>
+      </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard title="Total Gross" value={formatCurrency(totalGross)} icon={DollarSign} iconBg="bg-blue-50" iconColor="text-blue-600" subtitle={`${selectedMonth} ${selectedYear}`} />
@@ -411,6 +637,50 @@ export default function PayrollPage() {
         </TabsContent>
       </Tabs>
 
+      {/* ── Admin Salary Advance Dialog (select employee) ── */}
+      <Dialog open={showAdvanceDialog} onOpenChange={setShowAdvanceDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Request Salary Advance</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {advError && (
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                <p className="text-sm text-red-600">{advError}</p>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Employee</label>
+              <Select value={advForm.staffId} onValueChange={v => setAdvForm(f => ({...f, staffId: v}))}>
+                <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                <SelectContent>
+                  {staffList.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.name} — {u.position}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Amount (TZS)</label>
+              <Input type="number" placeholder="e.g. 200000" value={advForm.amount} onChange={e => setAdvForm(f => ({...f, amount: e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Repayment Date</label>
+              <Input type="date" value={advForm.repaymentDate} onChange={e => setAdvForm(f => ({...f, repaymentDate: e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Reason</label>
+              <Input placeholder="Reason for advance" value={advForm.reason} onChange={e => setAdvForm(f => ({...f, reason: e.target.value}))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAdvanceDialog(false)}>Cancel</Button>
+            <Button onClick={() => saveAdvance()}>Submit Request</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Run Payroll Confirm */}
       <Dialog open={runConfirm} onOpenChange={setRunConfirm}>
         <DialogContent className="max-w-sm">
@@ -508,49 +778,6 @@ export default function PayrollPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Salary Advance Dialog */}
-      <Dialog open={showAdvanceDialog} onOpenChange={setShowAdvanceDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Request Salary Advance</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            {advError && (
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                <p className="text-sm text-red-600">{advError}</p>
-              </div>
-            )}
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Employee</label>
-              <Select value={advForm.staffId} onValueChange={v => setAdvForm(f => ({...f, staffId: v}))}>
-                <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                <SelectContent>
-                  {staffList.map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.name} — {u.position}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Amount (TZS)</label>
-              <Input type="number" placeholder="e.g. 200000" value={advForm.amount} onChange={e => setAdvForm(f => ({...f, amount: e.target.value}))} />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Repayment Date</label>
-              <Input type="date" value={advForm.repaymentDate} onChange={e => setAdvForm(f => ({...f, repaymentDate: e.target.value}))} />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Reason</label>
-              <Input placeholder="Reason for advance" value={advForm.reason} onChange={e => setAdvForm(f => ({...f, reason: e.target.value}))} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAdvanceDialog(false)}>Cancel</Button>
-            <Button onClick={saveAdvance}>Submit Request</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </MainLayout>
   );
 }
