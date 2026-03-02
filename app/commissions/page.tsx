@@ -1,6 +1,6 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -71,6 +71,7 @@ export default function CommissionsPage() {
   const now = new Date();
   const [session, setSession]         = useState<Session | null>(null);
   const [activeCompanyId, setActiveCompanyId] = useState("");
+  const activeCompanyIdRef = useRef("");
   const [activeCompanyName, setActiveCompanyName] = useState("");
   const [staffList, setStaffList]     = useState<StaffUser[]>([]);
   const [commissions, setCommissions] = useState<Commission[]>([]);
@@ -89,6 +90,7 @@ export default function CommissionsPage() {
     setSession(sess);
     const cid = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setActiveCompanyId(cid);
+    activeCompanyIdRef.current = cid;
     const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
     setActiveCompanyName(companies.find(c => c.id === cid)?.name ?? "");
     const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
@@ -108,7 +110,10 @@ export default function CommissionsPage() {
     session?.role?.toLowerCase().includes("manager") ||
     session?.position?.toLowerCase().includes("manager");
 
-  const companyCommissions = commissions.filter(c => c.companyId === activeCompanyId);
+  const cid = activeCompanyIdRef.current || activeCompanyId;
+  const companyCommissions = cid
+    ? commissions.filter(c => c.companyId === cid)
+    : commissions;
 
   const monthFiltered = companyCommissions.filter(
     c => c.month === filterMonth && c.year === filterYear
@@ -180,7 +185,7 @@ export default function CommissionsPage() {
       const newItem: Commission = {
         id: `comm-${Date.now()}`,
         staffId: form.staffId,
-        companyId: activeCompanyId,
+        companyId: activeCompanyIdRef.current || activeCompanyId,
         customerName: form.customerName.trim(),
         month: form.month,
         year: Number(form.year),
