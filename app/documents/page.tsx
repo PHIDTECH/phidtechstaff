@@ -233,8 +233,13 @@ export default function DocumentsPage() {
                 <SelectContent>
                   <SelectItem value="all">Everyone</SelectItem>
                   <SelectItem value="admin">Admin Only</SelectItem>
-                  <SelectItem value="manager">Managers & Above</SelectItem>
+                  <SelectItem value="manager">Managers &amp; Above</SelectItem>
+                  <SelectItem value="accountant">Accountants &amp; Above</SelectItem>
+                  <SelectItem value="finance">Finance Team</SelectItem>
+                  <SelectItem value="hr">HR Team</SelectItem>
+                  <SelectItem value="department_head">Department Heads</SelectItem>
                   <SelectItem value="department">Department Only</SelectItem>
+                  <SelectItem value="staff">All Staff</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -51,7 +51,7 @@ export interface Commission {
   saleAmount: number;
   commissionPct: number;
   commissionAmount: number;
-  status: "pending" | "paid";
+  status: "pending" | "paid" | "cancelled";
   createdAt: string;
 }
 
@@ -65,6 +65,7 @@ const emptyForm = () => ({
   datePaid: "",
   saleAmount: "",
   commissionPct: String(DEFAULT_PCT),
+  status: "pending" as Commission["status"],
 });
 
 export default function CommissionsPage() {
@@ -154,6 +155,7 @@ export default function CommissionsPage() {
       datePaid: c.datePaid,
       saleAmount: String(c.saleAmount),
       commissionPct: String(c.commissionPct),
+      status: c.status,
     });
     setFormError("");
     setShowDialog(true);
@@ -178,6 +180,7 @@ export default function CommissionsPage() {
         saleAmount: Number(form.saleAmount),
         commissionPct: Number(form.commissionPct),
         commissionAmount: commAmt,
+        status: form.status,
       } : c);
       lsSet(COMMISSIONS_KEY, updated);
       setCommissions(updated);
@@ -193,7 +196,7 @@ export default function CommissionsPage() {
         saleAmount: Number(form.saleAmount),
         commissionPct: Number(form.commissionPct),
         commissionAmount: commAmt,
-        status: form.datePaid ? "paid" : "pending",
+        status: form.status !== "pending" ? form.status : (form.datePaid ? "paid" : "pending"),
         createdAt: new Date().toISOString(),
       };
       const updated = [...commissions, newItem];
@@ -415,9 +418,22 @@ export default function CommissionsPage() {
                 </div>
               </div>
             </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Date Paid <span className="text-gray-400 font-normal">(optional)</span></label>
-              <Input type="date" value={form.datePaid} onChange={e => setForm(f => ({...f, datePaid: e.target.value}))} />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Date Paid <span className="text-gray-400 font-normal">(optional)</span></label>
+                <Input type="date" value={form.datePaid} onChange={e => setForm(f => ({...f, datePaid: e.target.value}))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Status</label>
+                <Select value={form.status} onValueChange={v => setForm(f => ({...f, status: v as Commission["status"]}))}>  
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <DialogFooter>
