@@ -82,21 +82,22 @@ const ALL_PERMISSIONS = [
   { key: "vendors",      label: "Vendors" },
   { key: "documents",    label: "Documents" },
   { key: "reports",      label: "Reports" },
+  { key: "services",     label: "Services & Pricing" },
   { key: "admin",        label: "Admin Panel" },
 ];
 
 const DEFAULT_PERMISSIONS: Record<string, string[]> = {
   admin:            ALL_PERMISSIONS.map(p => p.key),
-  manager:          ["dashboard","attendance","leave","payroll","tasks","kpis","expenses","reports"],
-  accountant:       ["dashboard","accounting","invoices","expenses","payroll","reports"],
-  hr:               ["dashboard","users","attendance","leave","payroll","reports"],
-  sales:            ["dashboard","sales","customers","invoices","tasks","reports"],
-  it:               ["dashboard","tasks","assets","documents","reports"],
-  procurement:      ["dashboard","vendors","inventory","expenses","tasks"],
-  customer_service: ["dashboard","customers","tasks"],
-  legal:            ["dashboard","documents","reports"],
-  logistics:        ["dashboard","inventory","vendors","tasks"],
-  staff:            ["dashboard","attendance","leave","expenses"],
+  manager:          ["dashboard","attendance","leave","payroll","tasks","kpis","expenses","reports","services"],
+  accountant:       ["dashboard","accounting","invoices","expenses","payroll","reports","services"],
+  hr:               ["dashboard","users","attendance","leave","payroll","reports","services"],
+  sales:            ["dashboard","sales","customers","invoices","tasks","reports","services"],
+  it:               ["dashboard","tasks","assets","documents","reports","services"],
+  procurement:      ["dashboard","vendors","inventory","expenses","tasks","services"],
+  customer_service: ["dashboard","customers","tasks","services"],
+  legal:            ["dashboard","documents","reports","services"],
+  logistics:        ["dashboard","inventory","vendors","tasks","services"],
+  staff:            ["dashboard","attendance","leave","expenses","services"],
 };
 
 const USERS_KEY = "phidtech_users";

@@ -128,6 +128,7 @@ export default function AdminPage() {
     { module: "Expenses", admin: true, manager: true, staff: true },
     { module: "Documents", admin: true, manager: true, staff: true },
     { module: "Reports", admin: true, manager: true, staff: false },
+    { module: "Services & Pricing", admin: true, manager: true, staff: true },
     { module: "Admin Panel", admin: true, manager: false, staff: false },
   ];
 
