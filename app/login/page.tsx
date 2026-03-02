@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { Building2, Eye, EyeOff, Lock, Mail, ArrowLeft, KeyRound, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -17,6 +17,44 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Forgot password state
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotError, setForgotError] = useState("");
+  const [forgotResult, setForgotResult] = useState<{ name: string; password: string; hint?: string } | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+
+  const handleForgot = (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError("");
+    setForgotResult(null);
+    if (!forgotEmail.trim() || !forgotEmail.includes("@")) {
+      setForgotError("Please enter a valid email address.");
+      return;
+    }
+    // Check superadmin
+    if (forgotEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      setForgotResult({ name: "System Administrator", password: ADMIN_PASSWORD });
+      return;
+    }
+    // Check staff users
+    try {
+      const stored = localStorage.getItem(USERS_KEY);
+      if (stored) {
+        const users = JSON.parse(stored);
+        const match = users.find(
+          (u: { email: string; name: string; password: string }) =>
+            u.email.toLowerCase() === forgotEmail.toLowerCase()
+        );
+        if (match) {
+          setForgotResult({ name: match.name, password: match.password });
+          return;
+        }
+      }
+    } catch {}
+    setForgotError("No account found with that email address.");
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,76 +132,176 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <div className="mb-6">
-            <h2 className="text-xl font-bold text-gray-900">Welcome back</h2>
-            <p className="text-gray-500 text-sm mt-1">Sign in to your account to continue</p>
-          </div>
 
-          {/* Error Banner */}
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-              <div className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center shrink-0 mt-0.5">
-                <span className="text-white text-[10px] font-bold">!</span>
-              </div>
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          )}
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => { setEmail(e.target.value); setError(""); }}
-                  className="pl-10"
-                  placeholder="you@company.co.tz"
-                  autoComplete="email"
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm font-medium text-gray-700">Password</label>
-                <a href="#" className="text-xs text-blue-600 hover:text-blue-700 font-medium">Forgot password?</a>
-              </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(""); }}
-                  className="pl-10 pr-10"
-                  placeholder="Enter your password"
-                  autoComplete="current-password"
-                />
+          {/* ── FORGOT PASSWORD MODE ── */}
+          {forgotMode ? (
+            <>
+              <div className="mb-6">
                 <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  onClick={() => { setForgotMode(false); setForgotEmail(""); setForgotError(""); setForgotResult(null); setShowForgotPassword(false); }}
+                  className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium mb-4"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  <ArrowLeft className="w-4 h-4" /> Back to Sign In
                 </button>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                    <KeyRound className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Forgot Password?</h2>
+                    <p className="text-gray-500 text-sm">Enter your email to retrieve your password</p>
+                  </div>
+                </div>
               </div>
+
+              {/* Result panel */}
+              {forgotResult ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+                      <p className="text-sm font-semibold text-green-800">Account found — {forgotResult.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-green-700 mb-1.5 font-medium">Your password:</p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-white border border-green-200 rounded-lg px-3 py-2 font-mono text-sm text-gray-800 tracking-widest">
+                          {showForgotPassword ? forgotResult.password : "•".repeat(forgotResult.password.length)}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowForgotPassword(v => !v)}
+                          className="p-2 rounded-lg bg-white border border-green-200 text-gray-500 hover:text-gray-700 transition-colors"
+                        >
+                          {showForgotPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    className="w-full h-11 text-sm font-semibold"
+                    onClick={() => {
+                      setEmail(forgotEmail);
+                      setPassword(forgotResult.password);
+                      setForgotMode(false);
+                      setForgotResult(null);
+                      setShowForgotPassword(false);
+                    }}
+                  >
+                    Sign In with This Password
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={handleForgot} className="space-y-4">
+                  {forgotError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                      <div className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center shrink-0 mt-0.5">
+                        <span className="text-white text-[10px] font-bold">!</span>
+                      </div>
+                      <p className="text-sm text-red-700">{forgotError}</p>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <Input
+                        type="email"
+                        value={forgotEmail}
+                        onChange={e => { setForgotEmail(e.target.value); setForgotError(""); }}
+                        className="pl-10"
+                        placeholder="you@company.co.tz"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <Button type="submit" className="w-full h-11 text-sm font-semibold">
+                    Retrieve Password
+                  </Button>
+                </form>
+              )}
+            </>
+          ) : (
+
+          /* ── LOGIN MODE ── */
+          <>
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Welcome back</h2>
+              <p className="text-gray-500 text-sm mt-1">Sign in to your account to continue</p>
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-              <input type="checkbox" className="rounded" defaultChecked />
-              Keep me signed in
-            </label>
-
-            <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={loading}>
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Signing in...
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                <div className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-white text-[10px] font-bold">!</span>
                 </div>
-              ) : "Sign In"}
-            </Button>
-          </form>
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); setError(""); }}
+                    className="pl-10"
+                    placeholder="you@company.co.tz"
+                    autoComplete="email"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-sm font-medium text-gray-700">Password</label>
+                  <button
+                    type="button"
+                    onClick={() => { setForgotMode(true); setForgotEmail(email); setForgotError(""); setForgotResult(null); }}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                    className="pl-10 pr-10"
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                <input type="checkbox" className="rounded" defaultChecked />
+                Keep me signed in
+              </label>
+
+              <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={loading}>
+                {loading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Signing in...
+                  </div>
+                ) : "Sign In"}
+              </Button>
+            </form>
+          </>
+          )}
         </div>
 
         <p className="text-center text-blue-400/60 text-xs mt-6">
