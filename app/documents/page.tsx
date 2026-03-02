@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 const SESSION_KEY  = "phidtech_session";
 const ACTIVE_KEY   = "phidtech_active_company";
 const DOCS_KEY     = "phidtech_documents";
+const USERS_KEY    = "phidtech_users";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -27,9 +28,11 @@ function lsStr(key: string, fallback = "") { try { return localStorage.getItem(k
 interface Session { id: string; name: string; role: string; isSuperAdmin: boolean; companyId: string; }
 interface Doc {
   id: string; companyId: string; name: string; category: string;
-  permissions: string; uploadedBy: string; uploadedAt: string;
+  permissions: string; assignedTo?: string; assignedToName?: string;
+  uploadedBy: string; uploadedAt: string;
   size: string; version: number; dataUrl?: string;
 }
+interface StaffUser { id: string; name: string; companyId: string; department?: string; position?: string; status?: string; }
 
 const CATEGORIES = ["HR Policy","Financial","Technical","Sales","Legal","Marketing","Operations","Other"];
 
@@ -43,6 +46,7 @@ const PERMISSIONS = [
   { value: "department_head", label: "Department Heads" },
   { value: "department",      label: "Department Only" },
   { value: "staff",           label: "All Staff" },
+  { value: "specific_staff",  label: "Specific Staff Member" },
 ];
 
 const categoryIcons: Record<string, string> = {
@@ -65,10 +69,11 @@ function fmtBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const emptyForm = () => ({ category: "", permissions: "all" });
+const emptyForm = () => ({ category: "", permissions: "all", assignedTo: "", assignedToName: "" });
 
 export default function DocumentsPage() {
   const [docs, setDocs]                 = useState<Doc[]>([]);
+  const [staff, setStaff]               = useState<StaffUser[]>([]);
   const [cid, setCid]                   = useState("");
   const cidRef                          = useRef("");
   const [session, setSession]           = useState<Session | null>(null);
@@ -90,11 +95,13 @@ export default function DocumentsPage() {
     const c = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setCid(c); cidRef.current = c;
     setDocs(lsGet<Doc[]>(DOCS_KEY, []));
+    setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
   };
 
   useEffect(() => { reload(); }, []);
 
-  const co       = cidRef.current || cid;
+  const co         = cidRef.current || cid;
+  const coStaff    = (co ? staff.filter(u => u.companyId === co && u.status !== "inactive") : staff);
   const coDocs   = (co ? docs.filter(d => d.companyId === co) : docs)
                      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
   const categories = [...new Set(coDocs.map(d => d.category))];
@@ -140,17 +147,22 @@ export default function DocumentsPage() {
 
     const reader = new FileReader();
     reader.onload = () => {
+      const assignedStaff = form.permissions === "specific_staff" && form.assignedTo
+        ? coStaff.find(u => u.id === form.assignedTo)
+        : undefined;
       const newDoc: Doc = {
-        id:          `doc-${Date.now()}`,
-        companyId:   cidRef.current || cid,
-        name:        selectedFile.name,
-        category:    form.category,
-        permissions: form.permissions,
-        uploadedBy:  session?.name ?? "Unknown",
-        uploadedAt:  new Date().toISOString(),
-        size:        fmtBytes(selectedFile.size),
-        version:     1,
-        dataUrl:     typeof reader.result === "string" ? reader.result : undefined,
+        id:             `doc-${Date.now()}`,
+        companyId:      cidRef.current || cid,
+        name:           selectedFile.name,
+        category:       form.category,
+        permissions:    form.permissions,
+        assignedTo:     assignedStaff?.id,
+        assignedToName: assignedStaff?.name,
+        uploadedBy:     session?.name ?? "Unknown",
+        uploadedAt:     new Date().toISOString(),
+        size:           fmtBytes(selectedFile.size),
+        version:        1,
+        dataUrl:        typeof reader.result === "string" ? reader.result : undefined,
       };
       const updated = [...docs, newDoc];
       lsSet(DOCS_KEY, updated);
@@ -169,7 +181,10 @@ export default function DocumentsPage() {
     setDeleteId(null);
   };
 
-  const permLabel = (val: string) => PERMISSIONS.find(p => p.value === val)?.label ?? val;
+  const permLabel = (val: string, assignedToName?: string) => {
+    if (val === "specific_staff" && assignedToName) return `👤 ${assignedToName}`;
+    return PERMISSIONS.find(p => p.value === val)?.label ?? val;
+  };
 
   return (
     <MainLayout>
@@ -261,7 +276,7 @@ export default function DocumentsPage() {
                         <span className="text-xs font-mono bg-gray-100 text-gray-700 px-2 py-1 rounded">v{doc.version}</span>
                       </TableCell>
                       <TableCell>
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{permLabel(doc.permissions)}</span>
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{permLabel(doc.permissions, doc.assignedToName)}</span>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
@@ -394,13 +409,35 @@ export default function DocumentsPage() {
 
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Who can access?</label>
-              <Select value={form.permissions} onValueChange={v => sf({ permissions: v })}>
+              <Select value={form.permissions} onValueChange={v => sf({ permissions: v, assignedTo: "", assignedToName: "" })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {PERMISSIONS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
+
+            {form.permissions === "specific_staff" && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Select Staff Member <span className="text-red-500">*</span></label>
+                <Select value={form.assignedTo} onValueChange={v => {
+                  const u = coStaff.find(s => s.id === v);
+                  sf({ assignedTo: v, assignedToName: u?.name ?? "" });
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
+                  <SelectContent>
+                    {coStaff.map(u => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.name}{u.department ? ` – ${u.department}` : ""}{u.position ? ` (${u.position})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.assignedTo && (
+                  <p className="text-xs text-blue-600 mt-1">✓ Document will be sent directly to {form.assignedToName}</p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowUploadDialog(false)}>Cancel</Button>
