@@ -12,6 +12,11 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
+      - MAIL_HOST=smtp.gmail.com
+      - MAIL_PORT=587
+      - MAIL_USERNAME=phidtechnology@gmail.com
+      - MAIL_PASSWORD=bwhn mrax dynr wymu
+      - MAIL_FROM_ADDRESS=phidtechnology@gmail.com
     env_file:
       - .env.production
     volumes:
