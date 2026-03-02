@@ -85,13 +85,14 @@ const ALL_PERMISSIONS = [
   { key: "services",     label: "Services & Pricing" },
   { key: "commissions",  label: "Commissions" },
   { key: "notifications",label: "Messages & Notifications" },
+  { key: "petty_cash",   label: "Petty Cash" },
   { key: "admin",        label: "Admin Panel" },
 ];
 
 const DEFAULT_PERMISSIONS: Record<string, string[]> = {
   admin:            ALL_PERMISSIONS.map(p => p.key),
-  manager:          ["dashboard","attendance","leave","payroll","tasks","kpis","expenses","reports","services","commissions","notifications"],
-  accountant:       ["dashboard","accounting","invoices","expenses","payroll","reports","services","commissions","notifications"],
+  manager:          ["dashboard","attendance","leave","payroll","tasks","kpis","expenses","reports","services","commissions","notifications","petty_cash"],
+  accountant:       ["dashboard","accounting","invoices","expenses","payroll","reports","services","commissions","notifications","petty_cash"],
   hr:               ["dashboard","users","attendance","leave","payroll","reports","services","notifications"],
   sales:            ["dashboard","sales","customers","invoices","tasks","reports","services","commissions","notifications"],
   it:               ["dashboard","tasks","assets","documents","reports","services","notifications"],
