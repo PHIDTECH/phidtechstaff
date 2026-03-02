@@ -7,7 +7,7 @@ import {
   BookOpen, UserCheck, Target, Bell, Settings, ChevronDown,
   ChevronRight, Building2, ShoppingCart, Megaphone, Package,
   Receipt, BarChart3, FileText, Warehouse, TrendingUp, Briefcase,
-  Clock, HelpCircle, X, Menu, Percent, Wrench
+  Clock, HelpCircle, X, Menu, Percent, Wrench, Activity, Scale
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -43,7 +43,19 @@ const PERM_ROUTES: Record<string, string[]> = {
   admin:       ["/admin", "/notifications"],
 };
 
-const ALL_NAV = [
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ElementType;
+  children?: NavItem[];
+}
+
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
+const ALL_NAV: NavGroup[] = [
   {
     title: "Overview",
     items: [
@@ -71,19 +83,30 @@ const ALL_NAV = [
   {
     title: "Finance",
     items: [
-      { label: "Accounting", href: "/accounting", icon: BookOpen },
-      { label: "Invoices", href: "/invoices", icon: FileText },
-      { label: "Petty Cash", href: "/petty-cash", icon: DollarSign },
+      {
+        label: "Accounting",
+        href: "/accounting",
+        icon: BookOpen,
+        children: [
+          { label: "Dashboard",     href: "/accounting",                icon: BarChart3   },
+          { label: "Customer Sales",href: "/accounting/sales",          icon: ShoppingCart },
+          { label: "Profit & Loss", href: "/accounting/profit-loss",    icon: TrendingUp  },
+          { label: "Balance Sheet", href: "/accounting/balance-sheet",  icon: Scale       },
+          { label: "Cash Flow",     href: "/accounting/cashflow",       icon: Activity    },
+        ]
+      },
+      { label: "Invoices",   href: "/invoices",    icon: FileText  },
+      { label: "Petty Cash", href: "/petty-cash",  icon: DollarSign },
     ]
   },
   {
     title: "Sales & CRM",
     items: [
-      { label: "Customers", href: "/customers", icon: UserCheck },
-      { label: "Sales Pipeline", href: "/sales", icon: TrendingUp },
-      { label: "Commissions", href: "/commissions", icon: Percent },
-      { label: "Quotations", href: "/quotations", icon: FileText },
-      { label: "Support Tickets", href: "/tickets", icon: HelpCircle },
+      { label: "Customers",       href: "/customers",   icon: UserCheck  },
+      { label: "Sales Pipeline",  href: "/sales",       icon: TrendingUp },
+      { label: "Commissions",     href: "/commissions", icon: Percent    },
+      { label: "Quotations",      href: "/quotations",  icon: FileText   },
+      { label: "Support Tickets", href: "/tickets",     icon: HelpCircle },
     ]
   },
   {
@@ -95,10 +118,10 @@ const ALL_NAV = [
   {
     title: "Inventory",
     items: [
-      { label: "Products", href: "/inventory/products", icon: Package },
-      { label: "Stock", href: "/inventory/stock", icon: Warehouse },
-      { label: "Purchase Orders", href: "/inventory/orders", icon: ShoppingCart },
-      { label: "Vendors", href: "/vendors", icon: Building2 },
+      { label: "Products",        href: "/inventory/products", icon: Package   },
+      { label: "Stock",           href: "/inventory/stock",    icon: Warehouse },
+      { label: "Purchase Orders", href: "/inventory/orders",   icon: ShoppingCart },
+      { label: "Vendors",         href: "/vendors",            icon: Building2 },
     ]
   },
   {
@@ -110,10 +133,10 @@ const ALL_NAV = [
   {
     title: "System",
     items: [
-      { label: "Documents", href: "/documents", icon: FileText },
-      { label: "Messages & Notifications", href: "/notifications", icon: Bell },
-      { label: "Reports", href: "/reports", icon: BarChart3 },
-      { label: "Admin Panel", href: "/admin", icon: Settings },
+      { label: "Documents",               href: "/documents",     icon: FileText  },
+      { label: "Messages & Notifications",href: "/notifications", icon: Bell      },
+      { label: "Reports",                 href: "/reports",       icon: BarChart3 },
+      { label: "Admin Panel",             href: "/admin",         icon: Settings  },
     ]
   },
 ];
@@ -175,6 +198,10 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
   })).filter(group => group.items.length > 0);
 
   const [expandedGroups, setExpandedGroups] = useState<string[]>(ALL_NAV.map(n => n.title));
+  // Track which parent items with children are expanded; auto-open accounting if on accounting route
+  const [expandedItems, setExpandedItems] = useState<string[]>(
+    pathname.startsWith("/accounting") ? ["/accounting"] : []
+  );
 
   const toggleGroup = (title: string) => {
     setExpandedGroups(prev =>
@@ -182,10 +209,19 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
     );
   };
 
+  const toggleItem = (href: string) => {
+    setExpandedItems(prev =>
+      prev.includes(href) ? prev.filter(h => h !== href) : [...prev, href]
+    );
+  };
+
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard" || pathname === "/";
+    if (href === "/accounting") return pathname === "/accounting";
     return pathname.startsWith(href);
   };
+
+  const isParentActive = (href: string) => pathname.startsWith(href);
 
   return (
     <aside
@@ -248,6 +284,60 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const active = isActive(item.href);
+                  const parentActive = isParentActive(item.href);
+                  const hasChildren = !!(item.children && item.children.length > 0);
+                  const itemExpanded = expandedItems.includes(item.href) || (hasChildren && parentActive);
+
+                  if (hasChildren && (!collapsed || mobile)) {
+                    return (
+                      <div key={item.href}>
+                        {/* Parent item with submenu toggle */}
+                        <button
+                          onClick={() => toggleItem(item.href)}
+                          className={cn(
+                            "w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors rounded-lg mx-2 mb-0.5",
+                            parentActive
+                              ? "text-blue-400 bg-gray-800"
+                              : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                          )}
+                          style={{ width: "calc(100% - 1rem)" }}
+                        >
+                          <Icon className="w-4 h-4 shrink-0" />
+                          <span className="flex-1 text-left">{item.label}</span>
+                          {itemExpanded
+                            ? <ChevronDown className="w-3 h-3 shrink-0 opacity-60" />
+                            : <ChevronRight className="w-3 h-3 shrink-0 opacity-60" />
+                          }
+                        </button>
+                        {/* Sub-items */}
+                        {itemExpanded && (
+                          <div className="ml-3 border-l border-gray-700 pl-2 mb-1">
+                            {item.children!.map(child => {
+                              const CIcon = child.icon;
+                              const cActive = isActive(child.href);
+                              return (
+                                <Link
+                                  key={child.href}
+                                  href={child.href}
+                                  onClick={mobile ? onClose : undefined}
+                                  className={cn(
+                                    "flex items-center gap-2.5 px-3 py-1.5 text-xs transition-colors rounded-lg mx-1 mb-0.5",
+                                    cActive
+                                      ? "bg-blue-600 text-white"
+                                      : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                                  )}
+                                >
+                                  <CIcon className="w-3.5 h-3.5 shrink-0" />
+                                  <span>{child.label}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
                   return (
                     <Link
                       key={item.href}
