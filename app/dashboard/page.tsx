@@ -60,7 +60,9 @@ export default function DashboardPage() {
   const reload = () => {
     const sess = lsGet<{name:string;isSuperAdmin:boolean;companyId:string|null;role?:string}>(SESSION_KEY, null as never);
     setSession(sess);
-    const cid = lsStr(ACTIVE_KEY);
+    // Read raw (not JSON-parsed) to avoid "\"\"" vs "" confusion
+    let cid = "";
+    try { const raw = localStorage.getItem(ACTIVE_KEY); cid = raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : ""; } catch {}
     setActiveCompanyId(cid);
     setCompanies(lsGet<Company[]>(COMPANIES_KEY, []));
     setStaffUsers(lsGet<StaffUser[]>(USERS_KEY, []));
@@ -125,13 +127,13 @@ export default function DashboardPage() {
   const coLeave    = leaves.filter(l => l.companyId === activeCompanyId && l.status === "pending");
 
   const switchToGroup = () => {
-    lsSet(ACTIVE_KEY, "");
+    try { localStorage.removeItem(ACTIVE_KEY); } catch {}
     setActiveCompanyId("");
     window.dispatchEvent(new Event("phidtech_companies_updated"));
   };
 
   const switchToCompany = (id: string) => {
-    lsSet(ACTIVE_KEY, id);
+    try { localStorage.setItem(ACTIVE_KEY, id); } catch {}
     setActiveCompanyId(id);
     window.dispatchEvent(new Event("phidtech_companies_updated"));
   };

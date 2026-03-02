@@ -35,7 +35,11 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
 
   const reloadCompanies = () => {
     setCompaniesList(lsGet(COMPANIES_KEY, []));
-    setActiveCompanyIdState(lsStr(ACTIVE_KEY));
+    // Read raw (not JSON-parsed) to avoid side-effects from lsSet
+    try {
+      const raw = localStorage.getItem(ACTIVE_KEY) ?? "";
+      setActiveCompanyIdState(raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : "");
+    } catch { setActiveCompanyIdState(""); }
   };
 
   const reloadSession = () => {
@@ -84,12 +88,18 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
 
   // Superadmin sees the currently switched company; staff always see their own company
   const activeCompany = isSuperAdmin
-    ? (companiesList.find(c => c.id === activeCompanyId) ?? companiesList[0])
+    ? companiesList.find(c => c.id === activeCompanyId)
     : (companiesList.find(c => c.id === myCompanyId) ?? companiesList[0]);
 
   const setActiveCompanyId = (id: string) => {
     setActiveCompanyIdState(id);
     try { localStorage.setItem(ACTIVE_KEY, id); } catch {}
+    window.dispatchEvent(new Event("phidtech_companies_updated"));
+  };
+
+  const switchToGroupHQ = () => {
+    setActiveCompanyIdState("");
+    try { localStorage.removeItem(ACTIVE_KEY); } catch {}
     window.dispatchEvent(new Event("phidtech_companies_updated"));
   };
 
@@ -112,19 +122,41 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
             <>
               <button
                 onClick={() => { setShowCompanySwitcher(!showCompanySwitcher); setShowNotifications(false); setShowProfile(false); }}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-50 border border-gray-100 text-sm"
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-50 border text-sm ${!activeCompanyId ? "border-indigo-200 bg-indigo-50" : "border-gray-100"}`}
               >
-                <Building2 className="w-4 h-4 text-blue-600" />
-                <span className="font-medium text-gray-700 hidden sm:block">{activeCompany?.name ?? "Select Company"}</span>
+                {!activeCompanyId
+                  ? <span className="text-sm leading-none">👑</span>
+                  : <Building2 className="w-4 h-4 text-blue-600" />
+                }
+                <span className={`font-medium hidden sm:block ${!activeCompanyId ? "text-indigo-700" : "text-gray-700"}`}>
+                  {activeCompany?.name ?? (!activeCompanyId ? "Group HQ" : "Select Company")}
+                </span>
                 <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
               </button>
               {showCompanySwitcher && (
-                <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
+                <div className="absolute top-full left-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
                   <p className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Switch Company</p>
+                  {/* Group HQ option */}
+                  <button
+                    onClick={() => { switchToGroupHQ(); setShowCompanySwitcher(false); }}
+                    className="flex items-center gap-3 w-full px-3 py-2 hover:bg-indigo-50 text-left"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-700 to-indigo-800 flex items-center justify-center text-xs">
+                      👑
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-indigo-800">PHIDTECH GROUP HQ</p>
+                      <p className="text-xs text-indigo-400">All subsidiaries overview</p>
+                    </div>
+                    {!activeCompanyId && (
+                      <span className="ml-auto text-xs bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-medium">Active</span>
+                    )}
+                  </button>
+                  <div className="border-t border-gray-100 my-1" />
                   {companiesList.map((c) => (
                     <button
                       key={c.id}
-                      onClick={() => { setActiveCompanyId(c.id); setShowCompanySwitcher(false); window.dispatchEvent(new Event("phidtech_companies_updated")); }}
+                      onClick={() => { setActiveCompanyId(c.id); setShowCompanySwitcher(false); }}
                       className="flex items-center gap-3 w-full px-3 py-2 hover:bg-gray-50 text-left"
                     >
                       <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">

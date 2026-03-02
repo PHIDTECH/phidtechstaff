@@ -168,7 +168,8 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
     const load = () => {
       try {
         const s = localStorage.getItem(SESSION_KEY);
-        const cid = localStorage.getItem("phidtech_active_company") ?? "";
+        const rawCid = localStorage.getItem("phidtech_active_company") ?? "";
+        const cid = rawCid && rawCid !== '""' ? rawCid.replace(/^"|"$/g, "") : "";
         setActiveCompanyId(cid);
         if (s) {
           const sess = JSON.parse(s);
