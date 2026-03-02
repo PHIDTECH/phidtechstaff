@@ -136,11 +136,15 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
     return () => window.removeEventListener("phidtech_session_updated", load);
   }, []);
 
-  const perms: string[] | null = session?.isSuperAdmin ? null : (session?.permissions ?? null);
+  const isSuperAdmin = session?.isSuperAdmin === true;
+  const perms: string[] | null = isSuperAdmin ? null : (session?.permissions ?? []);
 
   const navigation = ALL_NAV.map(group => ({
     ...group,
-    items: group.items.filter(item => canAccess(item.href, perms)),
+    items: group.items.filter(item => {
+      if (item.href === "/admin") return isSuperAdmin;
+      return canAccess(item.href, session ? perms : []);
+    }),
   })).filter(group => group.items.length > 0);
 
   const [expandedGroups, setExpandedGroups] = useState<string[]>(ALL_NAV.map(n => n.title));
