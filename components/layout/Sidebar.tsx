@@ -162,16 +162,21 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
   const pathname = usePathname();
   const [session, setSession] = useState<{id:string;name:string;role:string;position:string;isSuperAdmin:boolean;companyId?:string;permissions?:string[]} | null>(null);
   const [myCompanyName, setMyCompanyName] = useState("");
+  const [activeCompanyId, setActiveCompanyId] = useState("");
 
   useEffect(() => {
     const load = () => {
       try {
         const s = localStorage.getItem(SESSION_KEY);
+        const cid = localStorage.getItem("phidtech_active_company") ?? "";
+        setActiveCompanyId(cid);
         if (s) {
           const sess = JSON.parse(s);
           setSession(sess);
-          if (!sess.isSuperAdmin && sess.companyId) {
-            const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+          const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+          if (sess.isSuperAdmin) {
+            setMyCompanyName(companies.find(c => c.id === cid)?.name ?? "");
+          } else if (sess.companyId) {
             setMyCompanyName(companies.find(c => c.id === sess.companyId)?.name ?? "");
           }
         }
@@ -187,6 +192,7 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
   }, []);
 
   const isSuperAdmin = session?.isSuperAdmin === true;
+  const isGroupMode  = isSuperAdmin && !activeCompanyId;
   const perms: string[] | null = isSuperAdmin ? null : (session?.permissions ?? []);
 
   const navigation = ALL_NAV.map(group => ({
@@ -233,19 +239,24 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
       {/* Logo */}
       <div className="flex items-center justify-between px-4 h-16 border-b border-gray-800 shrink-0">
         {(!collapsed || mobile) && (
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
-              <Building2 className="w-4 h-4 text-white" />
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isGroupMode ? "bg-gradient-to-br from-blue-700 to-indigo-800" : "bg-blue-600"}`}>
+              {isGroupMode
+                ? <span className="text-sm">👑</span>
+                : <Building2 className="w-4 h-4 text-white" />
+              }
             </div>
-            <div>
-              <p className="text-sm font-bold text-white leading-none">PHIDTECH MS</p>
-              <p className="text-[10px] text-gray-400">Phid Technologies</p>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-white leading-none truncate">PHIDTECH MS</p>
+              <p className="text-[10px] text-gray-400 truncate">
+                {isGroupMode ? "Group HQ" : (myCompanyName || "Select company")}
+              </p>
             </div>
           </div>
         )}
         {collapsed && !mobile && (
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center mx-auto">
-            <Building2 className="w-4 h-4 text-white" />
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center mx-auto ${isGroupMode ? "bg-gradient-to-br from-blue-700 to-indigo-800" : "bg-blue-600"}`}>
+            {isGroupMode ? <span className="text-sm">👑</span> : <Building2 className="w-4 h-4 text-white" />}
           </div>
         )}
         {mobile ? (

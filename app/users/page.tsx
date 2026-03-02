@@ -51,17 +51,27 @@ const DEFAULT_DEPARTMENTS = [
 ];
 
 const STAFF_POSITIONS = [
-  { value: "admin",             label: "System Admin",        color: "red" },
-  { value: "manager",           label: "Manager / HOD",       color: "purple" },
-  { value: "accountant",        label: "Accountant",          color: "green" },
-  { value: "hr",                label: "HR Officer",          color: "orange" },
-  { value: "sales",             label: "Sales & Marketing",   color: "blue" },
-  { value: "it",                label: "IT Officer",          color: "cyan" },
-  { value: "procurement",       label: "Procurement Officer", color: "yellow" },
-  { value: "customer_service",  label: "Customer Service",    color: "pink" },
-  { value: "legal",             label: "Legal Officer",       color: "indigo" },
-  { value: "logistics",         label: "Logistics Officer",   color: "teal" },
-  { value: "staff",             label: "General Staff",       color: "gray" },
+  // ── Group-level roles ──────────────────────────────────────────────────
+  { value: "group_ceo",         label: "Group CEO",                  color: "red",    group: true },
+  { value: "group_cfo",         label: "Group CFO",                  color: "red",    group: true },
+  { value: "group_manager",     label: "Group Manager",              color: "indigo", group: true },
+  { value: "group_controller",  label: "Group Controller",           color: "purple", group: true },
+  { value: "group_auditor",     label: "Group Internal Auditor",     color: "orange", group: true },
+  { value: "group_hr",          label: "Group HR Director",          color: "teal",   group: true },
+  { value: "group_legal",       label: "Group Legal Counsel",        color: "indigo", group: true },
+  { value: "group_it",          label: "Group IT Director",          color: "cyan",   group: true },
+  // ── Company-level roles ────────────────────────────────────────────────
+  { value: "admin",             label: "System Admin",               color: "red" },
+  { value: "manager",           label: "Manager / HOD",              color: "purple" },
+  { value: "accountant",        label: "Accountant",                 color: "green" },
+  { value: "hr",                label: "HR Officer",                 color: "orange" },
+  { value: "sales",             label: "Sales & Marketing",          color: "blue" },
+  { value: "it",                label: "IT Officer",                 color: "cyan" },
+  { value: "procurement",       label: "Procurement Officer",        color: "yellow" },
+  { value: "customer_service",  label: "Customer Service",           color: "pink" },
+  { value: "legal",             label: "Legal Officer",              color: "indigo" },
+  { value: "logistics",         label: "Logistics Officer",          color: "teal" },
+  { value: "staff",             label: "General Staff",              color: "gray" },
 ];
 
 const ALL_PERMISSIONS = [
@@ -89,8 +99,20 @@ const ALL_PERMISSIONS = [
   { key: "admin",        label: "Admin Panel" },
 ];
 
+const GROUP_ALL = ALL_PERMISSIONS.map(p => p.key);
+
 const DEFAULT_PERMISSIONS: Record<string, string[]> = {
-  admin:            ALL_PERMISSIONS.map(p => p.key),
+  // Group-level — full cross-company access
+  group_ceo:        GROUP_ALL,
+  group_cfo:        GROUP_ALL,
+  group_manager:    GROUP_ALL,
+  group_controller: GROUP_ALL,
+  group_auditor:    ["dashboard","accounting","invoices","expenses","payroll","reports","kpis","documents","notifications"],
+  group_hr:         ["dashboard","users","attendance","leave","payroll","reports","kpis","notifications"],
+  group_legal:      ["dashboard","documents","reports","notifications"],
+  group_it:         ["dashboard","users","tasks","assets","documents","reports","notifications"],
+  // Company-level
+  admin:            GROUP_ALL,
   manager:          ["dashboard","attendance","leave","payroll","tasks","kpis","expenses","reports","services","commissions","notifications","petty_cash"],
   accountant:       ["dashboard","accounting","invoices","expenses","payroll","reports","services","commissions","notifications","petty_cash"],
   hr:               ["dashboard","users","attendance","leave","payroll","reports","services","notifications"],
@@ -102,6 +124,10 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
   logistics:        ["dashboard","inventory","vendors","tasks","services","notifications"],
   staff:            ["dashboard","attendance","leave","expenses","services","notifications"],
 };
+
+const GROUP_ID = "group";
+const GROUP_POSITIONS = STAFF_POSITIONS.filter(p => (p as {group?:boolean}).group);
+const COMPANY_POSITIONS = STAFF_POSITIONS.filter(p => !(p as {group?:boolean}).group);
 
 const USERS_KEY = "phidtech_users";
 const ACTIVE_KEY = "phidtech_active_company";
@@ -195,6 +221,7 @@ export default function UsersPage() {
   const companyUsers = activeCompanyId
     ? usersList.filter(u => u.companyId === activeCompanyId)
     : [];
+  const groupUsers = usersList.filter(u => u.companyId === GROUP_ID);
 
   const filtered = companyUsers.filter(u => {
     const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -202,6 +229,10 @@ export default function UsersPage() {
       u.department.toLowerCase().includes(search.toLowerCase());
     const matchRole = roleFilter === "all" || u.position === roleFilter;
     return matchSearch && matchRole;
+  });
+  const filteredGroup = groupUsers.filter(u => {
+    return u.name.toLowerCase().includes(search.toLowerCase()) ||
+      u.email.toLowerCase().includes(search.toLowerCase());
   });
 
   const activeCount = companyUsers.filter(u => u.status === "active").length;
@@ -292,16 +323,20 @@ export default function UsersPage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Total Staff" value={companyUsers.length} icon={Users} iconBg="bg-blue-50" iconColor="text-blue-600" subtitle={activeCompany?.name} />
-        <StatCard title="Active" value={activeCount} icon={UserCheck} iconBg="bg-green-50" iconColor="text-green-600" subtitle="Currently active" />
-        <StatCard title="Managers" value={managerCount} icon={Shield} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="HODs & Managers" />
-        <StatCard title="Departments" value={deptCount} icon={Building2} iconBg="bg-orange-50" iconColor="text-orange-600" subtitle="Active depts" />
+        <StatCard title="Total Staff"    value={companyUsers.length}  icon={Users}     iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle={activeCompany?.name} />
+        <StatCard title="Active"          value={activeCount}          icon={UserCheck} iconBg="bg-green-50"  iconColor="text-green-600"  subtitle="Currently active" />
+        <StatCard title="Group HQ Staff" value={groupUsers.length}    icon={Shield}    iconBg="bg-indigo-50" iconColor="text-indigo-600" subtitle="Cross-company roles" />
+        <StatCard title="Departments"     value={deptCount}            icon={Building2} iconBg="bg-orange-50" iconColor="text-orange-600" subtitle="Active depts" />
       </div>
 
       <Tabs defaultValue="list">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <TabsList>
             <TabsTrigger value="list">Staff List</TabsTrigger>
+            <TabsTrigger value="group_hq">
+              🏢 Group HQ Staff
+              {groupUsers.length > 0 && <span className="ml-1.5 text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full">{groupUsers.length}</span>}
+            </TabsTrigger>
             <TabsTrigger value="roles">Positions & Permissions</TabsTrigger>
             <TabsTrigger value="departments">Departments</TabsTrigger>
           </TabsList>
@@ -392,6 +427,84 @@ export default function UsersPage() {
                         <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(user.status)}`}>
                           {user.status}
                         </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => setSelectedUser(user)}>
+                            <Eye className="w-4 h-4 text-gray-400" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => openEdit(user)}>
+                            <Edit className="w-4 h-4 text-gray-400" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => deleteUser(user.id)}>
+                            <Trash2 className="w-4 h-4 text-red-400" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ── Group HQ Staff ── */}
+        <TabsContent value="group_hq">
+          <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-xl p-4 mb-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-700 to-indigo-800 flex items-center justify-center shrink-0">
+              <Shield className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p className="font-semibold text-indigo-900">PHIDTECH GROUP OF COMPANIES LIMITED — HQ Staff</p>
+              <p className="text-xs text-indigo-600">These staff have cross-company access and manage all subsidiaries</p>
+            </div>
+            <Button size="sm" className="ml-auto shrink-0" onClick={() => { setForm(emptyForm(GROUP_ID)); setFormError(""); setShowAddDialog(true); }}>
+              <UserPlus className="w-4 h-4 mr-2" />Add Group Staff
+            </Button>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            {groupUsers.length === 0 ? (
+              <div className="py-16 text-center text-gray-400">
+                <Shield className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p className="font-medium">No Group HQ staff yet</p>
+                <p className="text-sm mt-1">Add staff who manage the entire group of companies</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Group Role</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredGroup.map(user => (
+                    <TableRow key={user.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                            {getInitials(user.name)}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{user.name}</p>
+                            <p className="text-xs text-gray-400">{user.email}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${positionColor(user.position)}`}>
+                          {positionLabel(user.position)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-700">{user.department || "—"}</TableCell>
+                      <TableCell className="text-sm text-gray-500">{user.phone || "—"}</TableCell>
+                      <TableCell>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(user.status)}`}>{user.status}</span>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
@@ -564,16 +677,24 @@ export default function UsersPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Company <span className="text-red-500">*</span></label>
-                <Select value={form.companyId} onValueChange={v => setForm(f => ({ ...f, companyId: v }))}>
+                <Select value={form.companyId} onValueChange={v => {
+                  const isGroup = v === GROUP_ID;
+                  const defaultPos = isGroup ? "group_manager" : "staff";
+                  setForm(f => ({ ...f, companyId: v, position: defaultPos, permissions: DEFAULT_PERMISSIONS[defaultPos] ?? DEFAULT_PERMISSIONS.staff }));
+                }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select company" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={GROUP_ID}>👑 PHIDTECH GROUP HQ (Cross-company)</SelectItem>
                     {companiesList.map(c => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {form.companyId === GROUP_ID && (
+                  <p className="text-xs text-indigo-600 mt-1 font-medium">⚡ Group HQ staff can access and manage all subsidiary companies</p>
+                )}
               </div>
               <div className="col-span-2">
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Full Name <span className="text-red-500">*</span></label>
@@ -616,7 +737,17 @@ export default function UsersPage() {
                 <Select value={form.position} onValueChange={handlePositionChange}>
                   <SelectTrigger><SelectValue placeholder="Select position" /></SelectTrigger>
                   <SelectContent>
-                    {STAFF_POSITIONS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                    {form.companyId === GROUP_ID ? (
+                      <>
+                        <div className="px-2 py-1.5 text-xs font-bold text-gray-400 uppercase tracking-wider">Group HQ Roles</div>
+                        {GROUP_POSITIONS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                      </>
+                    ) : (
+                      <>
+                        <div className="px-2 py-1.5 text-xs font-bold text-gray-400 uppercase tracking-wider">Company Roles</div>
+                        {COMPANY_POSITIONS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
