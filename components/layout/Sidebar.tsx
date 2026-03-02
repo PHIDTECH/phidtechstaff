@@ -171,7 +171,7 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
               <Building2 className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-sm font-bold text-white leading-none">BOMS</p>
+              <p className="text-sm font-bold text-white leading-none">PHIDTECH MS</p>
               <p className="text-[10px] text-gray-400">Phid Technologies</p>
             </div>
           </div>
