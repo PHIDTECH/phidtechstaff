@@ -17,8 +17,6 @@ services:
       - MAIL_USERNAME=phidtechnology@gmail.com
       - MAIL_PASSWORD=bwhn mrax dynr wymu
       - MAIL_FROM_ADDRESS=phidtechnology@gmail.com
-    env_file:
-      - .env.production
     volumes:
       - boms_uploads_data:/app/public/uploads
     networks:

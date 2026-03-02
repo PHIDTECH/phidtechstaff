@@ -9,13 +9,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
+    const mailUser = process.env.MAIL_USERNAME;
+    const mailPass = process.env.MAIL_PASSWORD;
+
+    if (!mailUser || !mailPass) {
+      console.error("SMTP credentials missing. MAIL_USERNAME:", !!mailUser, "MAIL_PASSWORD:", !!mailPass);
+      return NextResponse.json({ error: "SMTP credentials not configured on server." }, { status: 500 });
+    }
+
     const transporter = nodemailer.createTransport({
       host: process.env.MAIL_HOST ?? "smtp.gmail.com",
       port: Number(process.env.MAIL_PORT ?? 587),
       secure: false,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
       auth: {
-        user: process.env.MAIL_USERNAME,
-        pass: process.env.MAIL_PASSWORD,
+        user: mailUser,
+        pass: mailPass,
       },
     });
 
