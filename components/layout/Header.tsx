@@ -33,9 +33,21 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
   const [myCompanyId, setMyCompanyId] = useState(""); // staff's own company
   const [notifList, setNotifList] = useState<{id:string;userId:string;message:string;read:boolean;createdAt:string}[]>([]);
 
-  const reloadCompanies = () => {
-    setCompaniesList(lsGet(COMPANIES_KEY, []));
-    // Read raw (not JSON-parsed) to avoid side-effects from lsSet
+  const reloadCompanies = async () => {
+    // Load from server so all devices share the same list
+    try {
+      const res = await fetch("/api/companies", { cache: "no-store" });
+      if (res.ok) {
+        const list = await res.json();
+        setCompaniesList(list);
+        try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(list)); } catch {}
+      } else {
+        setCompaniesList(lsGet(COMPANIES_KEY, []));
+      }
+    } catch {
+      setCompaniesList(lsGet(COMPANIES_KEY, []));
+    }
+    // Active company from raw localStorage
     try {
       const raw = localStorage.getItem(ACTIVE_KEY) ?? "";
       setActiveCompanyIdState(raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : "");

@@ -57,15 +57,30 @@ export default function DashboardPage() {
   const [sales, setSales]             = useState<Sale[]>([]);
   const [expenses, setExpenses]       = useState<Expense[]>([]);
 
-  const reload = () => {
+  const reload = async () => {
     const sess = lsGet<{name:string;isSuperAdmin:boolean;companyId:string|null;role?:string}>(SESSION_KEY, null as never);
     setSession(sess);
-    // Read raw (not JSON-parsed) to avoid "\"\"" vs "" confusion
     let cid = "";
     try { const raw = localStorage.getItem(ACTIVE_KEY); cid = raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : ""; } catch {}
     setActiveCompanyId(cid);
-    setCompanies(lsGet<Company[]>(COMPANIES_KEY, []));
-    setStaffUsers(lsGet<StaffUser[]>(USERS_KEY, []));
+    // Load companies from server so all devices see same data
+    try {
+      const r = await fetch("/api/companies", { cache: "no-store" });
+      if (r.ok) {
+        const list = await r.json();
+        setCompanies(list);
+        try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(list)); } catch {}
+      } else { setCompanies(lsGet<Company[]>(COMPANIES_KEY, [])); }
+    } catch { setCompanies(lsGet<Company[]>(COMPANIES_KEY, [])); }
+    // Load users from server
+    try {
+      const r = await fetch("/api/users", { cache: "no-store" });
+      if (r.ok) {
+        const list = await r.json();
+        setStaffUsers(list);
+        try { localStorage.setItem(USERS_KEY, JSON.stringify(list)); } catch {}
+      } else { setStaffUsers(lsGet<StaffUser[]>(USERS_KEY, [])); }
+    } catch { setStaffUsers(lsGet<StaffUser[]>(USERS_KEY, [])); }
     setTasks(lsGet<Task[]>(TASKS_KEY, []));
     setLeaves(lsGet<LeaveReq[]>(LEAVE_KEY, []));
     setSales(lsGet<Sale[]>(SALES_KEY, []));

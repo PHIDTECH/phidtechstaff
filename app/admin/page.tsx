@@ -31,24 +31,25 @@ const emptyCompany = (): Omit<Company, "id" | "createdAt"> => ({
   name: "", industry: "", address: "", phone: "", email: "", website: "", logo: ""
 });
 
-function MigrateUsersButton() {
+function MigrateButton({ label, lsKey, endpoint }: { label: string; lsKey: string; endpoint: string }) {
   const [status, setStatus] = useState<"idle"|"running"|"done"|"error">("idle");
   const [msg, setMsg] = useState("");
 
   const run = async () => {
     setStatus("running");
     try {
-      const raw = localStorage.getItem("phidtech_users");
-      const users = raw ? JSON.parse(raw) : [];
-      if (!users.length) { setMsg("No users found in this browser's local storage."); setStatus("done"); return; }
-      const res = await fetch("/api/users/migrate", {
+      const raw = localStorage.getItem(lsKey);
+      const items = raw ? JSON.parse(raw) : [];
+      if (!items.length) { setMsg(`No data found in this browser's local storage (${lsKey}).`); setStatus("done"); return; }
+      const bodyKey = endpoint.includes("users") ? "users" : "companies";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ users, secret: "Kaijage@@2023" }),
+        body: JSON.stringify({ [bodyKey]: items, secret: "Kaijage@@2023" }),
       });
       const data = await res.json();
       if (!res.ok) { setMsg(data.error ?? "Migration failed."); setStatus("error"); return; }
-      setMsg(`✅ Done! Imported ${data.imported} new user(s). ${data.skipped} already existed on server.`);
+      setMsg(`✅ Done! Imported ${data.imported} new record(s). ${data.skipped} already existed on server.`);
       setStatus("done");
     } catch { setMsg("Network error during migration."); setStatus("error"); }
   };
@@ -62,7 +63,7 @@ function MigrateUsersButton() {
       )}
       <Button size="sm" onClick={run} disabled={status === "running"} className="w-full">
         <ArrowLeftRight className="w-4 h-4 mr-2" />
-        {status === "running" ? "Migrating…" : "Migrate Staff from This Browser → Server"}
+        {status === "running" ? "Migrating…" : label}
       </Button>
     </div>
   );
@@ -79,38 +80,47 @@ export default function AdminPage() {
   const [form, setForm] = useState(emptyCompany());
   const [formError, setFormError] = useState("");
 
-  const reload = () => {
-    setCompaniesList(lsGet<Company[]>(COMPANIES_KEY, []));
-    setActiveCompanyIdState(lsStr(ACTIVE_KEY));
-    setStaffUsers(lsGet(USERS_KEY, []));
+  const reload = async () => {
+    // Companies from server
+    try {
+      const res = await fetch("/api/companies", { cache: "no-store" });
+      if (res.ok) {
+        const list = await res.json();
+        setCompaniesList(list);
+        // Keep localStorage in sync for other pages still reading it
+        try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(list)); } catch {}
+      }
+    } catch {}
+    // Users from server
+    try {
+      const res = await fetch("/api/users", { cache: "no-store" });
+      if (res.ok) {
+        const list = await res.json();
+        setStaffUsers(list);
+        try { localStorage.setItem(USERS_KEY, JSON.stringify(list)); } catch {}
+      }
+    } catch {}
+    // Active company from raw localStorage
+    try {
+      const raw = localStorage.getItem(ACTIVE_KEY) ?? "";
+      setActiveCompanyIdState(raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : "");
+    } catch {}
   };
 
   useEffect(() => {
     reload();
     const onCustom = () => reload();
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === COMPANIES_KEY || e.key === ACTIVE_KEY || e.key === USERS_KEY) reload();
-    };
     window.addEventListener("phidtech_companies_updated", onCustom);
-    window.addEventListener("storage", onStorage);
     return () => {
       window.removeEventListener("phidtech_companies_updated", onCustom);
-      window.removeEventListener("storage", onStorage);
     };
   }, []);
-
-  const persistCompanies = (list: Company[]) => {
-    setCompaniesList(list);
-    try {
-      localStorage.setItem(COMPANIES_KEY, JSON.stringify(list));
-      window.dispatchEvent(new Event("phidtech_companies_updated"));
-    } catch {}
-  };
 
   const setActiveCompanyId = (id: string) => {
     setActiveCompanyIdState(id);
     try {
-      localStorage.setItem(ACTIVE_KEY, id);
+      if (id) { localStorage.setItem(ACTIVE_KEY, id); }
+      else { localStorage.removeItem(ACTIVE_KEY); }
       window.dispatchEvent(new Event("phidtech_companies_updated"));
     } catch {}
   };
@@ -129,18 +139,23 @@ export default function AdminPage() {
     setShowModal(true);
   };
 
-  const saveCompany = () => {
+  const saveCompany = async () => {
     if (!form.name.trim()) { setFormError("Company name is required."); return; }
     if (!form.email.trim()) { setFormError("Email is required."); return; }
-    if (editTarget) {
-      persistCompanies(companiesList.map(c => c.id === editTarget.id ? { ...c, ...form } : c));
-    } else {
-      const newCompany: Company = { ...form, id: `c${Date.now()}`, createdAt: new Date().toISOString().slice(0, 10) };
-      const updated = [...companiesList, newCompany];
-      persistCompanies(updated);
-      setActiveCompanyId(newCompany.id);
-    }
-    setShowModal(false);
+    try {
+      if (editTarget) {
+        const r = await fetch("/api/companies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editTarget.id, ...form }) });
+        if (!r.ok) { const d = await r.json(); setFormError(d.error ?? "Failed to save."); return; }
+      } else {
+        const r = await fetch("/api/companies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+        if (!r.ok) { const d = await r.json(); setFormError(d.error ?? "Failed to save."); return; }
+        const newCompany = await r.json();
+        setActiveCompanyId(newCompany.id);
+      }
+      await reload();
+      window.dispatchEvent(new Event("phidtech_companies_updated"));
+      setShowModal(false);
+    } catch { setFormError("Network error. Please try again."); }
   };
 
   const systemStats = [
@@ -487,9 +502,12 @@ export default function AdminPage() {
                 </div>
               </div>
               <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700 mb-4">
-                Run this <strong>once</strong> after deployment to move existing staff accounts from browser storage to the server so all devices can log in.
+                Run these <strong>once</strong> after deployment to move existing data from this browser to the server so all devices share the same data.
               </div>
-              <MigrateUsersButton />
+              <MigrateButton label="Migrate Companies → Server" lsKey="phidtech_companies" endpoint="/api/companies/migrate" />
+              <div className="mt-3">
+                <MigrateButton label="Migrate Staff Users → Server" lsKey="phidtech_users" endpoint="/api/users/migrate" />
+              </div>
             </div>
 
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
