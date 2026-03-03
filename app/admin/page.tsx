@@ -31,6 +31,43 @@ const emptyCompany = (): Omit<Company, "id" | "createdAt"> => ({
   name: "", industry: "", address: "", phone: "", email: "", website: "", logo: ""
 });
 
+function MigrateUsersButton() {
+  const [status, setStatus] = useState<"idle"|"running"|"done"|"error">("idle");
+  const [msg, setMsg] = useState("");
+
+  const run = async () => {
+    setStatus("running");
+    try {
+      const raw = localStorage.getItem("phidtech_users");
+      const users = raw ? JSON.parse(raw) : [];
+      if (!users.length) { setMsg("No users found in this browser's local storage."); setStatus("done"); return; }
+      const res = await fetch("/api/users/migrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ users, secret: "Kaijage@@2023" }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setMsg(data.error ?? "Migration failed."); setStatus("error"); return; }
+      setMsg(`✅ Done! Imported ${data.imported} new user(s). ${data.skipped} already existed on server.`);
+      setStatus("done");
+    } catch { setMsg("Network error during migration."); setStatus("error"); }
+  };
+
+  return (
+    <div className="space-y-3">
+      {msg && (
+        <div className={`p-3 rounded-lg text-sm ${status === "error" ? "bg-red-50 text-red-700 border border-red-100" : "bg-green-50 text-green-700 border border-green-100"}`}>
+          {msg}
+        </div>
+      )}
+      <Button size="sm" onClick={run} disabled={status === "running"} className="w-full">
+        <ArrowLeftRight className="w-4 h-4 mr-2" />
+        {status === "running" ? "Migrating…" : "Migrate Staff from This Browser → Server"}
+      </Button>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [brandName, setBrandName] = useState("PHIDTECH MS");
   const [primaryColor, setPrimaryColor] = useState("#2563eb");
@@ -437,6 +474,22 @@ export default function AdminPage() {
                   <Download className="w-4 h-4 mr-2" /> Download
                 </Button>
               </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                  <ArrowLeftRight className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Migrate Staff to Server</h3>
+                  <p className="text-xs text-gray-400">Import staff users from this browser to the shared server database</p>
+                </div>
+              </div>
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700 mb-4">
+                Run this <strong>once</strong> after deployment to move existing staff accounts from browser storage to the server so all devices can log in.
+              </div>
+              <MigrateUsersButton />
             </div>
 
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">

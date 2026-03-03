@@ -163,8 +163,23 @@ const emptyForm = (companyId = "") => ({
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
 }
-function lsStr(key: string, fallback = ""): string {
-  try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+
+// API helpers
+async function apiGet<T>(url: string, fallback: T): Promise<T> {
+  try {
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) return fallback;
+    return await r.json() as T;
+  } catch { return fallback; }
+}
+async function apiPost(url: string, body: unknown) {
+  return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+async function apiPut(url: string, body: unknown) {
+  return fetch(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+async function apiDelete(url: string) {
+  return fetch(url, { method: "DELETE" });
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -183,19 +198,26 @@ export default function UsersPage() {
   const [activeCompanyId, setActiveCompanyId] = useState<string>("");
   const [companiesList, setCompaniesList] = useState<Array<{id:string;name:string;industry?:string}>>([]);
 
-  // Load everything directly from localStorage — no context race
-  const reload = () => {
-    setUsersList(lsGet<StaffUser[]>(USERS_KEY, []));
-    setDeptsList(lsGet<string[]>("phidtech_departments", DEFAULT_DEPARTMENTS));
+  const [saving, setSaving] = useState(false);
+
+  // Load users from server API; load companies/depts from localStorage
+  const reload = async () => {
+    const rawCid = localStorage.getItem(ACTIVE_KEY) ?? "";
+    const cid = rawCid && rawCid !== '""' ? rawCid.replace(/^"|"$/g, "") : "";
+    setActiveCompanyId(cid);
     setCompaniesList(lsGet(COMPANIES_KEY, []));
-    setActiveCompanyId(lsStr(ACTIVE_KEY));
+    setDeptsList(lsGet<string[]>("phidtech_departments", DEFAULT_DEPARTMENTS));
+    // Fetch users from server so all devices share same data
+    const serverUsers = await apiGet<StaffUser[]>("/api/users", []);
+    setUsersList(serverUsers);
+    // Also keep localStorage in sync for other pages that still read it
+    try { localStorage.setItem(USERS_KEY, JSON.stringify(serverUsers)); } catch {}
   };
 
   useEffect(() => {
     reload();
-    // Listen for company switches from the header
     const onStorage = (e: StorageEvent) => {
-      if (e.key === ACTIVE_KEY || e.key === USERS_KEY || e.key === COMPANIES_KEY) reload();
+      if (e.key === ACTIVE_KEY || e.key === COMPANIES_KEY) reload();
     };
     const onCustom = () => reload();
     window.addEventListener("storage", onStorage);
@@ -207,11 +229,6 @@ export default function UsersPage() {
   }, []);
 
   const activeCompany = companiesList.find(c => c.id === activeCompanyId) ?? companiesList[0];
-
-  const saveUsers = (list: StaffUser[]) => {
-    setUsersList(list);
-    try { localStorage.setItem(USERS_KEY, JSON.stringify(list)); } catch {}
-  };
 
   const saveDepts = (list: string[]) => {
     setDeptsList(list);
@@ -270,43 +287,53 @@ export default function UsersPage() {
     setCustomDept("");
   };
 
-  const saveUser = (isEdit = false) => {
+  const saveUser = async (isEdit = false) => {
     if (!isEdit && !form.companyId) { setFormError("Please select a company."); return; }
     if (!form.name.trim()) { setFormError("Full name is required."); return; }
     if (!form.email.trim()) { setFormError("Email is required."); return; }
     if (!isEdit && !form.password.trim()) { setFormError("Password is required."); return; }
     if (!isEdit && form.password.length < 6) { setFormError("Password must be at least 6 characters."); return; }
     if (!form.department) { setFormError("Department is required."); return; }
-    if (isEdit && editUser) {
-      const updated = usersList.map(u => u.id === editUser.id ? {
-        ...u, name: form.name, email: form.email,
-        password: form.password || u.password,
-        phone: form.phone, department: form.department,
-        position: form.position, salary: Number(form.salary) || 0,
-        status: form.status, permissions: form.permissions,
-        allowances: form.allowances,
-      } : u);
-      saveUsers(updated);
-      setShowEditDialog(false);
-    } else {
-      const newUser: StaffUser = {
-        id: `u${Date.now()}`, companyId: form.companyId || activeCompanyId,
-        name: form.name, email: form.email, password: form.password,
-        phone: form.phone, department: form.department,
-        position: form.position, role: form.position,
-        salary: Number(form.salary) || 0,
-        allowances: form.allowances,
-        joinDate: new Date().toISOString().slice(0, 10),
-        status: form.status, permissions: form.permissions,
-      };
-      saveUsers([...usersList, newUser]);
-      setShowAddDialog(false);
-    }
+
+    setSaving(true);
+    try {
+      if (isEdit && editUser) {
+        const payload = {
+          id: editUser.id, name: form.name, email: form.email,
+          password: form.password || undefined,
+          phone: form.phone, department: form.department,
+          position: form.position, role: form.position,
+          salary: Number(form.salary) || 0,
+          status: form.status, permissions: form.permissions,
+          allowances: form.allowances,
+        };
+        const r = await apiPut("/api/users", payload);
+        if (!r.ok) { const d = await r.json(); setFormError(d.error ?? "Failed to save."); return; }
+        setShowEditDialog(false);
+      } else {
+        const payload: StaffUser = {
+          id: `u${Date.now()}`, companyId: form.companyId || activeCompanyId,
+          name: form.name, email: form.email, password: form.password,
+          phone: form.phone, department: form.department,
+          position: form.position, role: form.position,
+          salary: Number(form.salary) || 0,
+          allowances: form.allowances,
+          joinDate: new Date().toISOString().slice(0, 10),
+          status: form.status, permissions: form.permissions,
+        };
+        const r = await apiPost("/api/users", payload);
+        if (!r.ok) { const d = await r.json(); setFormError(d.error ?? "Failed to save."); return; }
+        setShowAddDialog(false);
+      }
+      await reload();
+    } catch { setFormError("Network error. Please try again."); }
+    finally { setSaving(false); }
   };
 
-  const deleteUser = (id: string) => {
+  const deleteUser = async (id: string) => {
     if (!confirm("Delete this employee?")) return;
-    saveUsers(usersList.filter(u => u.id !== id));
+    await apiDelete(`/api/users?id=${id}`);
+    await reload();
   };
 
   return (
@@ -828,9 +855,12 @@ export default function UsersPage() {
             </div>
 
             <DialogFooter className="mt-2">
-              <Button variant="outline" onClick={onClose}>Cancel</Button>
-              <Button onClick={() => saveUser(isEdit)}>
-                {isEdit ? "Save Changes" : "Add Employee"}
+              <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+              <Button onClick={() => saveUser(isEdit)} disabled={saving}>
+                {saving
+                  ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />Saving...</>
+                  : isEdit ? "Save Changes" : "Add Employee"
+                }
               </Button>
             </DialogFooter>
           </DialogContent>

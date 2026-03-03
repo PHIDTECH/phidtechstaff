@@ -5,8 +5,6 @@ import { Building2, Eye, EyeOff, Lock, Mail, ArrowLeft, KeyRound, CheckCircle2, 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 const ADMIN_EMAIL      = "phidtechnology@gmail.com";
-const ADMIN_PASSWORD   = "Kaijage@@2023";
-const USERS_KEY        = "phidtech_users";
 const SESSION_KEY      = "phidtech_session";
 const RESET_TOKENS_KEY = "phidtech_reset_tokens";
 
@@ -99,48 +97,36 @@ export default function LoginPage() {
       return;
     }
 
-    // Check superadmin first (also accept overridden password set via reset flow)
-    const adminPwOverride = lsGet<string>("phidtech_admin_password_override", "");
-    const validAdminPw = adminPwOverride || ADMIN_PASSWORD;
-    if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase() && password === validAdminPw) {
-      setLoading(true);
-      await new Promise((r) => setTimeout(r, 700));
-      localStorage.setItem(SESSION_KEY, JSON.stringify({
-        id: "superadmin", name: "System Administrator",
-        email: ADMIN_EMAIL, role: "admin", position: "admin",
-        companyId: null, isSuperAdmin: true,
-      }));
-      router.push("/dashboard");
-      return;
-    }
-
-    // Check staff users in localStorage
+    setLoading(true);
     try {
-      const stored = localStorage.getItem(USERS_KEY);
-      if (stored) {
-        const users = JSON.parse(stored);
-        const match = users.find(
-          (u: { email: string; password: string }) =>
-            u.email.toLowerCase() === email.toLowerCase() && u.password === password
-        );
-        if (match) {
-          setLoading(true);
-          await new Promise((r) => setTimeout(r, 700));
-          // Set active company to this staff's company
-          localStorage.setItem("phidtech_active_company", match.companyId);
-          localStorage.setItem(SESSION_KEY, JSON.stringify({
-            id: match.id, name: match.name, email: match.email,
-            role: match.role, position: match.position,
-            permissions: match.permissions ?? [],
-            companyId: match.companyId, isSuperAdmin: false,
-          }));
-          router.push("/dashboard");
-          return;
-        }
-      }
-    } catch {}
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const data = await res.json();
 
-    setError("Invalid email or password. Please try again.");
+      if (!res.ok) {
+        setError(data.error ?? "Invalid email or password. Please try again.");
+        return;
+      }
+
+      const session = data.session;
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+
+      // For staff: set their active company; for superadmin: clear (Group HQ mode)
+      if (!session.isSuperAdmin && session.companyId) {
+        localStorage.setItem("phidtech_active_company", session.companyId);
+      } else {
+        localStorage.removeItem("phidtech_active_company");
+      }
+
+      router.push("/dashboard");
+    } catch {
+      setError("Connection error. Please check your internet and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
