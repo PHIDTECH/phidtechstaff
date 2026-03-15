@@ -12,6 +12,7 @@ interface StaffUser {
   role: string;
   position: string;
   companyId: string;
+  branchId?: string;
   permissions: string[];
   status: string;
 }
@@ -71,6 +72,7 @@ export async function POST(req: NextRequest) {
         position: match.position,
         permissions: match.permissions ?? [],
         companyId: match.companyId,
+        branchId: match.branchId ?? null,
         isSuperAdmin: false,
       },
     });

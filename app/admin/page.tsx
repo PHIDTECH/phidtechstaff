@@ -10,8 +10,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Settings, Users, Building2, Activity, RefreshCw, Download,
-  CheckCircle, AlertTriangle, Database, Pencil, ArrowLeftRight, X, Plus
+  CheckCircle, AlertTriangle, Database, Pencil, ArrowLeftRight, X, Plus, MapPin, Trash2
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { auditLogs } from "@/lib/data";
 import { formatDateTime, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -70,17 +71,26 @@ function MigrateButton({ label, lsKey, endpoint }: { label: string; lsKey: strin
   );
 }
 
+interface Branch { id: string; companyId: string; name: string; location: string; managerId: string; }
+const emptyBranch = (): Omit<Branch, "id"> => ({ companyId: "", name: "", location: "", managerId: "" });
+
 export default function AdminPage() {
   usePermissionGuard("admin");
   const [brandName, setBrandName] = useState("PHIDTECH MS");
   const [primaryColor, setPrimaryColor] = useState("#2563eb");
   const [companiesList, setCompaniesList] = useState<Company[]>([]);
   const [activeCompanyId, setActiveCompanyIdState] = useState("");
-  const [staffUsers, setStaffUsers] = useState<{id:string;companyId:string;status:string;name:string}[]>([]);
+  const [staffUsers, setStaffUsers] = useState<{id:string;companyId:string;status:string;name:string;role:string}[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Company | null>(null);
   const [form, setForm] = useState(emptyCompany());
   const [formError, setFormError] = useState("");
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [showBranchModal, setShowBranchModal] = useState(false);
+  const [editBranch, setEditBranch] = useState<Branch | null>(null);
+  const [branchForm, setBranchForm] = useState(emptyBranch());
+  const [branchFormError, setBranchFormError] = useState("");
+  const [deleteBranchId, setDeleteBranchId] = useState<string | null>(null);
 
   const reload = async () => {
     // Companies from server
@@ -89,7 +99,6 @@ export default function AdminPage() {
       if (res.ok) {
         const list = await res.json();
         setCompaniesList(list);
-        // Keep localStorage in sync for other pages still reading it
         try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(list)); } catch {}
       }
     } catch {}
@@ -101,6 +110,11 @@ export default function AdminPage() {
         setStaffUsers(list);
         try { localStorage.setItem(USERS_KEY, JSON.stringify(list)); } catch {}
       }
+    } catch {}
+    // Branches from server
+    try {
+      const res = await fetch("/api/branches", { cache: "no-store" });
+      if (res.ok) setBranches(await res.json());
     } catch {}
     // Active company from raw localStorage
     try {
@@ -160,8 +174,36 @@ export default function AdminPage() {
     } catch { setFormError("Network error. Please try again."); }
   };
 
+  const bf = (f: Partial<typeof branchForm>) => setBranchForm(p => ({ ...p, ...f }));
+
+  const openAddBranch = () => { setEditBranch(null); setBranchForm(emptyBranch()); setBranchFormError(""); setShowBranchModal(true); };
+  const openEditBranch = (b: Branch) => { setEditBranch(b); setBranchForm({ companyId: b.companyId, name: b.name, location: b.location, managerId: b.managerId }); setBranchFormError(""); setShowBranchModal(true); };
+
+  const saveBranch = async () => {
+    if (!branchForm.name.trim()) { setBranchFormError("Branch name is required."); return; }
+    if (!branchForm.companyId)   { setBranchFormError("Select a company."); return; }
+    try {
+      if (editBranch) {
+        const r = await fetch("/api/branches", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editBranch.id, ...branchForm }) });
+        if (!r.ok) { const d = await r.json(); setBranchFormError(d.error ?? "Failed to save."); return; }
+      } else {
+        const r = await fetch("/api/branches", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(branchForm) });
+        if (!r.ok) { const d = await r.json(); setBranchFormError(d.error ?? "Failed to save."); return; }
+      }
+      await reload();
+      setShowBranchModal(false);
+    } catch { setBranchFormError("Network error."); }
+  };
+
+  const deleteBranch = async (id: string) => {
+    await fetch(`/api/branches?id=${id}`, { method: "DELETE" });
+    await reload();
+    setDeleteBranchId(null);
+  };
+
   const systemStats = [
     { label: "Total Companies", value: companiesList.length, icon: Building2, color: "text-blue-600", bg: "bg-blue-50" },
+    { label: "Total Branches", value: branches.length, icon: MapPin, color: "text-teal-600", bg: "bg-teal-50" },
     { label: "Total Users", value: staffUsers.length, icon: Users, color: "text-purple-600", bg: "bg-purple-50" },
     { label: "Active Users", value: staffUsers.filter(u => u.status === "active").length, icon: CheckCircle, color: "text-green-600", bg: "bg-green-50" },
     { label: "Audit Events", value: auditLogs.length, icon: Activity, color: "text-orange-600", bg: "bg-orange-50" },
@@ -225,6 +267,7 @@ export default function AdminPage() {
       <Tabs defaultValue="companies">
         <TabsList className="mb-4 flex-wrap h-auto gap-1">
           <TabsTrigger value="companies">Companies</TabsTrigger>
+          <TabsTrigger value="branches">Branches</TabsTrigger>
           <TabsTrigger value="permissions">Permissions</TabsTrigger>
           <TabsTrigger value="branding">Branding</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
@@ -280,6 +323,83 @@ export default function AdminPage() {
                 );
               })}
             </div>
+          </div>
+        </TabsContent>
+
+        {/* Branches Tab */}
+        <TabsContent value="branches">
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900">Branch Management</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Manage branches per company and assign branch managers</p>
+              </div>
+              <Button size="sm" onClick={openAddBranch}>
+                <Plus className="w-4 h-4 mr-2" /> Add Branch
+              </Button>
+            </div>
+            {branches.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+                <MapPin className="w-12 h-12 text-gray-200" />
+                <p className="font-semibold text-gray-500">No branches yet</p>
+                <p className="text-sm text-gray-400">Add a branch to get started.</p>
+                <Button size="sm" onClick={openAddBranch}><Plus className="w-4 h-4 mr-2" />Add Branch</Button>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Branch Name</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Branch Manager</TableHead>
+                    <TableHead>Staff Count</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {branches.map(branch => {
+                    const company = companiesList.find(c => c.id === branch.companyId);
+                    const manager = staffUsers.find(u => u.id === branch.managerId);
+                    const branchStaff = staffUsers.filter((u: {id:string;companyId:string;status:string;name:string;role:string} & {branchId?: string}) => u.branchId === branch.id);
+                    return (
+                      <TableRow key={branch.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
+                              <MapPin className="w-4 h-4 text-teal-600" />
+                            </div>
+                            <span className="font-medium text-gray-900">{branch.name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600">{company?.name ?? "—"}</TableCell>
+                        <TableCell className="text-sm text-gray-500">{branch.location || "—"}</TableCell>
+                        <TableCell>
+                          {manager ? (
+                            <span className="text-sm font-medium text-gray-800">{manager.name}</span>
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">Not assigned</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm font-semibold text-gray-800">{branchStaff.length}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="outline" size="sm" onClick={() => openEditBranch(branch)}>
+                              <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => setDeleteBranchId(branch.id)}>
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
           </div>
         </TabsContent>
 
@@ -653,6 +773,85 @@ export default function AdminPage() {
               <Button onClick={saveCompany}>
                 {editTarget ? "Save Changes" : "Add Company"}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Branch Modal */}
+      {showBranchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center">
+                  <MapPin className="w-5 h-5 text-teal-600" />
+                </div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {editBranch ? "Edit Branch" : "Add New Branch"}
+                </h2>
+              </div>
+              <button onClick={() => setShowBranchModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              {branchFormError && (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700">{branchFormError}</div>
+              )}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Company <span className="text-red-500">*</span></label>
+                <Select value={branchForm.companyId} onValueChange={v => bf({ companyId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+                  <SelectContent>
+                    {companiesList.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Branch Name <span className="text-red-500">*</span></label>
+                <Input value={branchForm.name} onChange={e => bf({ name: e.target.value })} placeholder="e.g. Karagwe Branch" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Location</label>
+                <Input value={branchForm.location} onChange={e => bf({ location: e.target.value })} placeholder="e.g. Karagwe, Kagera" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Branch Manager</label>
+                <Select value={branchForm.managerId || "none"} onValueChange={v => bf({ managerId: v === "none" ? "" : v })}>
+                  <SelectTrigger><SelectValue placeholder="Select manager (optional)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— No manager assigned —</SelectItem>
+                    {staffUsers
+                      .filter(u => !branchForm.companyId || u.companyId === branchForm.companyId)
+                      .map(u => <SelectItem key={u.id} value={u.id}>{u.name} ({u.role})</SelectItem>)
+                    }
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => setShowBranchModal(false)}>Cancel</Button>
+              <Button onClick={saveBranch}>
+                {editBranch ? "Save Changes" : "Add Branch"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Branch Confirmation */}
+      {deleteBranchId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
+            <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-7 h-7 text-red-500" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Branch?</h3>
+            <p className="text-sm text-gray-500 mb-6">This will permanently delete this branch. Staff assigned to it will no longer have a branch.</p>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteBranchId(null)}>Cancel</Button>
+              <Button variant="destructive" className="flex-1" onClick={() => deleteBranch(deleteBranchId)}>Delete</Button>
             </div>
           </div>
         </div>

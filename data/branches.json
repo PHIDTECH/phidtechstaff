@@ -1,0 +1,16 @@
+[
+  {
+    "id": "br_karagwe",
+    "companyId": "c_phidtech_ict",
+    "name": "Karagwe Branch",
+    "location": "Karagwe, Kagera",
+    "managerId": ""
+  },
+  {
+    "id": "br_mikocheni",
+    "companyId": "c_phidtech_ict",
+    "name": "Mikocheni Branch",
+    "location": "Mikocheni, Dar es Salaam",
+    "managerId": ""
+  }
+]

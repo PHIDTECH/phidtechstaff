@@ -30,6 +30,7 @@ interface Allowance {
 interface StaffUser {
   id: string;
   companyId: string;
+  branchId?: string;
   name: string;
   email: string;
   password: string;
@@ -42,6 +43,14 @@ interface StaffUser {
   joinDate: string;
   status: string;
   permissions: string[];
+}
+
+interface Branch {
+  id: string;
+  companyId: string;
+  name: string;
+  location: string;
+  managerId: string;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -157,6 +166,7 @@ const emptyForm = (companyId = "") => ({
   department: "", position: "staff", salary: "",
   status: "active", permissions: DEFAULT_PERMISSIONS["staff"] as string[],
   companyId,
+  branchId: "",
   allowances: [] as Allowance[],
 });
 
@@ -199,6 +209,7 @@ export default function UsersPage() {
   const [usersList, setUsersList] = useState<StaffUser[]>([]);
   const [activeCompanyId, setActiveCompanyId] = useState<string>("");
   const [companiesList, setCompaniesList] = useState<Array<{id:string;name:string;industry?:string}>>([]);
+  const [branchesList, setBranchesList] = useState<Branch[]>([]);
 
   const [saving, setSaving] = useState(false);
 
@@ -212,8 +223,10 @@ export default function UsersPage() {
     // Fetch users from server so all devices share same data
     const serverUsers = await apiGet<StaffUser[]>("/api/users", []);
     setUsersList(serverUsers);
-    // Also keep localStorage in sync for other pages that still read it
     try { localStorage.setItem(USERS_KEY, JSON.stringify(serverUsers)); } catch {}
+    // Fetch branches
+    const serverBranches = await apiGet<Branch[]>("/api/branches", []);
+    setBranchesList(serverBranches);
   };
 
   useEffect(() => {
@@ -265,6 +278,7 @@ export default function UsersPage() {
     setForm({ name: u.name, email: u.email, password: u.password, phone: u.phone,
       department: u.department, position: u.position, salary: String(u.salary),
       status: u.status, permissions: [...u.permissions], companyId: u.companyId,
+      branchId: u.branchId ?? "",
       allowances: u.allowances ? [...u.allowances] : [] });
     setFormError("");
     setShowEditDialog(true);
@@ -402,6 +416,7 @@ export default function UsersPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Employee</TableHead>
+                    <TableHead>Branch</TableHead>
                     <TableHead>Department</TableHead>
                     <TableHead>Position</TableHead>
                     <TableHead>Basic Salary</TableHead>
@@ -424,6 +439,13 @@ export default function UsersPage() {
                             <p className="text-xs text-gray-400">{user.email}</p>
                           </div>
                         </div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {user.branchId ? (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-medium">
+                            📍 {branchesList.find(b => b.id === user.branchId)?.name ?? user.branchId}
+                          </span>
+                        ) : <span className="text-gray-400 text-xs">Head Office</span>}
                       </TableCell>
                       <TableCell className="text-sm text-gray-700">{user.department}</TableCell>
                       <TableCell>
@@ -725,6 +747,23 @@ export default function UsersPage() {
                   <p className="text-xs text-indigo-600 mt-1 font-medium">⚡ Group HQ staff can access and manage all subsidiary companies</p>
                 )}
               </div>
+
+              {/* Branch assignment — only shown for non-group companies that have branches */}
+              {form.companyId && form.companyId !== GROUP_ID && branchesList.filter(b => b.companyId === form.companyId).length > 0 && (
+                <div className="col-span-2">
+                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">Branch</label>
+                  <Select value={form.branchId || "none"} onValueChange={v => setForm(f => ({ ...f, branchId: v === "none" ? "" : v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select branch (optional)" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— No specific branch (Head Office) —</SelectItem>
+                      {branchesList.filter(b => b.companyId === form.companyId).map(b => (
+                        <SelectItem key={b.id} value={b.id}>📍 {b.name}{b.location ? ` — ${b.location}` : ""}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div className="col-span-2">
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Full Name <span className="text-red-500">*</span></label>
                 <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. John Mwalimu" />
