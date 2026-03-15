@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useEffect, useRef, useState } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -74,6 +75,7 @@ function fmtBytes(bytes: number) {
 const emptyForm = () => ({ category: "", permissions: "all", assignedTo: "", assignedToName: "" });
 
 export default function DocumentsPage() {
+  usePermissionGuard("documents");
   const [docs, setDocs]                 = useState<Doc[]>([]);
   const [staff, setStaff]               = useState<StaffUser[]>([]);
   const [companies, setCompanies]       = useState<Company[]>([]);

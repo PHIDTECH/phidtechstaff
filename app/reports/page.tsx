@@ -1,5 +1,6 @@
 "use client";
 export const dynamic = "force-dynamic";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -19,6 +20,7 @@ function lsStr(key: string, fallback = ""): string {
 }
 
 export default function ReportsPage() {
+  usePermissionGuard("reports");
   const [activeCompanyId, setActiveCompanyId] = useState("");
   const [staffUsers, setStaffUsers] = useState<{id:string;companyId:string;status:string;department?:string;role?:string;salary?:number}[]>([]);
 

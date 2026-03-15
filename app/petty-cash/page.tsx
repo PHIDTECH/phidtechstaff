@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -14,6 +15,7 @@ import { pettyCash, users } from "@/lib/data";
 import { formatDate, formatCurrency } from "@/lib/utils";
 
 export default function PettyCashPage() {
+  usePermissionGuard("petty_cash");
   const [showDialog, setShowDialog] = useState(false);
 
   const companyPettyCash = pettyCash.filter(p => p.companyId === "c1");

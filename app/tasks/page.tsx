@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState, useEffect, useRef } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -56,6 +57,7 @@ const STATUS_COLOR: Record<string,string> = {
 const emptyForm = () => ({ title:"", description:"", assignedTo:"", priority:"medium" as Task["priority"], department:"", dueDate:"", attachments:[] as Attachment[] });
 
 export default function TasksPage() {
+  usePermissionGuard("tasks");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showAddDialog, setShowAddDialog] = useState(false);

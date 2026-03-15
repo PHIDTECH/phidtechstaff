@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -16,6 +17,7 @@ import { formatDate, formatCurrency, getStatusColor, getInitials } from "@/lib/u
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export default function AssetsPage() {
+  usePermissionGuard("assets");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [showAddDialog, setShowAddDialog] = useState(false);

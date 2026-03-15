@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 
 const SESSION_KEY    = "phidtech_session";
 const COMPANIES_KEY  = "phidtech_companies";
@@ -48,6 +49,7 @@ interface Sale { id: string; companyId: string; paid: number; amount: number; }
 interface Expense { id: string; companyId: string; amount: number; status: string; }
 
 export default function DashboardPage() {
+  usePermissionGuard("dashboard");
   const [session, setSession] = useState<{name:string;isSuperAdmin:boolean;companyId:string|null;role?:string} | null>(null);
   const [activeCompanyId, setActiveCompanyId] = useState("");
   const [companies, setCompanies]     = useState<Company[]>([]);

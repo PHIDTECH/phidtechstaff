@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -15,6 +16,7 @@ import { formatDate, formatCurrency, getStatusColor, getInitials } from "@/lib/u
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export default function VendorsPage() {
+  usePermissionGuard("vendors");
   const [search, setSearch] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState<typeof vendors[0] | null>(null);

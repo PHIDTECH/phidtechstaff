@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState, useEffect } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,7 @@ function MigrateButton({ label, lsKey, endpoint }: { label: string; lsKey: strin
 }
 
 export default function AdminPage() {
+  usePermissionGuard("admin");
   const [brandName, setBrandName] = useState("PHIDTECH MS");
   const [primaryColor, setPrimaryColor] = useState("#2563eb");
   const [companiesList, setCompaniesList] = useState<Company[]>([]);

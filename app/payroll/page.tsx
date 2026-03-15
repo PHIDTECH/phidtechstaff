@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState, useEffect } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -75,6 +76,7 @@ function calcNSSF(gross: number): number { return Math.round(gross * 0.10); }
 function calcSDL(gross: number): number { return Math.round(gross * 0.04); }
 
 export default function PayrollPage() {
+  usePermissionGuard("payroll");
   const now = new Date();
   const [search, setSearch] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);

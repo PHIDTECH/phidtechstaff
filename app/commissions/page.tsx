@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState, useEffect, useRef } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -69,6 +70,7 @@ const emptyForm = () => ({
 });
 
 export default function CommissionsPage() {
+  usePermissionGuard("commissions");
   const now = new Date();
   const [session, setSession]         = useState<Session | null>(null);
   const [activeCompanyId, setActiveCompanyId] = useState("");

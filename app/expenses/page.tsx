@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState, useEffect, useRef } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -50,6 +51,7 @@ const categoryColors: Record<string, string> = {
 };
 
 export default function ExpensesPage() {
+  usePermissionGuard("expenses");
   const [expenses, setExpenses]           = useState<Expense[]>([]);
   const [staff, setStaff]                 = useState<StaffUser[]>([]);
   const [session, setSession]             = useState<Session | null>(null);

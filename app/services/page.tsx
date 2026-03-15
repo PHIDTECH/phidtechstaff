@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState, useEffect } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -56,6 +57,7 @@ const emptyForm = () => ({
 });
 
 export default function ServicesPage() {
+  usePermissionGuard("services");
   const [session, setSession]     = useState<Session | null>(null);
   const [services, setServices]   = useState<Service[]>([]);
   const [search, setSearch]       = useState("");

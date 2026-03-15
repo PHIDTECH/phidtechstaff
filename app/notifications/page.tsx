@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState, useEffect } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -30,6 +31,7 @@ interface Msg    { id: string; fromId: string; fromName: string; toId: string; s
 interface Staff  { id: string; name: string; position: string; companyId: string; }
 
 export default function NotificationsPage() {
+  usePermissionGuard("notifications");
   const [notifList, setNotifList] = useState<Notif[]>([]);
   const [msgList,   setMsgList]   = useState<Msg[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);

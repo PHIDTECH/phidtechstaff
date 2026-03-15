@@ -2,6 +2,7 @@
 export const dynamic = "force-dynamic";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -41,6 +42,7 @@ function dayLabel(dateStr: string) {
 const ACCENT = ["#3b82f6","#10b981","#f97316","#8b5cf6","#ec4899","#06b6d4","#f59e0b","#14b8a6","#6366f1","#84cc16","#f43f5e","#22d3ee"];
 
 export default function AccountingPage() {
+  usePermissionGuard("accounting");
   const [sales, setSales]           = useState<SaleEntry[]>([]);
   const [expenses, setExpenses]     = useState<ExpenseEntry[]>([]);
   const [cid, setCid]               = useState("");

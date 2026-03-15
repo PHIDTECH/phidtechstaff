@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState, useEffect, useRef } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -52,6 +53,7 @@ const statusConfig: Record<string, { color: string; bgColor: string; barColor: s
 };
 
 export default function KPIsPage() {
+  usePermissionGuard("kpis");
   const [kpis, setKpis]                   = useState<KPI[]>([]);
   const [staff, setStaff]                 = useState<StaffUser[]>([]);
   const [activeCompanyId, setActiveCompanyId] = useState("");

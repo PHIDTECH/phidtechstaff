@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState, useEffect } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -65,6 +66,7 @@ function formatDate(d: string) {
 }
 
 export default function CustomersPage() {
+  usePermissionGuard("customers");
   const [session, setSession]             = useState<Session | null>(null);
   const [activeCompanyId, setActiveCompanyId] = useState("");
   const [companies, setCompanies]         = useState<Company[]>([]);

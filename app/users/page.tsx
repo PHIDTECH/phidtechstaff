@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState, useEffect } from "react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -184,6 +185,7 @@ async function apiDelete(url: string) {
 
 // ── Component ───────────────────────────────────────────────────────────────
 export default function UsersPage() {
+  usePermissionGuard("users");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [showAddDialog, setShowAddDialog] = useState(false);
