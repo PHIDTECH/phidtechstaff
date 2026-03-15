@@ -7,7 +7,7 @@ import {
   BookOpen, UserCheck, Target, Bell, Settings, ChevronDown,
   ChevronRight, Building2, ShoppingCart, Megaphone, Package,
   Receipt, BarChart3, FileText, Warehouse, TrendingUp, Briefcase,
-  Clock, HelpCircle, X, Menu, Percent, Wrench, Activity, Scale
+  Clock, HelpCircle, X, Menu, Percent, Wrench, Activity, Scale, MapPin
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -136,6 +136,7 @@ const ALL_NAV: NavGroup[] = [
       { label: "Documents",               href: "/documents",     icon: FileText  },
       { label: "Messages & Notifications",href: "/notifications", icon: Bell      },
       { label: "Reports",                 href: "/reports",       icon: BarChart3 },
+      { label: "Branches",                href: "/admin#branches",icon: MapPin    },
       { label: "Admin Panel",             href: "/admin",         icon: Settings  },
     ]
   },
@@ -199,7 +200,7 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
   const navigation = ALL_NAV.map(group => ({
     ...group,
     items: group.items.filter(item => {
-      if (item.href === "/admin") return isSuperAdmin;
+      if (item.href === "/admin" || item.href === "/admin#branches") return isSuperAdmin;
       return canAccess(item.href, session ? perms : []);
     }),
   })).filter(group => group.items.length > 0);
