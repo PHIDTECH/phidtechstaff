@@ -322,6 +322,7 @@ export default function UsersPage() {
           salary: Number(form.salary) || 0,
           status: form.status, permissions: form.permissions,
           allowances: form.allowances,
+          branchId: form.branchId || null,
         };
         const r = await apiPut("/api/users", payload);
         if (!r.ok) { const d = await r.json(); setFormError(d.error ?? "Failed to save."); return; }
@@ -336,6 +337,7 @@ export default function UsersPage() {
           allowances: form.allowances,
           joinDate: new Date().toISOString().slice(0, 10),
           status: form.status, permissions: form.permissions,
+          branchId: form.branchId || undefined,
         };
         const r = await apiPost("/api/users", payload);
         if (!r.ok) { const d = await r.json(); setFormError(d.error ?? "Failed to save."); return; }
