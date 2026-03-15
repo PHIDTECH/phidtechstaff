@@ -12,6 +12,7 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
+      - DATA_PATH=/app/data
       - MAIL_HOST=smtp.gmail.com
       - MAIL_PORT=587
       - MAIL_USERNAME=phidtechnology@gmail.com
@@ -19,6 +20,7 @@ services:
       - MAIL_FROM_ADDRESS=phidtechnology@gmail.com
     volumes:
       - boms_uploads_data:/app/public/uploads
+      - boms_data:/app/data
     networks:
       - boms_default
 
@@ -28,4 +30,6 @@ networks:
 
 volumes:
   boms_uploads_data:
+    driver: local
+  boms_data:
     driver: local

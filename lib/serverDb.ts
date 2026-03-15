@@ -1,7 +1,11 @@
 import fs from "fs";
 import path from "path";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+// In Docker standalone build, DATA_PATH env can point to /app/data explicitly.
+// Falls back to process.cwd()/data which is /app/data when cwd is /app.
+const DATA_DIR = process.env.DATA_PATH
+  ? path.resolve(process.env.DATA_PATH)
+  : path.join(process.cwd(), "data");
 
 function filePath(name: string) {
   return path.join(DATA_DIR, `${name}.json`);
