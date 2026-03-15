@@ -8,8 +8,9 @@ import { Input } from "@/components/ui/input";
 import { UserCircle, Camera, Save, Lock, Mail, Phone, Briefcase, Building2, CheckCircle } from "lucide-react";
 import { getInitials } from "@/lib/utils";
 
-const PROFILE_KEY = "phidtech_profile";
-const PHOTO_KEY = "phidtech_profile_photo";
+const PROFILE_KEY  = "phidtech_profile";
+const PHOTO_KEY    = "phidtech_profile_photo";
+const SESSION_KEY  = "phidtech_session";
 
 interface Profile {
   name: string;
@@ -36,6 +37,8 @@ export default function ProfilePage() {
   const [pwForm, setPwForm] = useState({ current: "", newPw: "", confirm: "" });
   const [pwError, setPwError] = useState("");
   const [pwSaved, setPwSaved] = useState(false);
+  const [pwLoading, setPwLoading] = useState(false);
+  const [sessionEmail, setSessionEmail] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -44,6 +47,12 @@ export default function ProfilePage() {
       if (stored) setProfile(JSON.parse(stored));
       const storedPhoto = localStorage.getItem(PHOTO_KEY);
       if (storedPhoto) setPhoto(storedPhoto);
+      // Read email from session so change-password API knows who to update
+      const sess = localStorage.getItem(SESSION_KEY);
+      if (sess) {
+        const s = JSON.parse(sess);
+        if (s?.email) setSessionEmail(s.email);
+      }
     } catch {}
   }, []);
 
@@ -65,14 +74,31 @@ export default function ProfilePage() {
     reader.readAsDataURL(file);
   };
 
-  const savePassword = () => {
+  const savePassword = async () => {
     setPwError("");
     if (!pwForm.current) { setPwError("Enter current password."); return; }
     if (pwForm.newPw.length < 8) { setPwError("New password must be at least 8 characters."); return; }
     if (pwForm.newPw !== pwForm.confirm) { setPwError("Passwords do not match."); return; }
-    setPwSaved(true);
-    setPwForm({ current: "", newPw: "", confirm: "" });
-    setTimeout(() => setPwSaved(false), 3000);
+    if (!sessionEmail) { setPwError("Could not determine your account. Please log out and log in again."); return; }
+
+    setPwLoading(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: sessionEmail,
+          currentPassword: pwForm.current,
+          newPassword: pwForm.newPw,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setPwError(data.error ?? "Failed to update password."); return; }
+      setPwSaved(true);
+      setPwForm({ current: "", newPw: "", confirm: "" });
+      setTimeout(() => setPwSaved(false), 3000);
+    } catch { setPwError("Network error. Please try again."); }
+    finally { setPwLoading(false); }
   };
 
   return (
@@ -245,8 +271,11 @@ export default function ProfilePage() {
             </div>
 
             <div className="mt-5 flex items-center gap-3">
-              <Button onClick={savePassword} variant="outline" className="min-w-[160px]">
-                <Lock className="w-4 h-4 mr-2" /> Update Password
+              <Button onClick={savePassword} variant="outline" className="min-w-[160px]" disabled={pwLoading}>
+                {pwLoading
+                  ? <><div className="w-4 h-4 border-2 border-gray-400 border-t-gray-700 rounded-full animate-spin mr-2" />Updating...</>
+                  : <><Lock className="w-4 h-4 mr-2" /> Update Password</>
+                }
               </Button>
               {pwSaved && (
                 <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
