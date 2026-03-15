@@ -748,17 +748,20 @@ export default function UsersPage() {
                 )}
               </div>
 
-              {/* Branch assignment — only shown for non-group companies that have branches */}
-              {form.companyId && form.companyId !== GROUP_ID && branchesList.filter(b => b.companyId === form.companyId).length > 0 && (
+              {/* Branch assignment — always shown for non-group companies */}
+              {form.companyId && form.companyId !== GROUP_ID && (
                 <div className="col-span-2">
                   <label className="text-sm font-medium text-gray-700 mb-1.5 block">Branch</label>
                   <Select value={form.branchId || "none"} onValueChange={v => setForm(f => ({ ...f, branchId: v === "none" ? "" : v }))}>
                     <SelectTrigger><SelectValue placeholder="Select branch (optional)" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">— No specific branch (Head Office) —</SelectItem>
+                      <SelectItem value="none">— Head Office (no branch) —</SelectItem>
                       {branchesList.filter(b => b.companyId === form.companyId).map(b => (
                         <SelectItem key={b.id} value={b.id}>📍 {b.name}{b.location ? ` — ${b.location}` : ""}</SelectItem>
                       ))}
+                      {branchesList.filter(b => b.companyId === form.companyId).length === 0 && (
+                        <SelectItem value="none" disabled>No branches added yet — add in Admin Panel</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
