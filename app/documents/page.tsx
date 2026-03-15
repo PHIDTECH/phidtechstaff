@@ -72,7 +72,7 @@ function fmtBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const emptyForm = () => ({ category: "", permissions: "all", assignedTo: "", assignedToName: "" });
+const emptyForm = () => ({ docName: "", category: "", permissions: "all", assignedTo: "", assignedToName: "" });
 
 export default function DocumentsPage() {
   usePermissionGuard("documents");
@@ -157,6 +157,7 @@ export default function DocumentsPage() {
 
   const saveUpload = () => {
     if (!selectedFile) { setFormError("Please select a file to upload."); return; }
+    if (!form.docName.trim()) { setFormError("Please enter a document name."); return; }
     if (!form.category)   { setFormError("Select a category."); return; }
     setUploading(true);
 
@@ -168,7 +169,7 @@ export default function DocumentsPage() {
       const newDoc: Doc = {
         id:             `doc-${Date.now()}`,
         companyId:      cidRef.current || cid,
-        name:           selectedFile.name,
+        name:           form.docName.trim() || selectedFile.name,
         category:       form.category,
         permissions:    form.permissions,
         assignedTo:     assignedStaff?.id,
@@ -409,6 +410,15 @@ export default function DocumentsPage() {
                 className="hidden"
                 accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp"
                 onChange={e => handleFileChange(e.target.files?.[0] ?? null)}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Document Name <span className="text-red-500">*</span></label>
+              <Input
+                placeholder="e.g. Employee Contract 2025"
+                value={form.docName}
+                onChange={e => sf({ docName: e.target.value })}
               />
             </div>
 
