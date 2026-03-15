@@ -35,11 +35,12 @@ function lsStr(key: string, fallback = "") {
 
 interface Session {
   id: string; name: string; role: string; position: string;
-  isSuperAdmin: boolean; companyId: string;
+  isSuperAdmin: boolean; companyId: string; branchId?: string | null;
 }
 interface StaffUser {
   id: string; name: string; email: string; position: string;
   department: string; salary: number; status: string; companyId: string;
+  branchId?: string | null;
   allowances?: { name: string; amount: number }[];
 }
 interface Allowance { name: string; amount: number; }
@@ -96,6 +97,8 @@ export default function PayrollPage() {
   const [editForm, setEditForm] = useState<{ basicSalary: string; allowances: Allowance[] } | null>(null);
   const [session, setSession] = useState<Session | null>(null);
 
+  const GENERAL_ROLES_PAYROLL = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
+
   const reload = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
@@ -104,7 +107,8 @@ export default function PayrollPage() {
     const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
     setActiveCompanyName(companies.find(c => c.id === cid)?.name ?? "");
     const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
-    setStaffList(allStaff.filter(u => u.companyId === cid));
+    const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_PAYROLL.includes(sess.position ?? sess.role ?? "");
+    setStaffList(allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
     setPayrollEntries(lsGet<PayrollEntry[]>(PAYROLL_KEY, []));
     setAdvances(lsGet<SalaryAdvance[]>(ADVANCES_KEY, []));
   };

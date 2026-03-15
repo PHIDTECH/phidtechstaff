@@ -27,8 +27,8 @@ function lsGet<T>(key: string, fallback: T): T {
 function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
-interface Session { id: string; name: string; role: string; isSuperAdmin: boolean; companyId: string; }
-interface StaffUser { id: string; name: string; companyId: string; department?: string; status?: string; }
+interface Session { id: string; name: string; role: string; position: string; isSuperAdmin: boolean; companyId: string; branchId?: string | null; }
+interface StaffUser { id: string; name: string; companyId: string; branchId?: string | null; department?: string; status?: string; }
 interface AttendanceRecord {
   id: string; companyId: string; userId: string; date: string;
   clockIn?: string; clockOut?: string;
@@ -90,8 +90,11 @@ export default function AttendancePage() {
   const [form, setForm]                   = useState(emptyForm());
   const [formError, setFormError]         = useState("");
 
+  const [session, setSession] = useState<Session | null>(null);
+
   const reload = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
+    setSession(sess);
     const cid  = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setActiveCompanyId(cid);
     cidRef.current = cid;
@@ -101,8 +104,17 @@ export default function AttendancePage() {
 
   useEffect(() => { reload(); }, []);
 
-  const cid          = cidRef.current || activeCompanyId;
-  const companyStaff = cid ? staff.filter(u => u.companyId === cid && u.status !== "inactive") : staff;
+  const cid = cidRef.current || activeCompanyId;
+
+  // Branch-scope: a branch manager only sees staff assigned to their branch
+  const GENERAL_ROLES = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
+  const isBranchManager = !!session && !session.isSuperAdmin && !!session.branchId && !GENERAL_ROLES.includes(session.position ?? session.role ?? "");
+
+  const companyStaff = (() => {
+    const base = cid ? staff.filter(u => u.companyId === cid && u.status !== "inactive") : staff;
+    if (isBranchManager && session?.branchId) return base.filter(u => u.branchId === session.branchId);
+    return base;
+  })();
   const companyRecs  = cid ? records.filter(r => r.companyId === cid) : records;
   const dayRecords   = companyRecs.filter(r => r.date === dateFilter);
 

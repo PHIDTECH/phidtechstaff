@@ -38,7 +38,7 @@ interface Task {
   dueDate: string; createdAt: string;
   attachments: Attachment[]; comments: Comment[];
 }
-interface StaffUser { id: string; name: string; position: string; department: string; companyId: string; status: string; }
+interface StaffUser { id: string; name: string; position: string; department: string; companyId: string; branchId?: string | null; status: string; }
 interface Notification { id: string; userId: string; message: string; read: boolean; createdAt: string; taskId?: string; }
 
 const PRIORITY_COLOR: Record<string,string> = {
@@ -69,19 +69,22 @@ export default function TasksPage() {
   const [staffList, setStaffList] = useState<StaffUser[]>([]);
   const [deptsList, setDeptsList] = useState<string[]>([]);
   const [tasksList, setTasksList] = useState<Task[]>([]);
-  const [session, setSession] = useState<{id:string;name:string;isSuperAdmin:boolean}|null>(null);
+  const [session, setSession] = useState<{id:string;name:string;position?:string;role?:string;isSuperAdmin:boolean;branchId?:string|null}|null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  const GENERAL_ROLES_TASKS = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
+
   const reload = () => {
+    const sess = lsGet<{id:string;name:string;position?:string;role?:string;isSuperAdmin:boolean;branchId?:string|null}>(SESSION_KEY, null as never);
+    setSession(sess);
     const cid = lsStr(ACTIVE_KEY);
     setActiveCompanyId(cid);
     const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
-    setStaffList(allStaff.filter(u => u.companyId === cid));
+    const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_TASKS.includes(sess.position ?? sess.role ?? "");
+    setStaffList(allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
     setDeptsList(lsGet<string[]>(DEPTS_KEY, []));
     setTasksList(lsGet<Task[]>(TASKS_KEY, []));
-    const sess = lsGet<{id:string;name:string;isSuperAdmin:boolean}>(SESSION_KEY, null as never);
-    setSession(sess);
   };
 
   useEffect(() => {
@@ -102,7 +105,16 @@ export default function TasksPage() {
     }
   }, [tasksList]);
 
-  const companyTasks = tasksList.filter(t => t.companyId === activeCompanyId);
+  const GENERAL_ROLES_TASKS_FILTER = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
+  const isBranchManagerTasks = !!session && !session.isSuperAdmin && !!session.branchId && !GENERAL_ROLES_TASKS_FILTER.includes(session.position ?? session.role ?? "");
+  // Branch managers see only tasks assigned to/from staff in their branch
+  const branchStaffIds = isBranchManagerTasks && session?.branchId
+    ? staffList.filter(u => u.branchId === session.branchId).map(u => u.id)
+    : null;
+  const companyTasks = tasksList.filter(t =>
+    t.companyId === activeCompanyId &&
+    (!branchStaffIds || branchStaffIds.includes(t.assignedTo) || t.assignedBy === session?.id)
+  );
   const filtered = companyTasks.filter(t => {
     const matchSearch = t.title.toLowerCase().includes(search.toLowerCase()) ||
       t.description.toLowerCase().includes(search.toLowerCase());

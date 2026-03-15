@@ -193,6 +193,9 @@ async function apiDelete(url: string) {
   return fetch(url, { method: "DELETE" });
 }
 
+// Branch manager detection helper (same list used across pages)
+const GENERAL_ROLES_USERS = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
+
 // ── Component ───────────────────────────────────────────────────────────────
 export default function UsersPage() {
   usePermissionGuard("users");
@@ -210,11 +213,14 @@ export default function UsersPage() {
   const [activeCompanyId, setActiveCompanyId] = useState<string>("");
   const [companiesList, setCompaniesList] = useState<Array<{id:string;name:string;industry?:string}>>([]);
   const [branchesList, setBranchesList] = useState<Branch[]>([]);
+  const [sessionData, setSessionData] = useState<{id:string;role:string;position:string;branchId?:string|null;isSuperAdmin:boolean}|null>(null);
 
   const [saving, setSaving] = useState(false);
 
   // Load users from server API; load companies/depts from localStorage
   const reload = async () => {
+    const sess = lsGet<{id:string;role:string;position:string;branchId?:string|null;isSuperAdmin:boolean}>("phidtech_session", null as never);
+    setSessionData(sess);
     const rawCid = localStorage.getItem(ACTIVE_KEY) ?? "";
     const cid = rawCid && rawCid !== '""' ? rawCid.replace(/^"|"$/g, "") : "";
     setActiveCompanyId(cid);
@@ -250,9 +256,16 @@ export default function UsersPage() {
     try { localStorage.setItem("phidtech_departments", JSON.stringify(list)); } catch {}
   };
 
-  const companyUsers = activeCompanyId
-    ? usersList.filter(u => u.companyId === activeCompanyId)
-    : [];
+  // Determine if this session is branch-scoped
+  const isBranchManagerSession = !!sessionData && !sessionData.isSuperAdmin && !!sessionData.branchId &&
+    !GENERAL_ROLES_USERS.includes(sessionData.position ?? sessionData.role ?? "");
+
+  const companyUsers = (() => {
+    const base = activeCompanyId ? usersList.filter(u => u.companyId === activeCompanyId) : [];
+    if (isBranchManagerSession && sessionData?.branchId)
+      return base.filter(u => u.branchId === sessionData.branchId);
+    return base;
+  })();
   const groupUsers = usersList.filter(u => u.companyId === GROUP_ID);
 
   const filtered = companyUsers.filter(u => {

@@ -42,7 +42,8 @@ function getGreeting() {
 }
 
 interface Company { id: string; name: string; industry?: string; }
-interface StaffUser { id: string; companyId: string; status: string; name: string; role?: string; }
+interface StaffUser { id: string; companyId: string; branchId?: string | null; status: string; name: string; role?: string; }
+interface Branch { id: string; companyId: string; name: string; location: string; managerId: string; }
 interface Task { id: string; companyId: string; status: string; }
 interface LeaveReq { id: string; companyId: string; status: string; }
 interface Sale { id: string; companyId: string; paid: number; amount: number; }
@@ -50,9 +51,10 @@ interface Expense { id: string; companyId: string; amount: number; status: strin
 
 export default function DashboardPage() {
   usePermissionGuard("dashboard");
-  const [session, setSession] = useState<{name:string;isSuperAdmin:boolean;companyId:string|null;role?:string} | null>(null);
+  const [session, setSession] = useState<{name:string;isSuperAdmin:boolean;companyId:string|null;role?:string;position?:string;branchId?:string|null} | null>(null);
   const [activeCompanyId, setActiveCompanyId] = useState("");
   const [companies, setCompanies]     = useState<Company[]>([]);
+  const [branches, setBranches]       = useState<Branch[]>([]);
   const [staffUsers, setStaffUsers]   = useState<StaffUser[]>([]);
   const [tasks, setTasks]             = useState<Task[]>([]);
   const [leaves, setLeaves]           = useState<LeaveReq[]>([]);
@@ -60,7 +62,7 @@ export default function DashboardPage() {
   const [expenses, setExpenses]       = useState<Expense[]>([]);
 
   const reload = async () => {
-    const sess = lsGet<{name:string;isSuperAdmin:boolean;companyId:string|null;role?:string}>(SESSION_KEY, null as never);
+    const sess = lsGet<{name:string;isSuperAdmin:boolean;companyId:string|null;role?:string;position?:string;branchId?:string|null}>(SESSION_KEY, null as never);
     setSession(sess);
     let cid = "";
     try { const raw = localStorage.getItem(ACTIVE_KEY); cid = raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : ""; } catch {}
@@ -83,6 +85,11 @@ export default function DashboardPage() {
         try { localStorage.setItem(USERS_KEY, JSON.stringify(list)); } catch {}
       } else { setStaffUsers(lsGet<StaffUser[]>(USERS_KEY, [])); }
     } catch { setStaffUsers(lsGet<StaffUser[]>(USERS_KEY, [])); }
+    // Load branches from server
+    try {
+      const r = await fetch("/api/branches", { cache: "no-store" });
+      if (r.ok) setBranches(await r.json());
+    } catch {}
     setTasks(lsGet<Task[]>(TASKS_KEY, []));
     setLeaves(lsGet<LeaveReq[]>(LEAVE_KEY, []));
     setSales(lsGet<Sale[]>(SALES_KEY, []));
@@ -104,6 +111,14 @@ export default function DashboardPage() {
   // Group mode = superadmin with no active company, OR group-role user
   const isGroupRole  = session?.role === "group_manager" || session?.role === "group_controller";
   const isGroupMode  = (isSuperAdmin && !activeCompanyId) || isGroupRole;
+
+  // Branch scope detection
+  const GENERAL_ROLES_DASH = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
+  const isBranchManagerDash = !!session && !session.isSuperAdmin && !!session.branchId &&
+    !GENERAL_ROLES_DASH.includes(session.position ?? session.role ?? "");
+  // General Manager = has no branchId, not superadmin, not group role — sees all branches of the company
+  const isGeneralManagerDash = !!session && !session.isSuperAdmin && !isGroupRole &&
+    !session.branchId && GENERAL_ROLES_DASH.includes(session.position ?? session.role ?? "");
 
   const firstName  = session?.name?.split(" ")[0] ?? "";
   const activeComp = companies.find(c => c.id === activeCompanyId);
@@ -133,8 +148,11 @@ export default function DashboardPage() {
   const groupLeave   = leaves.filter(l => l.status === "pending").length;
   const groupStaff_HQ = staffUsers.filter(u => u.companyId === GROUP_ID).length;
 
-  // Single-company stats
-  const coStaff    = staffUsers.filter(u => u.companyId === activeCompanyId);
+  // Single-company stats (branch-scoped when applicable)
+  const allCoStaff = staffUsers.filter(u => u.companyId === activeCompanyId);
+  const coStaff    = isBranchManagerDash && session?.branchId
+    ? allCoStaff.filter(u => u.branchId === session.branchId)
+    : allCoStaff;
   const coSales    = sales.filter(s => s.companyId === activeCompanyId);
   const coExp      = expenses.filter(e => e.companyId === activeCompanyId && (e.status === "paid" || e.status === "approved"));
   const coRevenue  = coSales.reduce((s, e) => s + e.paid, 0);
@@ -142,6 +160,18 @@ export default function DashboardPage() {
   const coProfit   = coRevenue - coExpAmt;
   const coTasks    = tasks.filter(t => t.companyId === activeCompanyId);
   const coLeave    = leaves.filter(l => l.companyId === activeCompanyId && l.status === "pending");
+
+  // Branch overview data (for general managers)
+  const companyBranches = branches.filter(b => b.companyId === activeCompanyId);
+  const branchStats = companyBranches.map(b => ({
+    ...b,
+    staffCount: allCoStaff.filter(u => u.branchId === b.id).length,
+    activeCount: allCoStaff.filter(u => u.branchId === b.id && u.status === "active").length,
+  }));
+  const headOfficeStaff = allCoStaff.filter(u => !u.branchId);
+
+  // Current branch name for branch manager
+  const myBranch = session?.branchId ? branches.find(b => b.id === session.branchId) : null;
 
   const switchToGroup = () => {
     try { localStorage.removeItem(ACTIVE_KEY); } catch {}
@@ -354,14 +384,27 @@ export default function DashboardPage() {
       <div className="mb-6">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isBranchManagerDash ? "bg-purple-600" : "bg-blue-600"}`}>
               <Building2 className="w-5 h-5 text-white" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">
                 {getGreeting()}{firstName ? `, ${firstName}` : ""}!
               </h1>
-              <p className="text-sm text-gray-500">{activeComp?.name || "No company selected"} · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+              <p className="text-sm text-gray-500">
+                {activeComp?.name || "No company selected"}
+                {isBranchManagerDash && myBranch && (
+                  <span className="ml-2 text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-semibold">
+                    {myBranch.name} Branch
+                  </span>
+                )}
+                {isGeneralManagerDash && companyBranches.length > 0 && (
+                  <span className="ml-2 text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-semibold">
+                    {companyBranches.length} Branches
+                  </span>
+                )}
+                {" · "}{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+              </p>
             </div>
           </div>
           {isSuperAdmin && (
@@ -374,11 +417,74 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Total Staff"     value={coStaff.length}                                       icon={Users}       iconColor="text-blue-600"   iconBg="bg-blue-50"   subtitle="Registered employees" />
+        <StatCard
+          title={isBranchManagerDash ? "Branch Staff" : "Total Staff"}
+          value={coStaff.length}
+          icon={Users} iconColor="text-blue-600" iconBg="bg-blue-50"
+          subtitle={isBranchManagerDash ? (myBranch?.name ?? "Your branch") : "Registered employees"}
+        />
         <StatCard title="Active Staff"    value={coStaff.filter(u => u.status === "active").length}    icon={UserCheck}   iconColor="text-green-600"  iconBg="bg-green-50"  subtitle="Currently active" />
         <StatCard title="Revenue"         value={formatCurrency(coRevenue)}                            icon={TrendingUp}  iconColor="text-purple-600" iconBg="bg-purple-50" subtitle="Collected" />
         <StatCard title="Pending Leave"   value={coLeave.length}                                       icon={Calendar}    iconColor="text-orange-600" iconBg="bg-orange-50" subtitle="Needs approval" />
       </div>
+
+      {/* Branch Overview — visible to General Managers (not branch-scoped) */}
+      {isGeneralManagerDash && companyBranches.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Building2 className="w-4 h-4 text-blue-600" />
+            <h2 className="font-bold text-gray-900 text-base">Branch Performance Overview</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {branchStats.map(b => (
+              <div key={b.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center">
+                    <Building2 className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 text-sm">{b.name}</p>
+                    <p className="text-xs text-gray-400">{b.location}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                    <p className="text-lg font-bold text-gray-900">{b.staffCount}</p>
+                    <p className="text-xs text-gray-500">Total Staff</p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-2.5 text-center">
+                    <p className="text-lg font-bold text-green-700">{b.activeCount}</p>
+                    <p className="text-xs text-gray-500">Active</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {headOfficeStaff.length > 0 && (
+              <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
+                    <Building2 className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 text-sm">Head Office</p>
+                    <p className="text-xs text-gray-400">No branch assigned</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                    <p className="text-lg font-bold text-gray-900">{headOfficeStaff.length}</p>
+                    <p className="text-xs text-gray-500">Total Staff</p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-2.5 text-center">
+                    <p className="text-lg font-bold text-green-700">{headOfficeStaff.filter(u => u.status === "active").length}</p>
+                    <p className="text-xs text-gray-500">Active</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Financial row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
