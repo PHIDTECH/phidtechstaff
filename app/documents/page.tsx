@@ -106,6 +106,8 @@ export default function DocumentsPage() {
 
   useEffect(() => { reload(); }, []);
 
+  const canDelete   = session?.isSuperAdmin === true;
+
   const co         = cidRef.current || cid;
   const coStaff    = (co ? staff.filter(u => u.companyId === co && u.status !== "inactive") : staff);
   // For specific staff picker: ALL active staff across ALL companies, grouped by company
@@ -308,9 +310,11 @@ export default function DocumentsPage() {
                               </Button>
                             </a>
                           )}
-                          <Button variant="ghost" size="icon" onClick={() => setDeleteId(doc.id)} title="Delete">
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </Button>
+                          {canDelete && (
+                            <Button variant="ghost" size="icon" onClick={() => setDeleteId(doc.id)} title="Delete">
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
