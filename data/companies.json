@@ -1,0 +1,46 @@
+[
+  {
+    "id": "c_phidtech_t",
+    "name": "PHIDTECH T LIMITED",
+    "industry": "Technology",
+    "address": "",
+    "phone": "",
+    "email": "",
+    "website": "",
+    "logo": "",
+    "createdAt": "2025-01-01"
+  },
+  {
+    "id": "c_phidtech_ict",
+    "name": "PHIDTECH ICT & BUSINESS SOLUTIONS LIMITED",
+    "industry": "ICT and Business Solutions",
+    "address": "",
+    "phone": "",
+    "email": "",
+    "website": "",
+    "logo": "",
+    "createdAt": "2025-01-01"
+  },
+  {
+    "id": "c_phidtech_finance",
+    "name": "PHIDTECH GLOBAL FINANCE LIMITED",
+    "industry": "Finance",
+    "address": "",
+    "phone": "",
+    "email": "",
+    "website": "",
+    "logo": "",
+    "createdAt": "2025-01-01"
+  },
+  {
+    "id": "c_pntv_media",
+    "name": "PNTV and PNRADIO MEDIA GROUP LIMITED",
+    "industry": "Media and Broadcasting",
+    "address": "",
+    "phone": "",
+    "email": "",
+    "website": "",
+    "logo": "",
+    "createdAt": "2025-01-01"
+  }
+]
