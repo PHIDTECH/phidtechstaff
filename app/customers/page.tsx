@@ -19,7 +19,6 @@ const ACTIVE_KEY    = "phidtech_active_company";
 const COMPANIES_KEY = "phidtech_companies";
 const SESSION_KEY   = "phidtech_session";
 const CUSTOMERS_KEY = "phidtech_customers";
-const BRANCHES_KEY  = "phidtech_branches";
 const GROUP_KEY     = "phidtech_group_company";
 
 function lsGet<T>(key: string, fallback: T): T {
@@ -94,7 +93,6 @@ export default function CustomersPage() {
     setActiveCompanyId(cid);
     const cos = lsGet<Company[]>(COMPANIES_KEY, []);
     setCompanies(cos);
-    setBranches(lsGet<Branch[]>(BRANCHES_KEY, []));
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
     setGroupCompanyId(gc);
     setCustomers(lsGet<Customer[]>(CUSTOMERS_KEY, []));
@@ -102,6 +100,10 @@ export default function CustomersPage() {
 
   useEffect(() => {
     reload();
+    fetch("/api/branches")
+      .then(r => r.json())
+      .then((data: Branch[]) => setBranches(Array.isArray(data) ? data : []))
+      .catch(() => {});
     window.addEventListener("phidtech_companies_updated", reload);
     return () => window.removeEventListener("phidtech_companies_updated", reload);
   }, []);
