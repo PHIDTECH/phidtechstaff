@@ -23,6 +23,12 @@ const NOTIF_KEY   = "phidtech_notifications";
 const DEPTS_KEY   = "phidtech_departments";
 const SESSION_KEY = "phidtech_session";
 
+const DEFAULT_DEPARTMENTS = [
+  "Administration", "Human Resources", "Finance & Accounting", "Sales & Marketing",
+  "Information Technology", "Operations", "Customer Service", "Procurement",
+  "Legal & Compliance", "Research & Development", "Logistics", "Production",
+];
+
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
 }
@@ -85,14 +91,15 @@ export default function TasksPage() {
     const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_TASKS.includes(sess.position ?? sess.role ?? "");
     setStaffList(allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
-    // Departments stored as objects or legacy strings
+    // Departments stored as plain strings (or objects for backwards compat)
     const rawDepts = lsGet<(Department|string)[]>(DEPTS_KEY, []);
     const deptObjs: Department[] = rawDepts.map((d, i) =>
       typeof d === "string" ? { id: String(i), name: d, companyId: cid } : d
     );
     setAllDepts(deptObjs);
     const companyDepts = deptObjs.filter(d => !d.companyId || d.companyId === cid).map(d => d.name);
-    setDeptsList(companyDepts);
+    // Fall back to defaults if no departments saved yet
+    setDeptsList(companyDepts.length > 0 ? companyDepts : DEFAULT_DEPARTMENTS);
     setTasksList(lsGet<Task[]>(TASKS_KEY, []));
   };
 
