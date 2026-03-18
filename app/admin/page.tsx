@@ -21,6 +21,7 @@ import type { Company } from "@/lib/types";
 const COMPANIES_KEY = "phidtech_companies";
 const ACTIVE_KEY = "phidtech_active_company";
 const USERS_KEY = "phidtech_users";
+const GROUP_KEY = "phidtech_group_company";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -81,6 +82,7 @@ export default function AdminPage() {
   const [companiesList, setCompaniesList] = useState<Company[]>([]);
   const [activeCompanyId, setActiveCompanyIdState] = useState("");
   const [staffUsers, setStaffUsers] = useState<{id:string;companyId:string;status:string;name:string;role:string}[]>([]);
+  const [groupCompanyId, setGroupCompanyIdState] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Company | null>(null);
   const [form, setForm] = useState(emptyCompany());
@@ -120,6 +122,11 @@ export default function AdminPage() {
     try {
       const raw = localStorage.getItem(ACTIVE_KEY) ?? "";
       setActiveCompanyIdState(raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : "");
+    } catch {}
+    // Group company
+    try {
+      const gc = localStorage.getItem(GROUP_KEY) ?? "";
+      setGroupCompanyIdState(gc.replace(/^"|"$/g, ""));
     } catch {}
   };
 
@@ -309,9 +316,20 @@ export default function AdminPage() {
                         <p className="text-xs text-gray-400">Users</p>
                       </div>
                       <div className="flex items-center gap-2">
+                        {company.id === groupCompanyId && (
+                          <span className="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded-full font-medium">Group</span>
+                        )}
                         <Button variant="outline" size="sm" onClick={() => openEdit(company)}>
                           <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
                         </Button>
+                        {company.id !== groupCompanyId && (
+                          <Button variant="outline" size="sm" onClick={() => {
+                            setGroupCompanyIdState(company.id);
+                            try { localStorage.setItem(GROUP_KEY, company.id); } catch {}
+                          }}>
+                            🏢 Set as Group
+                          </Button>
+                        )}
                         {!isActive && (
                           <Button size="sm" onClick={() => setActiveCompanyId(company.id)}>
                             <ArrowLeftRight className="w-3.5 h-3.5 mr-1" /> Switch

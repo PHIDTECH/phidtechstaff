@@ -20,6 +20,7 @@ const ACTIVE_KEY     = "phidtech_active_company";
 const DOCS_KEY       = "phidtech_documents";
 const USERS_KEY      = "phidtech_users";
 const COMPANIES_KEY  = "phidtech_companies";
+const GROUP_KEY      = "phidtech_group_company";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -27,20 +28,20 @@ function lsGet<T>(key: string, fallback: T): T {
 function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
-interface Session { id: string; name: string; role: string; isSuperAdmin: boolean; companyId: string; }
+interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; }
 interface Doc {
   id: string; companyId: string; name: string; category: string;
   permissions: string; assignedTo?: string; assignedToName?: string;
-  uploadedBy: string; uploadedAt: string;
-  size: string; version: number; dataUrl?: string;
+  uploadedBy: string; uploadedAt: string; size: string; version: number; dataUrl?: string;
+  sharedWithRoles?: string[];
 }
-interface StaffUser { id: string; name: string; companyId: string; department?: string; position?: string; status?: string; }
-interface Company { id: string; name: string; }
+interface StaffUser { id: string; name: string; companyId: string; department?: string; position?: string; status?: string; role?: string; }
+interface Company { id: string; name: string; isGroup?: boolean; }
 
 const CATEGORIES = ["HR Policy","Financial","Technical","Sales","Legal","Marketing","Operations","Other"];
 
 const PERMISSIONS = [
-  { value: "all",             label: "Everyone" },
+  { value: "all",             label: "All Staff (Own Company)" },
   { value: "admin",           label: "Admin Only" },
   { value: "manager",         label: "Managers & Above" },
   { value: "accountant",      label: "Accountants & Above" },
@@ -51,6 +52,58 @@ const PERMISSIONS = [
   { value: "staff",           label: "All Staff" },
   { value: "specific_staff",  label: "Specific Staff Member" },
 ];
+
+const GROUP_ROLES = [
+  { value: "admin",      label: "Admin" },
+  { value: "ceo",        label: "CEO" },
+  { value: "manager",    label: "Manager" },
+  { value: "hr",         label: "HR" },
+  { value: "accountant", label: "Accountant" },
+  { value: "finance",    label: "Finance" },
+  { value: "legal",      label: "Legal" },
+  { value: "operations", label: "Operations" },
+  { value: "director",   label: "Director" },
+];
+
+function matchesRole(session: Session, role: string): boolean {
+  const r = (session.role ?? "").toLowerCase();
+  const p = (session.position ?? "").toLowerCase();
+  return r === role || p.includes(role);
+}
+
+function canViewDoc(doc: Doc, session: Session, groupCompanyId: string): boolean {
+  if (!session) return false;
+  if (session.isSuperAdmin) return true;
+
+  const userCo     = session.companyId;
+  const docCo      = doc.companyId;
+  const isGroupUser = userCo === groupCompanyId;
+  const isOwnDoc    = userCo === docCo;
+
+  // Specific staff assignment — only that staff member (and their own company admin/SA)
+  if (doc.permissions === "specific_staff") {
+    if (doc.assignedTo === session.id) return true;
+    if (isOwnDoc && (session.role === "admin" || session.role === "manager")) return true;
+    if (session.isSuperAdmin) return true;
+    // Group company admin can also see it
+    if (isGroupUser && session.role === "admin") return true;
+    return false;
+  }
+
+  // Own company documents: visible to own company members
+  if (isOwnDoc) return true;
+
+  // Cross-company: only group company users can see other companies' docs
+  if (!isGroupUser) return false;
+
+  // Group company user — check if doc is shared with their role
+  const sharedRoles = doc.sharedWithRoles ?? [];
+  if (sharedRoles.length === 0) {
+    // No role restriction on group sharing — group admin sees it
+    return session.role === "admin";
+  }
+  return sharedRoles.some(role => matchesRole(session, role));
+}
 
 const categoryIcons: Record<string, string> = {
   "HR Policy": "📋", "Financial": "💰", "Technical": "⚙️",
@@ -72,7 +125,7 @@ function fmtBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const emptyForm = () => ({ docName: "", category: "", permissions: "all", assignedTo: "", assignedToName: "" });
+const emptyForm = () => ({ docName: "", category: "", permissions: "all", assignedTo: "", assignedToName: "", sharedWithRoles: [] as string[] });
 
 export default function DocumentsPage() {
   usePermissionGuard("documents");
@@ -81,6 +134,7 @@ export default function DocumentsPage() {
   const [companies, setCompanies]       = useState<Company[]>([]);
   const [cid, setCid]                   = useState("");
   const cidRef                          = useRef("");
+  const [groupCid, setGroupCid]         = useState("");
   const [session, setSession]           = useState<Session | null>(null);
   const [search, setSearch]             = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -102,7 +156,12 @@ export default function DocumentsPage() {
     setCid(c); cidRef.current = c;
     setDocs(lsGet<Doc[]>(DOCS_KEY, []));
     setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
-    setCompanies(lsGet<Company[]>(COMPANIES_KEY, []));
+    const cos = lsGet<Company[]>(COMPANIES_KEY, []);
+    setCompanies(cos);
+    // Group company: explicitly stored, or first company in list
+    const storedGroup = lsStr(GROUP_KEY);
+    const gc = storedGroup || (cos.find(c => c.isGroup)?.id ?? cos[0]?.id ?? "");
+    setGroupCid(gc);
   };
 
   useEffect(() => { reload(); }, []);
@@ -110,35 +169,42 @@ export default function DocumentsPage() {
   const canDelete   = session?.isSuperAdmin === true;
 
   const co         = cidRef.current || cid;
-  const isSA       = session?.isSuperAdmin === true || session?.role === "admin";
+  const isSA       = session?.isSuperAdmin === true;
+  const isAdmin    = session?.role === "admin";
+  const isGroupUser = !!groupCid && session?.companyId === groupCid;
   const coStaff    = (co ? staff.filter(u => u.companyId === co && u.status !== "inactive") : staff);
-  // For specific staff picker: ALL active staff across ALL companies, grouped by company
+  // All active staff grouped by company (for cross-company sharing picker)
   const allActiveStaff = staff.filter(u => u.status !== "inactive");
   const staffByCompany = companies.map(c => ({
     company: c,
     members: allActiveStaff.filter(u => u.companyId === c.id),
   })).filter(g => g.members.length > 0);
-  // Staff not belonging to any known company
   const knownCompanyIds = new Set(companies.map(c => c.id));
   const ungroupedStaff  = allActiveStaff.filter(u => !knownCompanyIds.has(u.companyId));
-  // SuperAdmin sees ALL companies' documents; regular staff see only their company's docs
-  const coDocs   = (isSA ? docs : (co ? docs.filter(d => d.companyId === co) : docs))
-                     .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
-  const categories = [...new Set(coDocs.map(d => d.category))];
   const companyName = (id: string) => companies.find(c => c.id === id)?.name ?? id;
 
+  // Apply visibility rules
+  const coDocs = (session
+    ? docs.filter(d => canViewDoc(d, session, groupCid))
+    : []
+  ).sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+
+  const categories = [...new Set(coDocs.map(d => d.category))];
   const thisMonth = new Date().toISOString().slice(0, 7);
+
   const filtered  = coDocs.filter(d => {
     const ms = d.name.toLowerCase().includes(search.toLowerCase()) ||
                d.category.toLowerCase().includes(search.toLowerCase());
     const mf = categoryFilter === "all" || d.category === categoryFilter;
-    const mcf = !isSA || companyFilter === "all" || d.companyId === companyFilter;
+    const mcf = companyFilter === "all" || d.companyId === companyFilter;
     return ms && mf && mcf;
   });
   const docsByCategory = categories.map(cat => ({
     category: cat,
     docs: coDocs.filter(d => d.category === cat),
   }));
+  // Show company column if user can see docs from multiple companies
+  const showCompanyCol = isSA || (isGroupUser && isAdmin);
 
   const sf = (f: Partial<typeof form>) => setForm(p => ({ ...p, ...f }));
 
@@ -171,7 +237,7 @@ export default function DocumentsPage() {
     const reader = new FileReader();
     reader.onload = () => {
       const assignedStaff = form.permissions === "specific_staff" && form.assignedTo
-        ? coStaff.find(u => u.id === form.assignedTo)
+        ? allActiveStaff.find(u => u.id === form.assignedTo)
         : undefined;
       const newDoc: Doc = {
         id:             `doc-${Date.now()}`,
@@ -186,6 +252,7 @@ export default function DocumentsPage() {
         size:           fmtBytes(selectedFile.size),
         version:        1,
         dataUrl:        typeof reader.result === "string" ? reader.result : undefined,
+        sharedWithRoles: form.sharedWithRoles.length > 0 ? form.sharedWithRoles : undefined,
       };
       const updated = [...docs, newDoc];
       lsSet(DOCS_KEY, updated);
@@ -204,9 +271,14 @@ export default function DocumentsPage() {
     setDeleteId(null);
   };
 
-  const permLabel = (val: string, assignedToName?: string) => {
+  const permLabel = (val: string, assignedToName?: string, sharedRoles?: string[]) => {
     if (val === "specific_staff" && assignedToName) return `👤 ${assignedToName}`;
-    return PERMISSIONS.find(p => p.value === val)?.label ?? val;
+    const base = PERMISSIONS.find(p => p.value === val)?.label ?? val;
+    if (sharedRoles && sharedRoles.length > 0) {
+      const roleLabels = sharedRoles.map(r => GROUP_ROLES.find(g => g.value === r)?.label ?? r).join(", ");
+      return `${base} · 🏢 ${roleLabels}`;
+    }
+    return base;
   };
 
   return (
@@ -240,7 +312,7 @@ export default function DocumentsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input placeholder="Search documents..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 w-52" />
             </div>
-            {isSA && (
+            {showCompanyCol && (
               <Select value={companyFilter} onValueChange={setCompanyFilter}>
                 <SelectTrigger className="w-44"><SelectValue placeholder="All Companies" /></SelectTrigger>
                 <SelectContent>
@@ -274,7 +346,7 @@ export default function DocumentsPage() {
                   <TableRow>
                     <TableHead>Document</TableHead>
                     <TableHead>Category</TableHead>
-                    {isSA && <TableHead>Company</TableHead>}
+                    {showCompanyCol && <TableHead>Company</TableHead>}
                     <TableHead>Uploaded By</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Size</TableHead>
@@ -295,7 +367,7 @@ export default function DocumentsPage() {
                       <TableCell>
                         <span className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-medium">{doc.category}</span>
                       </TableCell>
-                      {isSA && (
+                      {showCompanyCol && (
                         <TableCell>
                           <span className="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">{companyName(doc.companyId)}</span>
                         </TableCell>
@@ -314,7 +386,7 @@ export default function DocumentsPage() {
                         <span className="text-xs font-mono bg-gray-100 text-gray-700 px-2 py-1 rounded">v{doc.version}</span>
                       </TableCell>
                       <TableCell>
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{permLabel(doc.permissions, doc.assignedToName)}</span>
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{permLabel(doc.permissions, doc.assignedToName, doc.sharedWithRoles)}</span>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
@@ -393,7 +465,7 @@ export default function DocumentsPage() {
 
       {/* Upload Dialog */}
       <Dialog open={showUploadDialog} onOpenChange={v => { if (!v) setShowUploadDialog(false); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Upload Document</DialogTitle></DialogHeader>
           <div className="space-y-4">
             {formError && (
@@ -497,6 +569,72 @@ export default function DocumentsPage() {
                 {form.assignedTo && (
                   <p className="text-xs text-blue-600 mt-1">✓ Document will be sent directly to {form.assignedToName}</p>
                 )}
+              </div>
+            )}
+
+            {/* Group company role sharing — shown when uploading from a subsidiary */}
+            {groupCid && (co !== groupCid) && form.permissions !== "specific_staff" && (
+              <div className="border border-blue-100 rounded-xl p-3 bg-blue-50/50">
+                <label className="text-sm font-semibold text-blue-800 mb-2 block">
+                  🏢 Also visible to Group Company roles
+                </label>
+                <p className="text-xs text-blue-600 mb-3">Select which roles in the Group company can see this document. Leave unchecked to keep it within this company only.</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {GROUP_ROLES.map(gr => {
+                    const checked = form.sharedWithRoles.includes(gr.value);
+                    return (
+                      <label key={gr.value} className={`flex items-center gap-2 text-xs rounded-lg px-2 py-1.5 cursor-pointer select-none border transition-colors ${checked ? "bg-blue-100 border-blue-300 text-blue-800 font-medium" : "bg-white border-gray-200 text-gray-600 hover:border-blue-200"}`}>
+                        <input
+                          type="checkbox"
+                          className="w-3 h-3 accent-blue-600"
+                          checked={checked}
+                          onChange={() => {
+                            const next = checked
+                              ? form.sharedWithRoles.filter(r => r !== gr.value)
+                              : [...form.sharedWithRoles, gr.value];
+                            sf({ sharedWithRoles: next });
+                          }}
+                        />
+                        {gr.label}
+                      </label>
+                    );
+                  })}
+                </div>
+                {form.sharedWithRoles.length > 0 && (
+                  <p className="text-xs text-blue-700 mt-2 font-medium">
+                    ✓ Visible to: {form.sharedWithRoles.map(r => GROUP_ROLES.find(g => g.value === r)?.label).join(", ")} in Group Company
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Group company uploading — choose which subsidiaries can see it */}
+            {groupCid && co === groupCid && (
+              <div className="border border-green-100 rounded-xl p-3 bg-green-50/50">
+                <label className="text-sm font-semibold text-green-800 mb-2 block">
+                  🏢 Share with Group roles
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {GROUP_ROLES.map(gr => {
+                    const checked = form.sharedWithRoles.includes(gr.value);
+                    return (
+                      <label key={gr.value} className={`flex items-center gap-2 text-xs rounded-lg px-2 py-1.5 cursor-pointer select-none border transition-colors ${checked ? "bg-green-100 border-green-300 text-green-800 font-medium" : "bg-white border-gray-200 text-gray-600 hover:border-green-200"}`}>
+                        <input
+                          type="checkbox"
+                          className="w-3 h-3 accent-green-600"
+                          checked={checked}
+                          onChange={() => {
+                            const next = checked
+                              ? form.sharedWithRoles.filter(r => r !== gr.value)
+                              : [...form.sharedWithRoles, gr.value];
+                            sf({ sharedWithRoles: next });
+                          }}
+                        />
+                        {gr.label}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
