@@ -110,7 +110,7 @@ export default function DocumentsPage() {
   const canDelete   = session?.isSuperAdmin === true;
 
   const co         = cidRef.current || cid;
-  const isSA       = session?.isSuperAdmin === true;
+  const isSA       = session?.isSuperAdmin === true || session?.role === "admin";
   const coStaff    = (co ? staff.filter(u => u.companyId === co && u.status !== "inactive") : staff);
   // For specific staff picker: ALL active staff across ALL companies, grouped by company
   const allActiveStaff = staff.filter(u => u.status !== "inactive");
