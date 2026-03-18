@@ -84,6 +84,7 @@ export default function DocumentsPage() {
   const [session, setSession]           = useState<Session | null>(null);
   const [search, setSearch]             = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [companyFilter, setCompanyFilter]   = useState("all");
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [form, setForm]                 = useState(emptyForm());
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -109,6 +110,7 @@ export default function DocumentsPage() {
   const canDelete   = session?.isSuperAdmin === true;
 
   const co         = cidRef.current || cid;
+  const isSA       = session?.isSuperAdmin === true;
   const coStaff    = (co ? staff.filter(u => u.companyId === co && u.status !== "inactive") : staff);
   // For specific staff picker: ALL active staff across ALL companies, grouped by company
   const allActiveStaff = staff.filter(u => u.status !== "inactive");
@@ -119,16 +121,19 @@ export default function DocumentsPage() {
   // Staff not belonging to any known company
   const knownCompanyIds = new Set(companies.map(c => c.id));
   const ungroupedStaff  = allActiveStaff.filter(u => !knownCompanyIds.has(u.companyId));
-  const coDocs   = (co ? docs.filter(d => d.companyId === co) : docs)
+  // SuperAdmin sees ALL companies' documents; regular staff see only their company's docs
+  const coDocs   = (isSA ? docs : (co ? docs.filter(d => d.companyId === co) : docs))
                      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
   const categories = [...new Set(coDocs.map(d => d.category))];
+  const companyName = (id: string) => companies.find(c => c.id === id)?.name ?? id;
 
   const thisMonth = new Date().toISOString().slice(0, 7);
   const filtered  = coDocs.filter(d => {
     const ms = d.name.toLowerCase().includes(search.toLowerCase()) ||
                d.category.toLowerCase().includes(search.toLowerCase());
     const mf = categoryFilter === "all" || d.category === categoryFilter;
-    return ms && mf;
+    const mcf = !isSA || companyFilter === "all" || d.companyId === companyFilter;
+    return ms && mf && mcf;
   });
   const docsByCategory = categories.map(cat => ({
     category: cat,
@@ -230,11 +235,20 @@ export default function DocumentsPage() {
             <TabsTrigger value="list">All Documents</TabsTrigger>
             <TabsTrigger value="folders">By Category</TabsTrigger>
           </TabsList>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input placeholder="Search documents..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 w-52" />
             </div>
+            {isSA && (
+              <Select value={companyFilter} onValueChange={setCompanyFilter}>
+                <SelectTrigger className="w-44"><SelectValue placeholder="All Companies" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Companies</SelectItem>
+                  {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -260,6 +274,7 @@ export default function DocumentsPage() {
                   <TableRow>
                     <TableHead>Document</TableHead>
                     <TableHead>Category</TableHead>
+                    {isSA && <TableHead>Company</TableHead>}
                     <TableHead>Uploaded By</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Size</TableHead>
@@ -280,6 +295,11 @@ export default function DocumentsPage() {
                       <TableCell>
                         <span className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-medium">{doc.category}</span>
                       </TableCell>
+                      {isSA && (
+                        <TableCell>
+                          <span className="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">{companyName(doc.companyId)}</span>
+                        </TableCell>
+                      )}
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar className="w-7 h-7">
