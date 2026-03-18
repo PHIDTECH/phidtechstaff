@@ -381,10 +381,13 @@ export default function PayrollPage() {
 
   const years = [now.getFullYear(), now.getFullYear() - 1];
 
-  // Role check: superadmin or accountant (position/role contains "accountant")
+  // Role check: superadmin, admin, accountant, or manager can manage payroll
   const canManage = session?.isSuperAdmin === true ||
+    session?.role?.toLowerCase() === "admin" ||
     session?.role?.toLowerCase().includes("accountant") ||
-    session?.position?.toLowerCase().includes("accountant");
+    session?.position?.toLowerCase().includes("accountant") ||
+    session?.role?.toLowerCase() === "manager" ||
+    session?.position?.toLowerCase().includes("manager");
 
   // Staff personal data
   const myEntry = companyEntries.find(p => p.staffId === session?.id);
@@ -767,7 +770,7 @@ export default function PayrollPage() {
 
         <TabsContent value="advances">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            {advances.filter(a => a.companyId === activeCompanyId).length === 0 ? (
+            {advances.filter(a => session?.isSuperAdmin ? true : a.companyId === activeCompanyId).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <AlertCircle className="w-10 h-10 text-gray-300 mb-3" />
                 <p className="text-sm text-gray-500">No salary advances yet</p>
@@ -789,7 +792,7 @@ export default function PayrollPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {advances.filter(a => a.companyId === activeCompanyId).map((adv) => {
+                  {advances.filter(a => session?.isSuperAdmin ? true : a.companyId === activeCompanyId).map((adv) => {
                     const emp = staffList.find(u => u.id === adv.staffId);
                     return (
                       <TableRow key={adv.id}>

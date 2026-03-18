@@ -40,6 +40,7 @@ interface Task {
 }
 interface StaffUser { id: string; name: string; position: string; department: string; companyId: string; branchId?: string | null; status: string; }
 interface Notification { id: string; userId: string; message: string; read: boolean; createdAt: string; taskId?: string; }
+interface Department { id: string; name: string; companyId: string; }
 
 const PRIORITY_COLOR: Record<string,string> = {
   critical: "bg-red-100 text-red-800",
@@ -68,6 +69,7 @@ export default function TasksPage() {
   const [activeCompanyId, setActiveCompanyId] = useState("");
   const [staffList, setStaffList] = useState<StaffUser[]>([]);
   const [deptsList, setDeptsList] = useState<string[]>([]);
+  const [allDepts, setAllDepts] = useState<Department[]>([]);
   const [tasksList, setTasksList] = useState<Task[]>([]);
   const [session, setSession] = useState<{id:string;name:string;position?:string;role?:string;isSuperAdmin:boolean;branchId?:string|null}|null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -83,7 +85,14 @@ export default function TasksPage() {
     const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_TASKS.includes(sess.position ?? sess.role ?? "");
     setStaffList(allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
-    setDeptsList(lsGet<string[]>(DEPTS_KEY, []));
+    // Departments stored as objects or legacy strings
+    const rawDepts = lsGet<(Department|string)[]>(DEPTS_KEY, []);
+    const deptObjs: Department[] = rawDepts.map((d, i) =>
+      typeof d === "string" ? { id: String(i), name: d, companyId: cid } : d
+    );
+    setAllDepts(deptObjs);
+    const companyDepts = deptObjs.filter(d => !d.companyId || d.companyId === cid).map(d => d.name);
+    setDeptsList(companyDepts);
     setTasksList(lsGet<Task[]>(TASKS_KEY, []));
   };
 
@@ -573,7 +582,10 @@ export default function TasksPage() {
                 <Select value={form.department} onValueChange={v => setForm(f => ({...f, department: v}))}>
                   <SelectTrigger><SelectValue placeholder="Select dept" /></SelectTrigger>
                   <SelectContent>
-                    {deptsList.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    {deptsList.length === 0
+                      ? <SelectItem value="__none" disabled>No departments found</SelectItem>
+                      : deptsList.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)
+                    }
                   </SelectContent>
                 </Select>
               </div>

@@ -19,6 +19,8 @@ const ACTIVE_KEY    = "phidtech_active_company";
 const COMPANIES_KEY = "phidtech_companies";
 const SESSION_KEY   = "phidtech_session";
 const CUSTOMERS_KEY = "phidtech_customers";
+const BRANCHES_KEY  = "phidtech_branches";
+const GROUP_KEY     = "phidtech_group_company";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -35,6 +37,7 @@ interface Session {
   isSuperAdmin: boolean; companyId: string; permissions?: string[];
 }
 interface Company { id: string; name: string; parentId?: string; }
+interface Branch { id: string; companyId: string; name: string; location: string; }
 interface Customer {
   id: string;
   companyId: string;
@@ -69,7 +72,9 @@ export default function CustomersPage() {
   usePermissionGuard("customers");
   const [session, setSession]             = useState<Session | null>(null);
   const [activeCompanyId, setActiveCompanyId] = useState("");
+  const [groupCompanyId, setGroupCompanyId] = useState("");
   const [companies, setCompanies]         = useState<Company[]>([]);
+  const [branches, setBranches]           = useState<Branch[]>([]);
   const [customers, setCustomers]         = useState<Customer[]>([]);
   const [search, setSearch]               = useState("");
   const [typeFilter, setTypeFilter]       = useState("all");
@@ -87,7 +92,11 @@ export default function CustomersPage() {
     setSession(sess);
     const cid = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setActiveCompanyId(cid);
-    setCompanies(lsGet<Company[]>(COMPANIES_KEY, []));
+    const cos = lsGet<Company[]>(COMPANIES_KEY, []);
+    setCompanies(cos);
+    setBranches(lsGet<Branch[]>(BRANCHES_KEY, []));
+    const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
+    setGroupCompanyId(gc);
     setCustomers(lsGet<Customer[]>(CUSTOMERS_KEY, []));
   };
 
@@ -97,11 +106,15 @@ export default function CustomersPage() {
     return () => window.removeEventListener("phidtech_companies_updated", reload);
   }, []);
 
-  // SuperAdmin: see ALL customers across all companies
-  // Staff: see only their company's customers
-  const visibleCustomers = session?.isSuperAdmin
+  // Visibility: SuperAdmin + group company admin/manager see all companies
+  const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
+  const isGroupAdmin = isGroupUser && (session?.role === "admin" || session?.role === "manager");
+  const visibleCustomers = (session?.isSuperAdmin || isGroupAdmin)
     ? customers
     : customers.filter(c => c.companyId === activeCompanyId);
+  const showCompanyCol = session?.isSuperAdmin || isGroupAdmin;
+  // Branches for active company
+  const companyBranches = branches.filter(b => b.companyId === activeCompanyId);
 
   const filtered = visibleCustomers.filter(c => {
     const q = search.toLowerCase();
@@ -174,7 +187,11 @@ export default function CustomersPage() {
     setDeleteId(null);
   };
 
-  const branchLabel = (b: string) => b === "head_office" ? "Head Office" : b || "—";
+  const branchLabel = (b: string) => {
+    if (!b || b === "head_office") return "Head Office";
+    const found = branches.find(br => br.id === b);
+    return found ? `${found.name}${found.location ? ` — ${found.location}` : ""}` : b;
+  };
 
   return (
     <MainLayout>
@@ -247,7 +264,7 @@ export default function CustomersPage() {
                     <TableHead>Type</TableHead>
                     <TableHead>Branch</TableHead>
                     <TableHead>Date</TableHead>
-                    {session?.isSuperAdmin && <TableHead>Company</TableHead>}
+                    {showCompanyCol && <TableHead>Company</TableHead>}
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -286,7 +303,7 @@ export default function CustomersPage() {
                         }`}>{branchLabel(cust.branch)}</span>
                       </TableCell>
                       <TableCell className="text-sm text-gray-500">{formatDate(cust.date) || formatDate(cust.createdAt)}</TableCell>
-                      {session?.isSuperAdmin && (
+                      {showCompanyCol && (
                         <TableCell className="text-xs text-gray-500">{getCompanyName(cust.companyId)}</TableCell>
                       )}
                       <TableCell>
@@ -363,7 +380,7 @@ export default function CustomersPage() {
                     cust.type === "business" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-blue-700"
                   }`}>{cust.type}</span>
                 </div>
-                {session?.isSuperAdmin && (
+                {showCompanyCol && (
                   <p className="text-[10px] text-gray-400 mt-2 border-t border-gray-50 pt-2">{getCompanyName(cust.companyId)}</p>
                 )}
               </div>
@@ -402,7 +419,7 @@ export default function CustomersPage() {
                   { label: "Branch / Office", value: branchLabel(selectedCustomer.branch) },
                   { label: "Date", value: formatDate(selectedCustomer.date) },
                   { label: "Customer Since", value: formatDate(selectedCustomer.createdAt) },
-                  ...(session?.isSuperAdmin ? [{ label: "Company", value: getCompanyName(selectedCustomer.companyId) }] : []),
+                  ...(showCompanyCol ? [{ label: "Company", value: getCompanyName(selectedCustomer.companyId) }] : []),
                 ].map(item => (
                   <div key={item.label} className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-gray-400 mb-1">{item.label}</p>
@@ -469,7 +486,9 @@ export default function CustomersPage() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent position="popper">
                       <SelectItem value="head_office">Head Office</SelectItem>
-                      <SelectItem value="branch">Branch</SelectItem>
+                      {companyBranches.map(b => (
+                        <SelectItem key={b.id} value={b.id}>{b.name}{b.location ? ` — ${b.location}` : ""}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
