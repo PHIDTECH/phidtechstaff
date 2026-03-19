@@ -18,7 +18,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 const ACTIVE_KEY      = "phidtech_active_company";
 const USERS_KEY       = "phidtech_users";
 const PAYROLL_KEY     = "phidtech_payroll";
-const ADVANCES_KEY    = "phidtech_advances";
 const COMPANIES_KEY   = "phidtech_companies";
 const SESSION_KEY     = "phidtech_session";
 const COMMISSIONS_KEY = "phidtech_commissions";
@@ -99,6 +98,13 @@ export default function PayrollPage() {
 
   const GENERAL_ROLES_PAYROLL = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
 
+  const fetchAdvances = () => {
+    fetch("/api/advances")
+      .then(r => r.json())
+      .then((data: SalaryAdvance[]) => setAdvances(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  };
+
   const reload = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
@@ -110,11 +116,11 @@ export default function PayrollPage() {
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_PAYROLL.includes(sess.position ?? sess.role ?? "");
     setStaffList(allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
     setPayrollEntries(lsGet<PayrollEntry[]>(PAYROLL_KEY, []));
-    setAdvances(lsGet<SalaryAdvance[]>(ADVANCES_KEY, []));
   };
 
   useEffect(() => {
     reload();
+    fetchAdvances();
     window.addEventListener("phidtech_companies_updated", reload);
     return () => window.removeEventListener("phidtech_companies_updated", reload);
   }, []);
@@ -215,9 +221,13 @@ export default function PayrollPage() {
       repaymentDate: advForm.repaymentDate,
       status: "pending",
     };
-    const updated = [...advances, adv];
-    lsSet(ADVANCES_KEY, updated);
-    setAdvances(updated);
+    fetch("/api/advances", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(adv),
+    })
+      .then(() => { fetchAdvances(); })
+      .catch(() => {});
     setAdvForm({ staffId: "", amount: "", reason: "", repaymentDate: "" });
     setAdvError("");
     setShowAdvanceDialog(false);
@@ -374,9 +384,13 @@ export default function PayrollPage() {
   };
 
   const updateAdvStatus = (id: string, status: "approved" | "rejected") => {
-    const updated = advances.map(a => a.id === id ? { ...a, status } : a);
-    lsSet(ADVANCES_KEY, updated);
-    setAdvances(updated);
+    fetch("/api/advances", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    })
+      .then(() => fetchAdvances())
+      .catch(() => {});
   };
 
   const years = [now.getFullYear(), now.getFullYear() - 1];
