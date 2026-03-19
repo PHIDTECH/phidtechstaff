@@ -122,7 +122,33 @@ export default function PayrollPage() {
 
   useEffect(() => {
     reload();
-    fetchAdvances();
+    // Migrate any advances still in localStorage to server API
+    const migrateKey = "phidtech_advances_migrated";
+    const alreadyMigrated = localStorage.getItem(migrateKey);
+    if (!alreadyMigrated) {
+      try {
+        const lsAdvances: SalaryAdvance[] = JSON.parse(localStorage.getItem("phidtech_advances") || "[]");
+        if (lsAdvances.length > 0) {
+          Promise.all(lsAdvances.map(adv =>
+            fetch("/api/advances", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(adv),
+            }).catch(() => {})
+          )).then(() => {
+            localStorage.setItem(migrateKey, "1");
+            fetchAdvances();
+          });
+        } else {
+          localStorage.setItem(migrateKey, "1");
+          fetchAdvances();
+        }
+      } catch {
+        fetchAdvances();
+      }
+    } else {
+      fetchAdvances();
+    }
     window.addEventListener("phidtech_companies_updated", reload);
     return () => window.removeEventListener("phidtech_companies_updated", reload);
   }, []);
