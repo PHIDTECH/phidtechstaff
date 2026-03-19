@@ -17,7 +17,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const SESSION_KEY    = "phidtech_session";
 const ACTIVE_KEY     = "phidtech_active_company";
-const DOCS_KEY       = "phidtech_documents";
 const USERS_KEY      = "phidtech_users";
 const COMPANIES_KEY  = "phidtech_companies";
 const GROUP_KEY      = "phidtech_group_company";
@@ -25,7 +24,6 @@ const GROUP_KEY      = "phidtech_group_company";
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
 }
-function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
 interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; }
@@ -154,17 +152,22 @@ export default function DocumentsPage() {
     setSession(sess);
     const c = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setCid(c); cidRef.current = c;
-    setDocs(lsGet<Doc[]>(DOCS_KEY, []));
     setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
     const cos = lsGet<Company[]>(COMPANIES_KEY, []);
     setCompanies(cos);
-    // Group company: explicitly stored, or first company in list
     const storedGroup = lsStr(GROUP_KEY);
-    const gc = storedGroup || (cos.find(c => c.isGroup)?.id ?? cos[0]?.id ?? "");
+    const gc = storedGroup || (cos.find(co => co.isGroup)?.id ?? cos[0]?.id ?? "");
     setGroupCid(gc);
   };
 
-  useEffect(() => { reload(); }, []);
+  const fetchDocs = () => {
+    fetch("/api/documents")
+      .then(r => r.json())
+      .then((data: Doc[]) => setDocs(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  };
+
+  useEffect(() => { reload(); fetchDocs(); }, []);
 
   const canDelete   = session?.isSuperAdmin === true;
 
@@ -254,21 +257,23 @@ export default function DocumentsPage() {
         dataUrl:        typeof reader.result === "string" ? reader.result : undefined,
         sharedWithRoles: form.sharedWithRoles.length > 0 ? form.sharedWithRoles : undefined,
       };
-      const updated = [...docs, newDoc];
-      lsSet(DOCS_KEY, updated);
-      setDocs(updated);
-      setUploading(false);
-      setShowUploadDialog(false);
+      fetch("/api/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newDoc),
+      })
+        .then(r => r.json())
+        .then(() => { fetchDocs(); setUploading(false); setShowUploadDialog(false); })
+        .catch(() => { setFormError("Failed to save document. Please try again."); setUploading(false); });
     };
     reader.onerror = () => { setFormError("Failed to read file."); setUploading(false); };
     reader.readAsDataURL(selectedFile);
   };
 
   const deleteDoc = (id: string) => {
-    const updated = docs.filter(d => d.id !== id);
-    lsSet(DOCS_KEY, updated);
-    setDocs(updated);
-    setDeleteId(null);
+    fetch(`/api/documents?id=${id}`, { method: "DELETE" })
+      .then(() => { fetchDocs(); setDeleteId(null); })
+      .catch(() => setDeleteId(null));
   };
 
   const permLabel = (val: string, assignedToName?: string, sharedRoles?: string[]) => {
