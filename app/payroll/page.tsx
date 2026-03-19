@@ -84,6 +84,7 @@ export default function PayrollPage() {
   const [activeCompanyId, setActiveCompanyId] = useState("");
   const [activeCompanyName, setActiveCompanyName] = useState("");
   const [staffList, setStaffList] = useState<StaffUser[]>([]);
+  const [allStaffList, setAllStaffList] = useState<StaffUser[]>([]);
   const [payrollEntries, setPayrollEntries] = useState<PayrollEntry[]>([]);
   const [advances, setAdvances] = useState<SalaryAdvance[]>([]);
   const [showSlipDialog, setShowSlipDialog] = useState<PayrollEntry | null>(null);
@@ -113,6 +114,7 @@ export default function PayrollPage() {
     const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
     setActiveCompanyName(companies.find(c => c.id === cid)?.name ?? "");
     const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
+    setAllStaffList(allStaff);
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_PAYROLL.includes(sess.position ?? sess.role ?? "");
     setStaffList(allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
     setPayrollEntries(lsGet<PayrollEntry[]>(PAYROLL_KEY, []));
@@ -784,7 +786,7 @@ export default function PayrollPage() {
 
         <TabsContent value="advances">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            {advances.filter(a => session?.isSuperAdmin ? true : a.companyId === activeCompanyId).length === 0 ? (
+            {advances.filter(a => session?.isSuperAdmin ? true : (a.companyId === activeCompanyId || canManage)).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <AlertCircle className="w-10 h-10 text-gray-300 mb-3" />
                 <p className="text-sm text-gray-500">No salary advances yet</p>
@@ -806,8 +808,8 @@ export default function PayrollPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {advances.filter(a => session?.isSuperAdmin ? true : a.companyId === activeCompanyId).map((adv) => {
-                    const emp = staffList.find(u => u.id === adv.staffId);
+                  {advances.filter(a => session?.isSuperAdmin ? true : (a.companyId === activeCompanyId || canManage)).map((adv) => {
+                    const emp = allStaffList.find(u => u.id === adv.staffId);
                     return (
                       <TableRow key={adv.id}>
                         <TableCell>
