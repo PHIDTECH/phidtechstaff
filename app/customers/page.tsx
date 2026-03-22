@@ -112,21 +112,17 @@ export default function CustomersPage() {
     setCustomers(lsGet<Customer[]>(CUSTOMERS_KEY, []));
   };
 
-  useEffect(() => {
-    reload();
-    // Load branches: merge localStorage + server so nothing is missed
+  const fetchBranches = () => {
     const lsBranches = lsGet<Branch[]>("phidtech_branches", []);
     fetch("/api/branches")
       .then(r => r.json())
       .then((data: Branch[]) => {
         const serverBranches = Array.isArray(data) ? data : [];
-        // Merge: server takes priority, add any ls-only branches not yet on server
         const merged = [...serverBranches];
         lsBranches.forEach(lb => {
           if (!merged.find(sb => sb.id === lb.id)) merged.push(lb);
         });
         setBranches(merged);
-        // Migrate ls-only branches to server
         lsBranches.forEach(lb => {
           if (!serverBranches.find(sb => sb.id === lb.id)) {
             fetch("/api/branches", {
@@ -138,6 +134,11 @@ export default function CustomersPage() {
         });
       })
       .catch(() => setBranches(lsBranches));
+  };
+
+  useEffect(() => {
+    reload();
+    fetchBranches();
     window.addEventListener("phidtech_companies_updated", reload);
     return () => window.removeEventListener("phidtech_companies_updated", reload);
   }, []);
@@ -171,12 +172,14 @@ export default function CustomersPage() {
     companies.find(c => c.id === cid)?.name ?? cid;
 
   const openAdd = () => {
+    fetchBranches();
     setForm({ ...emptyForm(), branch: "head_office" });
     setFormError("");
     setShowAddDialog(true);
   };
 
   const openEdit = (c: Customer) => {
+    fetchBranches();
     setEditCustomer(c);
     setForm({
       name: c.name, company: c.company, email: c.email, phone: c.phone,
