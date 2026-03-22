@@ -64,7 +64,7 @@ const MAX_ATTACHMENTS = 5;
 const emptyForm = () => ({
   name: "", company: "", email: "", phone: "",
   type: "business", address: "",
-  serviceProduct: "", date: "", branch: "head_office",
+  serviceProduct: "", date: "", branch: "br_head_office",
   status: "active",
   attachments: [] as CustomerAttachment[],
 });
@@ -548,9 +548,8 @@ export default function CustomersPage() {
                   <Select value={form.branch} onValueChange={v => setForm(f => ({...f, branch: v}))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent position="popper">
-                      <SelectItem value="head_office">Head Office</SelectItem>
                       {companyBranches.map(b => (
-                        <SelectItem key={b.id} value={b.id}>{b.name}{b.location ? ` — ${b.location}` : ""}</SelectItem>
+                        <SelectItem key={b.id} value={b.id}>{b.name}{b.location && b.location !== b.name ? ` — ${b.location}` : ""}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
