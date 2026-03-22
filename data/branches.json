@@ -7,6 +7,13 @@
     "managerId": ""
   },
   {
+    "id": "br_nyaishozi",
+    "companyId": "c_phidtech_ict",
+    "name": "Nyaishozi Branch",
+    "location": "Nyaishozi, Karagwe",
+    "managerId": ""
+  },
+  {
     "id": "br_karagwe",
     "companyId": "c_phidtech_ict",
     "name": "Karagwe Branch",
