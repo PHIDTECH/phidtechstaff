@@ -17,6 +17,8 @@ const SESSION_KEY   = "phidtech_session";
 const ACTIVE_KEY    = "phidtech_active_company";
 const INVOICES_KEY  = "phidtech_invoices";
 const CUSTOMERS_KEY = "phidtech_customers";
+const COMPANIES_KEY = "phidtech_companies";
+const GROUP_KEY     = "phidtech_group_company";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -57,21 +59,29 @@ export default function InvoicesPage() {
   const [deleteId, setDeleteId]           = useState<string | null>(null);
   const [form, setForm]                   = useState(emptyForm());
   const [formError, setFormError]         = useState("");
+  const [session, setSession]             = useState<Session | null>(null);
+  const [groupCompanyId, setGroupCompanyId] = useState("");
 
   const reload = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
+    setSession(sess);
     const cid  = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setActiveCompanyId(cid);
     cidRef.current = cid;
     setInvoices(lsGet<Invoice[]>(INVOICES_KEY, []));
     setCustomers(lsGet<Customer[]>(CUSTOMERS_KEY, []));
+    const cos = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+    const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
+    setGroupCompanyId(gc);
   };
 
   useEffect(() => { reload(); }, []);
 
-  const cid              = cidRef.current || activeCompanyId;
-  const companyInvoices  = cid ? invoices.filter(i => i.companyId === cid) : invoices;
-  const companyCustomers = cid ? customers.filter(c => c.companyId === cid) : customers;
+  const cid = cidRef.current || activeCompanyId;
+  const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
+  const isGroupMgr  = isGroupUser && (session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager");
+  const companyInvoices  = (session?.isSuperAdmin || isGroupMgr) ? invoices : (cid ? invoices.filter(i => i.companyId === cid) : invoices);
+  const companyCustomers = (session?.isSuperAdmin || isGroupMgr) ? customers : (cid ? customers.filter(c => c.companyId === cid) : customers);
 
   const filtered = companyInvoices.filter(i => {
     const cust        = companyCustomers.find(c => c.id === i.customerId);
