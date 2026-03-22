@@ -114,10 +114,30 @@ export default function CustomersPage() {
 
   useEffect(() => {
     reload();
+    // Load branches: merge localStorage + server so nothing is missed
+    const lsBranches = lsGet<Branch[]>("phidtech_branches", []);
     fetch("/api/branches")
       .then(r => r.json())
-      .then((data: Branch[]) => setBranches(Array.isArray(data) ? data : []))
-      .catch(() => {});
+      .then((data: Branch[]) => {
+        const serverBranches = Array.isArray(data) ? data : [];
+        // Merge: server takes priority, add any ls-only branches not yet on server
+        const merged = [...serverBranches];
+        lsBranches.forEach(lb => {
+          if (!merged.find(sb => sb.id === lb.id)) merged.push(lb);
+        });
+        setBranches(merged);
+        // Migrate ls-only branches to server
+        lsBranches.forEach(lb => {
+          if (!serverBranches.find(sb => sb.id === lb.id)) {
+            fetch("/api/branches", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(lb),
+            }).catch(() => {});
+          }
+        });
+      })
+      .catch(() => setBranches(lsBranches));
     window.addEventListener("phidtech_companies_updated", reload);
     return () => window.removeEventListener("phidtech_companies_updated", reload);
   }, []);
