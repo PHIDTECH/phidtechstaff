@@ -64,7 +64,7 @@ const MAX_ATTACHMENTS = 5;
 const emptyForm = () => ({
   name: "", company: "", email: "", phone: "",
   type: "business", address: "",
-  serviceProduct: "", date: "", branch: "br_head_office",
+  serviceProduct: "", date: "", branch: "",
   status: "active",
   attachments: [] as CustomerAttachment[],
 });
@@ -547,7 +547,7 @@ export default function CustomersPage() {
                 <div>
                   <label className="text-sm font-medium text-gray-700 mb-1.5 block">Branch / Office</label>
                   <Select value={form.branch} onValueChange={v => setForm(f => ({...f, branch: v}))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Select Branch" /></SelectTrigger>
                     <SelectContent className="max-h-60 overflow-y-auto">
                       {companyBranches.map(b => (
                         <SelectItem key={b.id} value={b.id}>{b.name}{b.location && b.location !== b.name ? ` — ${b.location}` : ""}</SelectItem>
