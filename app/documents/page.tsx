@@ -472,9 +472,11 @@ export default function DocumentsPage() {
 
       {/* Upload Dialog */}
       <Dialog open={showUploadDialog} onOpenChange={v => { if (!v) setShowUploadDialog(false); }}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Upload Document</DialogTitle></DialogHeader>
-          <div className="space-y-4">
+        <DialogContent className="max-w-md flex flex-col max-h-[90vh] p-0 gap-0">
+          <div className="px-6 pt-6 pb-2 border-b border-gray-100">
+            <DialogTitle className="text-base font-semibold">Upload Document</DialogTitle>
+          </div>
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             {formError && (
               <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
@@ -645,12 +647,12 @@ export default function DocumentsPage() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2 shrink-0">
             <Button variant="outline" onClick={() => setShowUploadDialog(false)}>Cancel</Button>
             <Button onClick={saveUpload} disabled={uploading}>
               {uploading ? "Uploading…" : <><Upload className="w-4 h-4 mr-2" />Upload</>}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
