@@ -149,8 +149,8 @@ export default function CustomersPage() {
     ? customers
     : customers.filter(c => c.companyId === activeCompanyId);
   const showCompanyCol = session?.isSuperAdmin || isGroupAdmin;
-  // Branches for active company
-  const companyBranches = branches.filter(b => b.companyId === activeCompanyId);
+  // Show ALL branches in dropdown (subsidiaries share offices/branches created by group superadmin)
+  const companyBranches = branches;
 
   const filtered = visibleCustomers.filter(c => {
     const q = search.toLowerCase();

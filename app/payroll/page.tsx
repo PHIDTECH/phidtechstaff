@@ -21,6 +21,7 @@ const PAYROLL_KEY     = "phidtech_payroll";
 const COMPANIES_KEY   = "phidtech_companies";
 const SESSION_KEY     = "phidtech_session";
 const COMMISSIONS_KEY = "phidtech_commissions";
+const GROUP_KEY       = "phidtech_group_company";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -96,6 +97,7 @@ export default function PayrollPage() {
   const [editEntry, setEditEntry] = useState<PayrollEntry | null>(null);
   const [editForm, setEditForm] = useState<{ basicSalary: string; allowances: Allowance[] } | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [groupCompanyId, setGroupCompanyId] = useState("");
 
   const GENERAL_ROLES_PAYROLL = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
 
@@ -113,6 +115,8 @@ export default function PayrollPage() {
     setActiveCompanyId(cid);
     const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
     setActiveCompanyName(companies.find(c => c.id === cid)?.name ?? "");
+    const gc = lsStr(GROUP_KEY) || (companies[0]?.id ?? "");
+    setGroupCompanyId(gc);
     const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
     setAllStaffList(allStaff);
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_PAYROLL.includes(sess.position ?? sess.role ?? "");
@@ -423,8 +427,17 @@ export default function PayrollPage() {
 
   const years = [now.getFullYear(), now.getFullYear() - 1];
 
+  // Group company context
+  const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
+  const isGroupManager = isGroupUser && (
+    session?.role?.toLowerCase() === "admin" ||
+    session?.role?.toLowerCase() === "manager" ||
+    session?.isSuperAdmin
+  );
+
   // Role check: superadmin, admin, accountant, or manager can manage payroll
   const canManage = session?.isSuperAdmin === true ||
+    isGroupManager ||
     session?.role?.toLowerCase() === "admin" ||
     session?.role?.toLowerCase().includes("accountant") ||
     session?.position?.toLowerCase().includes("accountant") ||
@@ -812,7 +825,7 @@ export default function PayrollPage() {
 
         <TabsContent value="advances">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            {advances.filter(a => session?.isSuperAdmin ? true : (a.companyId === activeCompanyId || canManage)).length === 0 ? (
+            {advances.filter(a => (session?.isSuperAdmin || isGroupManager) ? true : a.companyId === activeCompanyId).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <AlertCircle className="w-10 h-10 text-gray-300 mb-3" />
                 <p className="text-sm text-gray-500">No salary advances yet</p>
@@ -834,7 +847,7 @@ export default function PayrollPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {advances.filter(a => session?.isSuperAdmin ? true : (a.companyId === activeCompanyId || canManage)).map((adv) => {
+                  {advances.filter(a => (session?.isSuperAdmin || isGroupManager) ? true : a.companyId === activeCompanyId).map((adv) => {
                     const emp = allStaffList.find(u => u.id === adv.staffId);
                     return (
                       <TableRow key={adv.id}>
