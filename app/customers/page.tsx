@@ -266,18 +266,19 @@ export default function CustomersPage() {
             </div>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
               <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-              <SelectContent position="popper">
+              <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
                 <SelectItem value="business">Business</SelectItem>
                 <SelectItem value="individual">Individual</SelectItem>
               </SelectContent>
             </Select>
             <Select value={branchFilter} onValueChange={setBranchFilter}>
-              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-              <SelectContent position="popper">
+              <SelectTrigger className="w-44"><SelectValue placeholder="All Branches" /></SelectTrigger>
+              <SelectContent className="max-h-60 overflow-y-auto">
                 <SelectItem value="all">All Branches</SelectItem>
-                <SelectItem value="head_office">Head Office</SelectItem>
-                <SelectItem value="branch">Branch</SelectItem>
+                {branches.map(b => (
+                  <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -547,7 +548,7 @@ export default function CustomersPage() {
                   <label className="text-sm font-medium text-gray-700 mb-1.5 block">Branch / Office</label>
                   <Select value={form.branch} onValueChange={v => setForm(f => ({...f, branch: v}))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent position="popper">
+                    <SelectContent className="max-h-60 overflow-y-auto">
                       {companyBranches.map(b => (
                         <SelectItem key={b.id} value={b.id}>{b.name}{b.location && b.location !== b.name ? ` — ${b.location}` : ""}</SelectItem>
                       ))}
@@ -560,7 +561,7 @@ export default function CustomersPage() {
                   <label className="text-sm font-medium text-gray-700 mb-1.5 block">Type</label>
                   <Select value={form.type} onValueChange={v => setForm(f => ({...f, type: v}))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent position="popper">
+                    <SelectContent>
                       <SelectItem value="business">Business</SelectItem>
                       <SelectItem value="individual">Individual</SelectItem>
                     </SelectContent>
@@ -570,7 +571,7 @@ export default function CustomersPage() {
                   <label className="text-sm font-medium text-gray-700 mb-1.5 block">Status</label>
                   <Select value={form.status} onValueChange={v => setForm(f => ({...f, status: v}))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent position="popper">
+                    <SelectContent>
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="inactive">Inactive</SelectItem>
                     </SelectContent>
