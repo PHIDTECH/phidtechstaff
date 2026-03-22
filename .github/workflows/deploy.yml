@@ -24,10 +24,8 @@ jobs:
             cd /var/www/boms
             echo "==> Pulling latest code..."
             git pull origin main
-            echo "==> Installing dependencies..."
-            npm install --legacy-peer-deps
-            echo "==> Building app..."
-            npm run build
-            echo "==> Restarting app..."
-            pm2 restart all
+            echo "==> Rebuilding Docker image..."
+            docker compose build --no-cache boms-app
+            echo "==> Restarting container..."
+            docker compose up -d boms-app
             echo "==> Done!"
