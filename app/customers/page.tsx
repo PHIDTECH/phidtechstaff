@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { UserCheck, Plus, Search, Mail, Phone, Building2, TrendingUp, Eye, Edit, Trash2, AlertCircle } from "lucide-react";
+import { UserCheck, Plus, Search, Mail, Phone, Building2, TrendingUp, Eye, Edit, Trash2, AlertCircle, Paperclip, X, FileText, Download } from "lucide-react";
 import { formatCurrency, getStatusColor, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -37,6 +37,11 @@ interface Session {
 }
 interface Company { id: string; name: string; parentId?: string; }
 interface Branch { id: string; companyId: string; name: string; location: string; }
+interface CustomerAttachment {
+  name: string;
+  size: number;
+  dataUrl: string;
+}
 interface Customer {
   id: string;
   companyId: string;
@@ -52,14 +57,23 @@ interface Customer {
   status: string;
   totalRevenue: number;
   createdAt: string;
+  attachments?: CustomerAttachment[];
 }
 
+const MAX_ATTACHMENTS = 5;
 const emptyForm = () => ({
   name: "", company: "", email: "", phone: "",
   type: "business", address: "",
   serviceProduct: "", date: "", branch: "head_office",
   status: "active",
+  attachments: [] as CustomerAttachment[],
 });
+
+function fmtBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function formatDate(d: string) {
   if (!d) return "—";
@@ -148,6 +162,7 @@ export default function CustomersPage() {
       name: c.name, company: c.company, email: c.email, phone: c.phone,
       type: c.type, address: c.address, serviceProduct: c.serviceProduct,
       date: c.date, branch: c.branch, status: c.status,
+      attachments: c.attachments ?? [],
     });
     setFormError("");
     setShowEditDialog(true);
@@ -429,6 +444,29 @@ export default function CustomersPage() {
                   </div>
                 ))}
               </div>
+              {/* Attachments in detail view */}
+              {(selectedCustomer.attachments ?? []).length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <Paperclip className="w-3.5 h-3.5" /> Attachments
+                  </p>
+                  <div className="space-y-1.5">
+                    {(selectedCustomer.attachments ?? []).map((att, i) => (
+                      <a
+                        key={i}
+                        href={att.dataUrl}
+                        download={att.name}
+                        className="flex items-center gap-2 bg-gray-50 border border-gray-200 hover:border-blue-300 rounded-lg px-3 py-2 text-sm transition-colors"
+                      >
+                        <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                        <span className="flex-1 truncate text-gray-700">{att.name}</span>
+                        <span className="text-xs text-gray-400">{fmtBytes(att.size)}</span>
+                        <Download className="w-3.5 h-3.5 text-gray-400" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
@@ -520,6 +558,52 @@ export default function CustomersPage() {
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Address</label>
                 <Input placeholder="City, Country" value={form.address} onChange={e => setForm(f => ({...f, address: e.target.value}))} />
+              </div>
+              {/* Attachments */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                  Attachments <span className="text-gray-400 font-normal">(up to {MAX_ATTACHMENTS} files)</span>
+                </label>
+                {(form.attachments ?? []).length > 0 && (
+                  <div className="space-y-1.5 mb-2">
+                    {(form.attachments ?? []).map((att, i) => (
+                      <div key={i} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                        <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                        <span className="text-sm text-gray-700 flex-1 truncate">{att.name}</span>
+                        <span className="text-xs text-gray-400">{fmtBytes(att.size)}</span>
+                        <button type="button" onClick={() => setForm(f => ({ ...f, attachments: (f.attachments ?? []).filter((_, j) => j !== i) }))} className="text-gray-400 hover:text-red-500">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(form.attachments ?? []).length < MAX_ATTACHMENTS && (
+                  <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-gray-200 hover:border-blue-300 rounded-lg px-4 py-3 text-sm text-gray-500 hover:text-blue-600 transition-colors">
+                    <Paperclip className="w-4 h-4" />
+                    <span>Click to attach a file</span>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 10 * 1024 * 1024) return;
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          setForm(f => ({
+                            ...f,
+                            attachments: [...(f.attachments ?? []), { name: file.name, size: file.size, dataUrl: reader.result as string }]
+                          }));
+                        };
+                        reader.readAsDataURL(file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
+                <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, Images — max 10 MB each</p>
               </div>
             </div>
             <DialogFooter>
