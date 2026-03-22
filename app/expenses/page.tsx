@@ -19,6 +19,8 @@ const SESSION_KEY  = "phidtech_session";
 const ACTIVE_KEY   = "phidtech_active_company";
 const EXPENSES_KEY = "phidtech_expenses";
 const USERS_KEY    = "phidtech_users";
+const COMPANIES_KEY = "phidtech_companies";
+const GROUP_KEY    = "phidtech_group_company";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -66,6 +68,9 @@ export default function ExpensesPage() {
   const [form, setForm]                   = useState(emptyForm());
   const [formError, setFormError]         = useState("");
 
+  const [groupCompanyId, setGroupCompanyId] = useState("");
+  const [allStaff, setAllStaff] = useState<StaffUser[]>([]);
+
   const reload = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const cid  = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
@@ -73,15 +78,26 @@ export default function ExpensesPage() {
     setActiveCompanyId(cid);
     cidRef.current = cid;
     setExpenses(lsGet<Expense[]>(EXPENSES_KEY, []));
-    setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
+    const allS = lsGet<StaffUser[]>(USERS_KEY, []);
+    setAllStaff(allS);
+    setStaff(allS.filter(u => u.companyId === cid));
+    const cos = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+    const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
+    setGroupCompanyId(gc);
   };
 
   useEffect(() => { reload(); }, []);
 
-  const cid            = cidRef.current || activeCompanyId;
-  const companyExpenses = cid ? expenses.filter(e => e.companyId === cid) : expenses;
-  const companyStaff   = cid ? staff.filter(u => u.companyId === cid) : staff;
-  const canManage      = session?.isSuperAdmin || session?.role === "manager" || session?.role === "accountant";
+  const cid = cidRef.current || activeCompanyId;
+  const isGroupUser  = !!groupCompanyId && session?.companyId === groupCompanyId;
+  const isGroupMgr   = isGroupUser && (session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager");
+  const companyExpenses = (session?.isSuperAdmin || isGroupMgr)
+    ? expenses
+    : cid ? expenses.filter(e => e.companyId === cid) : expenses;
+  const companyStaff = (session?.isSuperAdmin || isGroupMgr)
+    ? allStaff
+    : cid ? allStaff.filter(u => u.companyId === cid) : allStaff;
+  const canManage = session?.isSuperAdmin || isGroupMgr || session?.role === "manager" || session?.role === "accountant" || session?.role === "admin";
 
   const filtered = companyExpenses.filter(e => {
     const emp         = companyStaff.find(u => u.id === e.userId);

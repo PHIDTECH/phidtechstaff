@@ -73,34 +73,36 @@ function canViewDoc(doc: Doc, session: Session, groupCompanyId: string): boolean
   if (!session) return false;
   if (session.isSuperAdmin) return true;
 
-  const userCo     = session.companyId;
-  const docCo      = doc.companyId;
-  const isGroupUser = userCo === groupCompanyId;
+  const userCo      = session.companyId;
+  const docCo       = doc.companyId;
+  const isGroupUser = !!groupCompanyId && userCo === groupCompanyId;
   const isOwnDoc    = userCo === docCo;
+  const role        = (session.role ?? "").toLowerCase();
+  const pos         = (session.position ?? "").toLowerCase();
+  const isManager   = role === "manager" || pos.includes("manager");
+  const isAdmin     = role === "admin";
+  const isGroupMgr  = isGroupUser && (isAdmin || isManager || session.isSuperAdmin);
 
-  // Specific staff assignment — only that staff member (and their own company admin/SA)
+  // Group company managers/admins see ALL documents from all subsidiaries
+  if (isGroupMgr) return true;
+
+  // Specific staff assignment
   if (doc.permissions === "specific_staff") {
     if (doc.assignedTo === session.id) return true;
-    if (isOwnDoc && (session.role === "admin" || session.role === "manager")) return true;
-    if (session.isSuperAdmin) return true;
-    // Group company admin can also see it
-    if (isGroupUser && session.role === "admin") return true;
+    if (isOwnDoc && (isAdmin || isManager)) return true;
     return false;
   }
 
   // Own company documents: visible to own company members
   if (isOwnDoc) return true;
 
-  // Cross-company: only group company users can see other companies' docs
+  // Cross-company: non-group users cannot see other companies' docs
   if (!isGroupUser) return false;
 
-  // Group company user — check if doc is shared with their role
+  // Group company user (non-manager) — check role-specific sharing
   const sharedRoles = doc.sharedWithRoles ?? [];
-  if (sharedRoles.length === 0) {
-    // No role restriction on group sharing — group admin sees it
-    return session.role === "admin";
-  }
-  return sharedRoles.some(role => matchesRole(session, role));
+  if (sharedRoles.length === 0) return isAdmin;
+  return sharedRoles.some(r => matchesRole(session, r));
 }
 
 const categoryIcons: Record<string, string> = {

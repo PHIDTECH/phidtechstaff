@@ -425,6 +425,12 @@ export default function PayrollPage() {
       .catch(() => {});
   };
 
+  const deleteAdvance = (id: string) => {
+    fetch(`/api/advances?id=${id}`, { method: "DELETE" })
+      .then(() => fetchAdvances())
+      .catch(() => {});
+  };
+
   const years = [now.getFullYear(), now.getFullYear() - 1];
 
   // Group company context
@@ -876,6 +882,11 @@ export default function PayrollPage() {
                                 <Button variant="ghost" size="sm" className="text-green-600 text-xs" onClick={() => updateAdvStatus(adv.id, "approved")}>Approve</Button>
                                 <Button variant="ghost" size="sm" className="text-red-500 text-xs" onClick={() => updateAdvStatus(adv.id, "rejected")}>Reject</Button>
                               </>
+                            )}
+                            {(session?.isSuperAdmin || isGroupManager) && (
+                              <Button variant="ghost" size="sm" className="text-gray-400 hover:text-red-600 text-xs px-1" onClick={() => deleteAdvance(adv.id)}>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
                             )}
                           </div>
                         </TableCell>
