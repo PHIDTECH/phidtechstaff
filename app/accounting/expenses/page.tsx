@@ -171,8 +171,8 @@ export default function AccountingExpensesPage() {
   return (
     <MainLayout>
       <PageHeader
-        title="Expenses — Accounting View"
-        subtitle="Review and manage expense claims across subsidiaries and group"
+        title="Staff Expense Claims"
+        subtitle="Review and manage staff expense claims across subsidiaries and group"
         icon={Receipt}
         actions={
           canManage ? (
