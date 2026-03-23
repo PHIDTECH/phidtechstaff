@@ -169,7 +169,16 @@ export default function DocumentsPage() {
       .catch(() => {});
   };
 
-  useEffect(() => { reload(); fetchDocs(); }, []);
+  useEffect(() => {
+    reload();
+    fetchDocs();
+    window.addEventListener("phidtech_companies_updated", reload);
+    window.addEventListener("storage", reload);
+    return () => {
+      window.removeEventListener("phidtech_companies_updated", reload);
+      window.removeEventListener("storage", reload);
+    };
+  }, []);
 
   const canDelete   = session?.isSuperAdmin === true;
 
@@ -188,9 +197,9 @@ export default function DocumentsPage() {
   const ungroupedStaff  = allActiveStaff.filter(u => !knownCompanyIds.has(u.companyId));
   const companyName = (id: string) => companies.find(c => c.id === id)?.name ?? id;
 
-  // Apply visibility rules
+  // Apply visibility rules: always filter by switched company if one is active
   const coDocs = (session
-    ? docs.filter(d => canViewDoc(d, session, groupCid))
+    ? docs.filter(d => canViewDoc(d, session, groupCid) && (!co || d.companyId === co))
     : []
   ).sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
 

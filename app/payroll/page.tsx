@@ -154,7 +154,11 @@ export default function PayrollPage() {
       fetchAdvances();
     }
     window.addEventListener("phidtech_companies_updated", reload);
-    return () => window.removeEventListener("phidtech_companies_updated", reload);
+    window.addEventListener("storage", reload);
+    return () => {
+      window.removeEventListener("phidtech_companies_updated", reload);
+      window.removeEventListener("storage", reload);
+    };
   }, []);
 
   const monthKey = `${selectedMonth}-${selectedYear}`;
@@ -831,7 +835,7 @@ export default function PayrollPage() {
 
         <TabsContent value="advances">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            {advances.filter(a => (session?.isSuperAdmin || isGroupManager) ? true : a.companyId === activeCompanyId).length === 0 ? (
+            {advances.filter(a => a.companyId === activeCompanyId).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <AlertCircle className="w-10 h-10 text-gray-300 mb-3" />
                 <p className="text-sm text-gray-500">No salary advances yet</p>
@@ -853,7 +857,7 @@ export default function PayrollPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {advances.filter(a => (session?.isSuperAdmin || isGroupManager) ? true : a.companyId === activeCompanyId).map((adv) => {
+                  {advances.filter(a => a.companyId === activeCompanyId).map((adv) => {
                     const emp = allStaffList.find(u => u.id === adv.staffId);
                     return (
                       <TableRow key={adv.id}>

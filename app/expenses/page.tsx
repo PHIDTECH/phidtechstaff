@@ -86,17 +86,21 @@ export default function ExpensesPage() {
     setGroupCompanyId(gc);
   };
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    reload();
+    window.addEventListener("phidtech_companies_updated", reload);
+    window.addEventListener("storage", reload);
+    return () => {
+      window.removeEventListener("phidtech_companies_updated", reload);
+      window.removeEventListener("storage", reload);
+    };
+  }, []);
 
   const cid = cidRef.current || activeCompanyId;
   const isGroupUser  = !!groupCompanyId && session?.companyId === groupCompanyId;
   const isGroupMgr   = isGroupUser && (session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager");
-  const companyExpenses = (session?.isSuperAdmin || isGroupMgr)
-    ? expenses
-    : cid ? expenses.filter(e => e.companyId === cid) : expenses;
-  const companyStaff = (session?.isSuperAdmin || isGroupMgr)
-    ? allStaff
-    : cid ? allStaff.filter(u => u.companyId === cid) : allStaff;
+  const companyExpenses = cid ? expenses.filter(e => e.companyId === cid) : expenses;
+  const companyStaff    = cid ? allStaff.filter(u => u.companyId === cid) : allStaff;
   const canManage = session?.isSuperAdmin || isGroupMgr || session?.role === "manager" || session?.role === "accountant" || session?.role === "admin";
 
   const filtered = companyExpenses.filter(e => {

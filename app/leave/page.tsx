@@ -91,8 +91,12 @@ export default function LeavePage() {
   useEffect(() => {
     reload();
     window.addEventListener("phidtech_companies_updated", reload);
-    return () => window.removeEventListener("phidtech_companies_updated", reload);
-  }, []);
+    window.addEventListener("storage", reload);
+    return () => {
+      window.removeEventListener("phidtech_companies_updated", reload);
+      window.removeEventListener("storage", reload);
+    };
+  }, []); 
 
   const save = (list: LeaveRequest[]) => { lsSet(LEAVE_KEY, list); setLeaves(list); };
 
@@ -111,13 +115,13 @@ export default function LeavePage() {
   );
   const canManage = session?.isSuperAdmin || isGroupMgr || isSubsidMgr;
 
-  const visibleLeaves = (session?.isSuperAdmin || isGroupMgr)
-    ? leaves
-    : leaves.filter(l => l.companyId === cid);
+  const visibleLeaves = cid
+    ? leaves.filter(l => l.companyId === cid)
+    : leaves;
 
-  const visibleStaff = (session?.isSuperAdmin || isGroupMgr)
-    ? staff.filter(u => u.status !== "inactive")
-    : staff.filter(u => u.companyId === cid && u.status !== "inactive");
+  const visibleStaff = cid
+    ? staff.filter(u => u.companyId === cid && u.status !== "inactive")
+    : staff.filter(u => u.status !== "inactive");
 
   const filtered = visibleLeaves.filter(l => {
     const matchSearch = l.userName.toLowerCase().includes(search.toLowerCase()) ||
