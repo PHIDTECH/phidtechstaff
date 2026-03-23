@@ -90,6 +90,7 @@ const ALL_NAV: NavGroup[] = [
         children: [
           { label: "Dashboard",     href: "/accounting",                icon: BarChart3   },
           { label: "Customer Sales",href: "/accounting/sales",          icon: ShoppingCart },
+          { label: "Expenses",      href: "/accounting/expenses",       icon: Receipt     },
           { label: "Profit & Loss", href: "/accounting/profit-loss",    icon: TrendingUp  },
           { label: "Balance Sheet", href: "/accounting/balance-sheet",  icon: Scale       },
           { label: "Cash Flow",     href: "/accounting/cashflow",       icon: Activity    },
