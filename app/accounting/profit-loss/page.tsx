@@ -3,19 +3,19 @@ export const dynamic = "force-dynamic";
 import { useEffect, useRef, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
-import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { TrendingUp, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend, LineChart, Line,
+  ResponsiveContainer, Legend,
 } from "recharts";
 
-const SESSION_KEY = "phidtech_session";
-const ACTIVE_KEY  = "phidtech_active_company";
-const SALES_KEY   = "phidtech_accounting_sales";
-const EXP_KEY     = "phidtech_expenses";
+const SESSION_KEY   = "phidtech_session";
+const ACTIVE_KEY    = "phidtech_active_company";
+const SALES_KEY     = "phidtech_accounting_sales";
+const EXP_KEY       = "phidtech_expenses";
+const PAYROLL_KEY   = "phidtech_payroll";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -25,10 +25,11 @@ function lsStr(key: string, fallback = "") { try { return localStorage.getItem(k
 interface Session { id: string; isSuperAdmin: boolean; companyId: string; }
 interface Sale { id: string; companyId: string; date: string; amount: number; paid: number; subtotal: number; tax: number; }
 interface Expense { id: string; companyId: string; amount: number; category: string; status: string; submittedAt: string; }
+interface PayrollEntry { id: string; staffId: string; companyId: string; month: string; year: number; netSalary: number; grossSalary: number; status: "draft" | "paid"; generatedAt: string; }
 
 type Period = "daily" | "weekly" | "monthly" | "yearly";
 
-function buildRows(sales: Sale[], expenses: Expense[], period: Period) {
+function buildRows(sales: Sale[], expenses: Expense[], payroll: PayrollEntry[], period: Period) {
   const now = new Date();
   let count = 0;
   let getKey: (d: Date) => string;
@@ -82,39 +83,67 @@ function buildRows(sales: Sale[], expenses: Expense[], period: Period) {
       return ek === k && (e.status === "paid" || e.status === "approved");
     }).reduce((acc, e) => acc + e.amount, 0);
 
-    return { label: getLabel(k), revenue: rev, expenses: exp, profit: rev - exp };
+    const sal = payroll.filter(p => {
+      if (p.status !== "paid") return false;
+      const pd = p.generatedAt ? p.generatedAt.slice(0, 10) : `${p.year}-01-01`;
+      const pk = period === "daily"   ? pd :
+                 period === "weekly"  ? getKey(new Date(pd)) :
+                 period === "monthly" ? `${p.year}-${String(MONTHS.indexOf(p.month) + 1).padStart(2, "0")}` :
+                 String(p.year);
+      return pk === k;
+    }).reduce((acc, p) => acc + p.netSalary, 0);
+
+    const totalExp = exp + sal;
+    return { label: getLabel(k), revenue: rev, expenses: totalExp, salaries: sal, claims: exp, profit: rev - totalExp };
   });
 }
+
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 export default function ProfitLossPage() {
   const [sales, setSales]       = useState<Sale[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [payroll, setPayroll]   = useState<PayrollEntry[]>([]);
   const [cid, setCid]           = useState("");
   const cidRef                  = useRef("");
   const [period, setPeriod]     = useState<Period>("monthly");
 
-  useEffect(() => {
+  const reload = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const c    = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setCid(c); cidRef.current = c;
     setSales(lsGet<Sale[]>(SALES_KEY, []));
     setExpenses(lsGet<Expense[]>(EXP_KEY, []));
+    setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, []));
+  };
+
+  useEffect(() => {
+    reload();
+    window.addEventListener("phidtech_companies_updated", reload);
+    window.addEventListener("storage", reload);
+    return () => {
+      window.removeEventListener("phidtech_companies_updated", reload);
+      window.removeEventListener("storage", reload);
+    };
   }, []);
 
   const co    = cidRef.current || cid;
   const coS   = co ? sales.filter(s => s.companyId === co) : sales;
   const coE   = co ? expenses.filter(e => e.companyId === co) : expenses;
+  const coP   = co ? payroll.filter(p => p.companyId === co) : payroll;
 
-  const rows  = buildRows(coS, coE, period);
+  const rows  = buildRows(coS, coE, coP, period);
 
-  const totalRev = coS.reduce((s, e) => s + e.paid, 0);
-  const totalExp = coE.filter(e => e.status === "paid" || e.status === "approved").reduce((s,e) => s + e.amount, 0);
-  const grossProfit = coS.reduce((s, e) => s + (e.subtotal ?? e.paid), 0);
-  const taxTotal    = coS.reduce((s, e) => s + (e.tax ?? 0), 0);
-  const netProfit   = totalRev - totalExp;
-  const margin      = totalRev > 0 ? ((netProfit / totalRev) * 100).toFixed(1) : "0.0";
+  const totalRev      = coS.reduce((s, e) => s + e.paid, 0);
+  const totalExpClaims = coE.filter(e => e.status === "paid" || e.status === "approved").reduce((s,e) => s + e.amount, 0);
+  const totalSalaries  = coP.filter(p => p.status === "paid").reduce((s,p) => s + p.netSalary, 0);
+  const totalExp       = totalExpClaims + totalSalaries;
+  const grossProfit    = coS.reduce((s, e) => s + (e.subtotal ?? e.paid), 0);
+  const taxTotal       = coS.reduce((s, e) => s + (e.tax ?? 0), 0);
+  const netProfit      = totalRev - totalExp;
+  const margin         = totalRev > 0 ? ((netProfit / totalRev) * 100).toFixed(1) : "0.0";
 
-  // Category breakdown for expenses
+  // Category breakdown for expense claims
   const expByCategory: Record<string, number> = {};
   coE.filter(e => e.status === "paid" || e.status === "approved").forEach(e => {
     expByCategory[e.category] = (expByCategory[e.category] ?? 0) + e.amount;
@@ -214,6 +243,11 @@ export default function ProfitLossPage() {
             <div className="flex justify-between py-1.5 font-semibold text-sm text-gray-700 border-b border-gray-100 mt-2">
               <span>Operating Expenses</span><span className="text-orange-600">({formatCurrency(totalExp)})</span>
             </div>
+            {totalSalaries > 0 && (
+              <div className="flex justify-between py-1 text-sm text-gray-500 pl-4">
+                <span>Staff Salaries (Payroll)</span><span>({formatCurrency(totalSalaries)})</span>
+              </div>
+            )}
             {expCategories.slice(0,6).map(([cat, amt]) => (
               <div key={cat} className="flex justify-between py-1 text-sm text-gray-500 pl-4">
                 <span>{cat}</span><span>({formatCurrency(amt)})</span>
