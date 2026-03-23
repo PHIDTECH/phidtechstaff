@@ -140,15 +140,19 @@ export default function CustomersPage() {
     reload();
     fetchBranches();
     window.addEventListener("phidtech_companies_updated", reload);
-    return () => window.removeEventListener("phidtech_companies_updated", reload);
+    window.addEventListener("storage", reload);
+    return () => {
+      window.removeEventListener("phidtech_companies_updated", reload);
+      window.removeEventListener("storage", reload);
+    };
   }, []);
 
-  // Visibility: SuperAdmin + group company admin/manager see all companies
+  // Visibility: always filter by the currently active/switched company
   const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
   const isGroupAdmin = isGroupUser && (session?.role === "admin" || session?.role === "manager");
-  const visibleCustomers = (session?.isSuperAdmin || isGroupAdmin)
-    ? customers
-    : customers.filter(c => c.companyId === activeCompanyId);
+  const visibleCustomers = activeCompanyId
+    ? customers.filter(c => c.companyId === activeCompanyId)
+    : customers;
   const showCompanyCol = session?.isSuperAdmin || isGroupAdmin;
   // Show ALL branches in dropdown (subsidiaries share offices/branches created by group superadmin)
   const companyBranches = branches;

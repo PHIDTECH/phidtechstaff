@@ -90,7 +90,7 @@ export default function TasksPage() {
   const reload = () => {
     const sess = lsGet<{id:string;name:string;position?:string;role?:string;isSuperAdmin:boolean;branchId?:string|null;companyId?:string}>(SESSION_KEY, null as never);
     setSession(sess);
-    const cid = lsStr(ACTIVE_KEY);
+    const cid = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setActiveCompanyId(cid);
     const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
     setAllStaffList(allStaff);
@@ -138,7 +138,7 @@ export default function TasksPage() {
   const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
   const isGroupMgr  = isGroupUser && (session?.isSuperAdmin || (session?.role ?? "").toLowerCase() === "admin" || (session?.role ?? "").toLowerCase() === "manager");
   const companyTasks = (session?.isSuperAdmin || isGroupMgr)
-    ? tasksList
+    ? (activeCompanyId ? tasksList.filter(t => t.companyId === activeCompanyId) : tasksList)
     : tasksList.filter(t =>
         t.companyId === activeCompanyId &&
         (!branchStaffIds || branchStaffIds.includes(t.assignedTo) || t.assignedBy === session?.id)
