@@ -100,7 +100,7 @@ export default function CustomersPage() {
   const [formError, setFormError]         = useState("");
   const [deleteId, setDeleteId]           = useState<string | null>(null);
 
-  const reload = () => {
+  const loadSession = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
     const cid = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
@@ -109,35 +109,55 @@ export default function CustomersPage() {
     setCompanies(cos);
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
     setGroupCompanyId(gc);
-    setCustomers(lsGet<Customer[]>(CUSTOMERS_KEY, []));
+    return cid;
   };
 
-  const fetchBranches = () => {
-    const lsBranches = lsGet<Branch[]>("phidtech_branches", []);
-    fetch("/api/branches")
-      .then(r => r.json())
-      .then((data: Branch[]) => {
-        const serverBranches = Array.isArray(data) ? data : [];
-        const merged = [...serverBranches];
-        lsBranches.forEach(lb => {
-          if (!merged.find(sb => sb.id === lb.id)) merged.push(lb);
-        });
-        setBranches(merged);
-        lsBranches.forEach(lb => {
-          if (!serverBranches.find(sb => sb.id === lb.id)) {
-            fetch("/api/branches", {
-              method: "POST",
+  const fetchCustomers = async () => {
+    try {
+      const res = await fetch("/api/customers", { cache: "no-store" });
+      if (res.ok) {
+        const data: Customer[] = await res.json();
+        setCustomers(Array.isArray(data) ? data : []);
+        // Migrate any local-only customers to server (first-time sync)
+        const local = lsGet<Customer[]>(CUSTOMERS_KEY, []);
+        if (local.length > 0) {
+          const serverIds = new Set(data.map(c => c.id));
+          const toMigrate = local.filter(c => !serverIds.has(c.id));
+          if (toMigrate.length > 0) {
+            await fetch("/api/customers", {
+              method: "PUT",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(lb),
-            }).catch(() => {});
+              body: JSON.stringify(toMigrate),
+            });
+            const refreshed = await fetch("/api/customers", { cache: "no-store" });
+            if (refreshed.ok) setCustomers(await refreshed.json());
           }
-        });
-      })
-      .catch(() => setBranches(lsBranches));
+          lsSet(CUSTOMERS_KEY, []);
+        }
+      }
+    } catch {
+      // Fallback to localStorage if server unreachable
+      setCustomers(lsGet<Customer[]>(CUSTOMERS_KEY, []));
+    }
+  };
+
+  const fetchBranches = async () => {
+    try {
+      const res = await fetch("/api/branches", { cache: "no-store" });
+      if (res.ok) setBranches(await res.json());
+    } catch {
+      setBranches(lsGet<Branch[]>("phidtech_branches", []));
+    }
+  };
+
+  const reload = () => {
+    loadSession();
+    fetchCustomers();
   };
 
   useEffect(() => {
-    reload();
+    loadSession();
+    fetchCustomers();
     fetchBranches();
     window.addEventListener("phidtech_companies_updated", reload);
     window.addEventListener("storage", reload);
@@ -176,14 +196,12 @@ export default function CustomersPage() {
     companies.find(c => c.id === cid)?.name ?? cid;
 
   const openAdd = () => {
-    fetchBranches();
     setForm({ ...emptyForm(), branch: "head_office" });
     setFormError("");
     setShowAddDialog(true);
   };
 
   const openEdit = (c: Customer) => {
-    fetchBranches();
     setEditCustomer(c);
     setForm({
       name: c.name, company: c.company, email: c.email, phone: c.phone,
@@ -195,14 +213,15 @@ export default function CustomersPage() {
     setShowEditDialog(true);
   };
 
-  const saveCustomer = (isEdit: boolean) => {
+  const saveCustomer = async (isEdit: boolean) => {
     if (!form.name.trim()) { setFormError("Customer name is required."); return; }
     if (isEdit && editCustomer) {
-      const updated = customers.map(c => c.id === editCustomer.id ? {
-        ...c, ...form, totalRevenue: c.totalRevenue,
-      } : c);
-      lsSet(CUSTOMERS_KEY, updated);
-      setCustomers(updated);
+      const payload = { id: editCustomer.id, ...form, totalRevenue: editCustomer.totalRevenue };
+      await fetch("/api/customers", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
       setShowEditDialog(false);
     } else {
       const newCust: Customer = {
@@ -217,18 +236,20 @@ export default function CustomersPage() {
         totalRevenue: 0,
         createdAt: new Date().toISOString().slice(0, 10),
       };
-      const updated = [...customers, newCust];
-      lsSet(CUSTOMERS_KEY, updated);
-      setCustomers(updated);
+      await fetch("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newCust),
+      });
       setShowAddDialog(false);
     }
+    await fetchCustomers();
   };
 
-  const deleteCustomer = (id: string) => {
-    const updated = customers.filter(c => c.id !== id);
-    lsSet(CUSTOMERS_KEY, updated);
-    setCustomers(updated);
+  const deleteCustomer = async (id: string) => {
+    await fetch(`/api/customers?id=${id}`, { method: "DELETE" });
     setDeleteId(null);
+    await fetchCustomers();
   };
 
   const branchLabel = (b: string) => {
