@@ -88,7 +88,7 @@ export default function CommissionsPage() {
   const [formError, setFormError]     = useState("");
   const [deleteId, setDeleteId]       = useState<string | null>(null);
 
-  const reload = () => {
+  const loadSession = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
     const cid = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
@@ -98,11 +98,34 @@ export default function CommissionsPage() {
     setActiveCompanyName(companies.find(c => c.id === cid)?.name ?? "");
     const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
     setStaffList(cid ? allStaff.filter(u => u.companyId === cid) : allStaff);
-    setCommissions(lsGet<Commission[]>(COMMISSIONS_KEY, []));
   };
 
+  const fetchCommissions = async () => {
+    try {
+      const res = await fetch("/api/commissions", { cache: "no-store" });
+      if (res.ok) {
+        const data: Commission[] = await res.json();
+        setCommissions(Array.isArray(data) ? data : []);
+        const local = lsGet<Commission[]>(COMMISSIONS_KEY, []);
+        if (local.length > 0) {
+          const serverIds = new Set(data.map(c => c.id));
+          const toMigrate = local.filter(c => !serverIds.has(c.id));
+          if (toMigrate.length > 0) {
+            await fetch("/api/commissions", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toMigrate) });
+            const r2 = await fetch("/api/commissions", { cache: "no-store" });
+            if (r2.ok) setCommissions(await r2.json());
+          }
+          lsSet(COMMISSIONS_KEY, []);
+        }
+      }
+    } catch { setCommissions(lsGet<Commission[]>(COMMISSIONS_KEY, [])); }
+  };
+
+  const reload = () => { loadSession(); fetchCommissions(); };
+
   useEffect(() => {
-    reload();
+    loadSession();
+    fetchCommissions();
     window.addEventListener("phidtech_companies_updated", reload);
     window.addEventListener("storage", reload);
     return () => {
@@ -173,7 +196,7 @@ export default function CommissionsPage() {
     setShowDialog(true);
   };
 
-  const saveForm = () => {
+  const saveForm = async () => {
     if (!form.staffId) { setFormError("Select a staff member."); return; }
     if (!form.customerName.trim()) { setFormError("Enter customer name."); return; }
     if (!form.saleAmount || Number(form.saleAmount) <= 0) { setFormError("Enter a valid sale amount."); return; }
@@ -182,56 +205,42 @@ export default function CommissionsPage() {
     const commAmt = computedCommAmt(form.saleAmount, form.commissionPct);
 
     if (editItem) {
-      const updated = commissions.map(c => c.id === editItem.id ? {
-        ...c,
-        staffId: form.staffId,
-        customerName: form.customerName.trim(),
-        month: form.month,
-        year: Number(form.year),
-        datePaid: form.datePaid,
-        saleAmount: Number(form.saleAmount),
-        commissionPct: Number(form.commissionPct),
-        commissionAmount: commAmt,
-        status: form.status,
-      } : c);
-      lsSet(COMMISSIONS_KEY, updated);
-      setCommissions(updated);
+      await fetch("/api/commissions", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        id: editItem.id, staffId: form.staffId, customerName: form.customerName.trim(),
+        month: form.month, year: Number(form.year), datePaid: form.datePaid,
+        saleAmount: Number(form.saleAmount), commissionPct: Number(form.commissionPct),
+        commissionAmount: commAmt, status: form.status,
+      }) });
     } else {
       const newItem: Commission = {
         id: `comm-${Date.now()}`,
         staffId: form.staffId,
         companyId: activeCompanyIdRef.current || activeCompanyId,
         customerName: form.customerName.trim(),
-        month: form.month,
-        year: Number(form.year),
-        datePaid: form.datePaid,
-        saleAmount: Number(form.saleAmount),
-        commissionPct: Number(form.commissionPct),
+        month: form.month, year: Number(form.year), datePaid: form.datePaid,
+        saleAmount: Number(form.saleAmount), commissionPct: Number(form.commissionPct),
         commissionAmount: commAmt,
         status: form.status !== "pending" ? form.status : (form.datePaid ? "paid" : "pending"),
         createdAt: new Date().toISOString(),
       };
-      const updated = [...commissions, newItem];
-      lsSet(COMMISSIONS_KEY, updated);
-      setCommissions(updated);
+      await fetch("/api/commissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newItem) });
     }
     setShowDialog(false);
+    await fetchCommissions();
   };
 
-  const deleteItem = (id: string) => {
-    const updated = commissions.filter(c => c.id !== id);
-    lsSet(COMMISSIONS_KEY, updated);
-    setCommissions(updated);
+  const deleteItem = async (id: string) => {
+    await fetch(`/api/commissions?id=${id}`, { method: "DELETE" });
     setDeleteId(null);
+    await fetchCommissions();
   };
 
-  const markPaid = (id: string) => {
-    const updated = commissions.map(c => c.id === id
-      ? { ...c, status: "paid" as const, datePaid: c.datePaid || new Date().toISOString().slice(0,10) }
-      : c
-    );
-    lsSet(COMMISSIONS_KEY, updated);
-    setCommissions(updated);
+  const markPaid = async (id: string) => {
+    const c = commissions.find(x => x.id === id);
+    if (!c) return;
+    await fetch("/api/commissions", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status: "paid", datePaid: c.datePaid || new Date().toISOString().slice(0,10) }) });
+    await fetchCommissions();
   };
 
   const years = [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];

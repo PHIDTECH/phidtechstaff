@@ -117,14 +117,34 @@ export default function AttendancePage() {
 
   const [session, setSession] = useState<Session | null>(null);
 
-  const reload = () => {
+  const loadSession = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
     const cid  = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setActiveCompanyId(cid);
     cidRef.current = cid;
-    setRecords(lsGet<AttendanceRecord[]>(ATTENDANCE_KEY, []));
     setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
+  };
+
+  const fetchRecords = async () => {
+    try {
+      const res = await fetch("/api/attendance", { cache: "no-store" });
+      if (res.ok) {
+        const data: AttendanceRecord[] = await res.json();
+        setRecords(Array.isArray(data) ? data : []);
+        const local = lsGet<AttendanceRecord[]>(ATTENDANCE_KEY, []);
+        if (local.length > 0) {
+          const serverIds = new Set(data.map(r => r.id));
+          const toMigrate = local.filter(r => !serverIds.has(r.id));
+          if (toMigrate.length > 0) {
+            await fetch("/api/attendance", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toMigrate) });
+            const r2 = await fetch("/api/attendance", { cache: "no-store" });
+            if (r2.ok) setRecords(await r2.json());
+          }
+          lsSet(ATTENDANCE_KEY, []);
+        }
+      }
+    } catch { setRecords(lsGet<AttendanceRecord[]>(ATTENDANCE_KEY, [])); }
   };
 
   const loadBranches = async () => {
@@ -142,9 +162,18 @@ export default function AttendancePage() {
     }
   };
 
+  const reload = () => { loadSession(); fetchRecords(); };
+
   useEffect(() => {
-    reload();
+    loadSession();
+    fetchRecords();
     loadBranches();
+    window.addEventListener("phidtech_companies_updated", reload);
+    window.addEventListener("storage", reload);
+    return () => {
+      window.removeEventListener("phidtech_companies_updated", reload);
+      window.removeEventListener("storage", reload);
+    };
   }, []);
 
   const cid = cidRef.current || activeCompanyId;
@@ -166,8 +195,6 @@ export default function AttendancePage() {
   const late         = dayRecords.filter(r => r.status === "late").length;
   const totalOvertime = dayRecords.reduce((s, r) => s + (r.overtime || 0), 0);
 
-  const save = (list: AttendanceRecord[]) => { lsSet(ATTENDANCE_KEY, list); setRecords(list); };
-
   const sf = (f: Partial<typeof form>) => setForm(p => ({ ...p, ...f }));
 
   const openDialog = async () => {
@@ -182,70 +209,57 @@ export default function AttendancePage() {
     setIpStatus(ip ? (inOffice ? "office" : "remote") : "unknown");
   };
 
-  const saveRecord = () => {
+  const saveRecord = async () => {
     if (!form.userId) { setFormError("Select an employee."); return; }
     if (!form.date)   { setFormError("Select a date."); return; }
     if (!form.time)   { setFormError("Enter the time."); return; }
 
-    const existingIdx = records.findIndex(r => r.userId === form.userId && r.date === form.date && r.companyId === (cidRef.current || activeCompanyId));
-
+    const companyId = cidRef.current || activeCompanyId;
+    const existing = records.find(r => r.userId === form.userId && r.date === form.date && r.companyId === companyId);
     const locationType: "office" | "remote" | undefined =
       ipStatus === "office" ? "office" : ipStatus === "remote" ? "remote" : undefined;
 
     if (form.action === "in") {
-      const status     = form.status !== "present" && form.status !== "late" ? calcStatus(form.time) : form.status;
+      const status      = form.status !== "present" && form.status !== "late" ? calcStatus(form.time) : form.status;
       const lateMinutes = calcLateMinutes(form.time);
-
-      if (existingIdx >= 0) {
-        const updated = records.map((r, i) => i === existingIdx ? {
-          ...r, clockIn: form.time, status,
-          lateMinutes: lateMinutes > 0 ? lateMinutes : r.lateMinutes,
-          hoursWorked: calcHours(form.time, r.clockOut),
-          overtime: calcOvertime(calcHours(form.time, r.clockOut)),
-          location: locationType ?? r.location,
-          clockInIP: currentIP || r.clockInIP,
-        } : r);
-        save(updated);
+      if (existing) {
+        await fetch("/api/attendance", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+          id: existing.id, clockIn: form.time, status,
+          lateMinutes: lateMinutes > 0 ? lateMinutes : existing.lateMinutes,
+          hoursWorked: calcHours(form.time, existing.clockOut),
+          overtime: calcOvertime(calcHours(form.time, existing.clockOut)),
+          location: locationType ?? existing.location,
+          clockInIP: currentIP || existing.clockInIP,
+        }) });
       } else {
-        const newRec: AttendanceRecord = {
-          id: `att-${Date.now()}`,
-          companyId: cidRef.current || activeCompanyId,
-          userId: form.userId, date: form.date,
+        await fetch("/api/attendance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+          id: `att-${Date.now()}`, companyId, userId: form.userId, date: form.date,
           clockIn: form.time, status,
           lateMinutes: lateMinutes > 0 ? lateMinutes : undefined,
-          location: locationType,
-          clockInIP: currentIP || undefined,
-        };
-        save([...records, newRec]);
+          location: locationType, clockInIP: currentIP || undefined,
+        }) });
       }
     } else {
-      // Clock Out
-      if (existingIdx >= 0) {
-        const r       = records[existingIdx];
-        const hours   = calcHours(r.clockIn, form.time);
+      if (existing) {
+        const hours    = calcHours(existing.clockIn, form.time);
         const overtime = calcOvertime(hours);
-        const updated = records.map((rec, i) => i === existingIdx ? {
-          ...rec, clockOut: form.time,
-          hoursWorked: hours > 0 ? hours : rec.hoursWorked,
+        await fetch("/api/attendance", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+          id: existing.id, clockOut: form.time,
+          hoursWorked: hours > 0 ? hours : existing.hoursWorked,
           overtime:    overtime > 0 ? overtime : undefined,
-          status:      hours < 4 ? "half-day" : rec.status,
-        } : rec);
-        save(updated);
+          status:      hours < 4 ? "half-day" : existing.status,
+        }) });
       } else {
-        const newRec: AttendanceRecord = {
-          id: `att-${Date.now()}`,
-          companyId: cidRef.current || activeCompanyId,
-          userId: form.userId, date: form.date,
+        await fetch("/api/attendance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+          id: `att-${Date.now()}`, companyId, userId: form.userId, date: form.date,
           clockOut: form.time, status: "present",
-          location: locationType,
-          clockInIP: currentIP || undefined,
-        };
-        save([...records, newRec]);
+          location: locationType, clockInIP: currentIP || undefined,
+        }) });
       }
     }
     setShowDialog(false);
-    // Refresh date filter to show new data
     setDateFilter(form.date);
+    await fetchRecords();
   };
 
   // Weekly summary: last 7 days

@@ -87,7 +87,7 @@ export default function TasksPage() {
 
   const GENERAL_ROLES_TASKS = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
 
-  const reload = () => {
+  const loadSession = () => {
     const sess = lsGet<{id:string;name:string;position?:string;role?:string;isSuperAdmin:boolean;branchId?:string|null;companyId?:string}>(SESSION_KEY, null as never);
     setSession(sess);
     const cid = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
@@ -99,23 +99,48 @@ export default function TasksPage() {
     setGroupCompanyId(gc);
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_TASKS.includes(sess.position ?? sess.role ?? "");
     setStaffList(allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
-    // Departments stored as plain strings (or objects for backwards compat)
     const rawDepts = lsGet<(Department|string)[]>(DEPTS_KEY, []);
     const deptObjs: Department[] = rawDepts.map((d, i) =>
       typeof d === "string" ? { id: String(i), name: d, companyId: cid } : d
     );
     setAllDepts(deptObjs);
     const companyDepts = deptObjs.filter(d => !d.companyId || d.companyId === cid).map(d => d.name);
-    // Fall back to defaults if no departments saved yet
     setDeptsList(companyDepts.length > 0 ? companyDepts : DEFAULT_DEPARTMENTS);
-    setTasksList(lsGet<Task[]>(TASKS_KEY, []));
   };
 
+  const fetchTasks = async () => {
+    try {
+      const res = await fetch("/api/tasks", { cache: "no-store" });
+      if (res.ok) {
+        const data: Task[] = await res.json();
+        setTasksList(Array.isArray(data) ? data : []);
+        const local = lsGet<Task[]>(TASKS_KEY, []);
+        if (local.length > 0) {
+          const serverIds = new Set(data.map(t => t.id));
+          const toMigrate = local.filter(t => !serverIds.has(t.id));
+          if (toMigrate.length > 0) {
+            await fetch("/api/tasks", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toMigrate) });
+            const r2 = await fetch("/api/tasks", { cache: "no-store" });
+            if (r2.ok) setTasksList(await r2.json());
+          }
+          lsSet(TASKS_KEY, []);
+        }
+      }
+    } catch { setTasksList(lsGet<Task[]>(TASKS_KEY, [])); }
+  };
+
+  const reload = () => { loadSession(); fetchTasks(); };
+
   useEffect(() => {
-    reload();
+    loadSession();
+    fetchTasks();
     window.addEventListener("phidtech_companies_updated", reload);
-    return () => window.removeEventListener("phidtech_companies_updated", reload);
-  }, []);
+    window.addEventListener("storage", reload);
+    return () => {
+      window.removeEventListener("phidtech_companies_updated", reload);
+      window.removeEventListener("storage", reload);
+    };
+  }, [])
 
   useEffect(() => {
     if (selectedTask) chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -184,7 +209,7 @@ export default function TasksPage() {
     setForm(f => ({ ...f, attachments: f.attachments.filter((_, i) => i !== idx) }));
   };
 
-  const saveTask = () => {
+  const saveTask = async () => {
     if (!form.title.trim()) { setFormError("Task title is required."); return; }
     if (!form.assignedTo) { setFormError("Assign to a staff member."); return; }
     if (!form.priority)   { setFormError("Select a priority."); return; }
@@ -205,24 +230,22 @@ export default function TasksPage() {
       attachments: form.attachments,
       comments: [],
     };
-    const updated = [...tasksList, task];
-    lsSet(TASKS_KEY, updated);
-    setTasksList(updated);
+    await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(task) });
     pushNotification(form.assignedTo, `You have been assigned a new task: "${task.title}"`, task.id);
     setForm(emptyForm());
     setFormError("");
     setShowAddDialog(false);
+    await fetchTasks();
   };
 
-  const updateStatus = (taskId: string, status: Task["status"]) => {
-    const updated = tasksList.map(t => t.id === taskId ? { ...t, status } : t);
-    lsSet(TASKS_KEY, updated);
-    setTasksList(updated);
+  const updateStatus = async (taskId: string, status: Task["status"]) => {
+    await fetch("/api/tasks", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: taskId, status }) });
     const task = tasksList.find(t => t.id === taskId);
     if (task) pushNotification(task.assignedBy, `Task "${task.title}" status changed to ${status}`, task.id);
+    await fetchTasks();
   };
 
-  const sendComment = () => {
+  const sendComment = async () => {
     if (!commentText.trim() || !selectedTask) return;
     const comment: Comment = {
       id: `c-${Date.now()}`,
@@ -231,16 +254,14 @@ export default function TasksPage() {
       text: commentText.trim(),
       createdAt: new Date().toISOString(),
     };
-    const updated = tasksList.map(t =>
-      t.id === selectedTask.id ? { ...t, comments: [...t.comments, comment] } : t
-    );
-    lsSet(TASKS_KEY, updated);
-    setTasksList(updated);
-    // Notify the assigned staff (if commenter is not the assignee) and the creator
-    const task = tasksList.find(t => t.id === selectedTask.id)!;
+    const task = tasksList.find(t => t.id === selectedTask.id);
+    if (!task) return;
+    const updatedComments = [...task.comments, comment];
+    await fetch("/api/tasks", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: selectedTask.id, comments: updatedComments }) });
     const notifyIds = new Set([task.assignedTo, task.assignedBy].filter(id => id !== (session?.id ?? "superadmin")));
     notifyIds.forEach(uid => pushNotification(uid, `New comment on task "${task.title}": ${comment.text.slice(0,60)}`, task.id));
     setCommentText("");
+    await fetchTasks();
   };
 
   return (

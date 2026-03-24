@@ -71,13 +71,12 @@ export default function ExpensesPage() {
   const [groupCompanyId, setGroupCompanyId] = useState("");
   const [allStaff, setAllStaff] = useState<StaffUser[]>([]);
 
-  const reload = () => {
+  const loadSession = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const cid  = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setSession(sess);
     setActiveCompanyId(cid);
     cidRef.current = cid;
-    setExpenses(lsGet<Expense[]>(EXPENSES_KEY, []));
     const allS = lsGet<StaffUser[]>(USERS_KEY, []);
     setAllStaff(allS);
     setStaff(allS.filter(u => u.companyId === cid));
@@ -86,8 +85,32 @@ export default function ExpensesPage() {
     setGroupCompanyId(gc);
   };
 
+  const fetchExpenses = async () => {
+    try {
+      const res = await fetch("/api/expenses", { cache: "no-store" });
+      if (res.ok) {
+        const data: Expense[] = await res.json();
+        setExpenses(Array.isArray(data) ? data : []);
+        const local = lsGet<Expense[]>(EXPENSES_KEY, []);
+        if (local.length > 0) {
+          const serverIds = new Set(data.map(e => e.id));
+          const toMigrate = local.filter(e => !serverIds.has(e.id));
+          if (toMigrate.length > 0) {
+            await fetch("/api/expenses", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toMigrate) });
+            const r2 = await fetch("/api/expenses", { cache: "no-store" });
+            if (r2.ok) setExpenses(await r2.json());
+          }
+          lsSet(EXPENSES_KEY, []);
+        }
+      }
+    } catch { setExpenses(lsGet<Expense[]>(EXPENSES_KEY, [])); }
+  };
+
+  const reload = () => { loadSession(); fetchExpenses(); };
+
   useEffect(() => {
-    reload();
+    loadSession();
+    fetchExpenses();
     window.addEventListener("phidtech_companies_updated", reload);
     window.addEventListener("storage", reload);
     return () => {
@@ -118,8 +141,6 @@ export default function ExpensesPage() {
   const totalPending  = companyExpenses.filter(e => e.status === "pending").reduce((s,e) => s + e.amount, 0);
   const totalReimbursed = companyExpenses.filter(e => e.status === "paid").reduce((s,e) => s + e.amount, 0);
 
-  const save = (list: Expense[]) => { lsSet(EXPENSES_KEY, list); setExpenses(list); };
-
   const openAdd = () => {
     setEditItem(null);
     setForm({ ...emptyForm(), userId: session?.isSuperAdmin ? "" : (session?.id ?? "") });
@@ -134,18 +155,14 @@ export default function ExpensesPage() {
     setShowDialog(true);
   };
 
-  const saveForm = () => {
+  const saveForm = async () => {
     if (!form.userId)        { setFormError("Select an employee."); return; }
     if (!form.title.trim())  { setFormError("Enter a claim title."); return; }
     if (!form.amount)        { setFormError("Enter an amount."); return; }
 
     if (editItem) {
-      const updated = expenses.map(e => e.id === editItem.id ? {
-        ...e, userId: form.userId, title: form.title.trim(),
-        category: form.category, amount: Number(form.amount) || 0,
-        description: form.description,
-      } : e);
-      save(updated);
+      await fetch("/api/expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editItem.id, userId: form.userId, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description }) });
     } else {
       const newExp: Expense = {
         id: `exp-${Date.now()}`,
@@ -155,20 +172,23 @@ export default function ExpensesPage() {
         description: form.description, status: "pending",
         submittedAt: new Date().toISOString(),
       };
-      save([...expenses, newExp]);
+      await fetch("/api/expenses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newExp) });
     }
     setShowDialog(false);
+    await fetchExpenses();
   };
 
-  const updateStatus = (id: string, status: Expense["status"]) => {
-    const updated = expenses.map(e => e.id === id ? {
-      ...e, status,
-      approvedBy: status === "approved" || status === "paid" ? (session?.id ?? "") : e.approvedBy,
-    } : e);
-    save(updated);
+  const updateStatus = async (id: string, status: Expense["status"]) => {
+    await fetch("/api/expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status, approvedBy: status === "approved" || status === "paid" ? (session?.id ?? "") : undefined }) });
+    await fetchExpenses();
   };
 
-  const deleteExp = (id: string) => { save(expenses.filter(e => e.id !== id)); setDeleteId(null); };
+  const deleteExp = async (id: string) => {
+    await fetch(`/api/expenses?id=${id}`, { method: "DELETE" });
+    setDeleteId(null);
+    await fetchExpenses();
+  };
 
   const sf = (f: Partial<typeof form>) => setForm(p => ({ ...p, ...f }));
 
