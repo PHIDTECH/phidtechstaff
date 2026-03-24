@@ -72,8 +72,8 @@ function MigrateButton({ label, lsKey, endpoint }: { label: string; lsKey: strin
   );
 }
 
-interface Branch { id: string; companyId: string; name: string; location: string; managerId: string; }
-const emptyBranch = (): Omit<Branch, "id"> => ({ companyId: "", name: "", location: "", managerId: "" });
+interface Branch { id: string; companyId: string; name: string; location: string; managerId: string; allowedIPs?: string; }
+const emptyBranch = (): Omit<Branch, "id"> => ({ companyId: "", name: "", location: "", managerId: "", allowedIPs: "" });
 
 export default function AdminPage() {
   usePermissionGuard("admin");
@@ -184,7 +184,7 @@ export default function AdminPage() {
   const bf = (f: Partial<typeof branchForm>) => setBranchForm(p => ({ ...p, ...f }));
 
   const openAddBranch = () => { setEditBranch(null); setBranchForm(emptyBranch()); setBranchFormError(""); setShowBranchModal(true); };
-  const openEditBranch = (b: Branch) => { setEditBranch(b); setBranchForm({ companyId: b.companyId, name: b.name, location: b.location, managerId: b.managerId }); setBranchFormError(""); setShowBranchModal(true); };
+  const openEditBranch = (b: Branch) => { setEditBranch(b); setBranchForm({ companyId: b.companyId, name: b.name, location: b.location, managerId: b.managerId, allowedIPs: b.allowedIPs ?? "" }); setBranchFormError(""); setShowBranchModal(true); };
 
   const saveBranch = async () => {
     if (!branchForm.name.trim()) { setBranchFormError("Branch name is required."); return; }
@@ -370,6 +370,7 @@ export default function AdminPage() {
                     <TableHead>Branch Name</TableHead>
                     <TableHead>Company</TableHead>
                     <TableHead>Location</TableHead>
+                    <TableHead>Allowed Office IPs</TableHead>
                     <TableHead>Branch Manager</TableHead>
                     <TableHead>Staff Count</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -392,6 +393,15 @@ export default function AdminPage() {
                         </TableCell>
                         <TableCell className="text-sm text-gray-600">{company?.name ?? "—"}</TableCell>
                         <TableCell className="text-sm text-gray-500">{branch.location || "—"}</TableCell>
+                        <TableCell>
+                          {branch.allowedIPs ? (
+                            <div className="flex flex-wrap gap-1">
+                              {branch.allowedIPs.split(",").map(ip => ip.trim()).filter(Boolean).map(ip => (
+                                <span key={ip} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-mono">{ip}</span>
+                              ))}
+                            </div>
+                          ) : <span className="text-gray-300 text-xs">Not set</span>}
+                        </TableCell>
                         <TableCell>
                           {manager ? (
                             <span className="text-sm font-medium text-gray-800">{manager.name}</span>
@@ -846,6 +856,11 @@ export default function AdminPage() {
                     }
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Office IP Address(es)</label>
+                <Input value={branchForm.allowedIPs ?? ""} onChange={e => bf({ allowedIPs: e.target.value })} placeholder="e.g. 197.186.10.5, 41.73.2.100" />
+                <p className="text-xs text-gray-400 mt-1">Separate multiple IPs with commas. Staff clocking in from these IPs will be marked <strong>In Office</strong>.</p>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end">
