@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Settings, Users, Building2, Activity, RefreshCw, Download,
-  CheckCircle, AlertTriangle, Database, Pencil, ArrowLeftRight, X, Plus, MapPin, Trash2
+  CheckCircle, AlertTriangle, Database, Pencil, ArrowLeftRight, X, Plus, MapPin, Trash2, Wifi, Copy
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { auditLogs } from "@/lib/data";
@@ -93,6 +93,27 @@ export default function AdminPage() {
   const [branchForm, setBranchForm] = useState(emptyBranch());
   const [branchFormError, setBranchFormError] = useState("");
   const [deleteBranchId, setDeleteBranchId] = useState<string | null>(null);
+  const [detectedIP, setDetectedIP] = useState("");
+  const [detectingIP, setDetectingIP] = useState(false);
+  const [ipCopied, setIpCopied] = useState(false);
+
+  const detectMyIP = async () => {
+    setDetectingIP(true);
+    try {
+      const res = await fetch("https://api.ipify.org?format=json", { cache: "no-store" });
+      const data = await res.json();
+      setDetectedIP(data.ip ?? "");
+    } catch { setDetectedIP(""); }
+    setDetectingIP(false);
+  };
+
+  const copyIP = () => {
+    if (!detectedIP) return;
+    navigator.clipboard.writeText(detectedIP).then(() => {
+      setIpCopied(true);
+      setTimeout(() => setIpCopied(false), 2000);
+    });
+  };
 
   const reload = async () => {
     // Companies from server
@@ -346,6 +367,37 @@ export default function AdminPage() {
 
         {/* Branches Tab */}
         <TabsContent value="branches">
+          {/* IP Detection Helper Banner */}
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex items-center gap-2 flex-1">
+                <Wifi className="w-5 h-5 text-blue-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-blue-900">Set Branch Office IP</p>
+                  <p className="text-xs text-blue-600">Click the button from inside each office to detect its public IP, then copy it into the branch's Allowed IPs field.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {detectedIP && (
+                  <div className="flex items-center gap-2 bg-white border border-blue-200 rounded-lg px-3 py-1.5">
+                    <span className="font-mono text-sm font-bold text-blue-800">{detectedIP}</span>
+                    <button onClick={copyIP} className="text-blue-500 hover:text-blue-700" title="Copy IP">
+                      {ipCopied ? <CheckCircle className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                )}
+                <Button size="sm" variant="outline" onClick={detectMyIP} disabled={detectingIP} className="bg-white">
+                  <Wifi className="w-4 h-4 mr-2" />
+                  {detectingIP ? "Detecting…" : "Detect My IP"}
+                </Button>
+                {detectedIP && (
+                  <Button size="sm" onClick={() => { setBranchForm(f => ({ ...f, allowedIPs: f.allowedIPs ? f.allowedIPs + ", " + detectedIP : detectedIP })); setShowBranchModal(true); setEditBranch(null); setBranchFormError(""); }} className="bg-blue-600 hover:bg-blue-700 text-white">
+                    <Plus className="w-4 h-4 mr-1" /> Add to Branch
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
               <div>
@@ -413,7 +465,25 @@ export default function AdminPage() {
                           <span className="text-sm font-semibold text-gray-800">{branchStaff.length}</span>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="flex items-center justify-end gap-1 flex-wrap">
+                            {detectedIP && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-blue-600 border-blue-200 text-xs h-7 px-2"
+                                title={`Add ${detectedIP} to this branch`}
+                                onClick={async () => {
+                                  const existing = (branch.allowedIPs ?? "").split(",").map(s => s.trim()).filter(Boolean);
+                                  if (!existing.includes(detectedIP)) {
+                                    const newIPs = [...existing, detectedIP].join(", ");
+                                    await fetch("/api/branches", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: branch.id, allowedIPs: newIPs }) });
+                                    await reload();
+                                  }
+                                }}
+                              >
+                                <Wifi className="w-3 h-3 mr-1" /> Use {detectedIP}
+                              </Button>
+                            )}
                             <Button variant="outline" size="sm" onClick={() => openEditBranch(branch)}>
                               <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
                             </Button>
