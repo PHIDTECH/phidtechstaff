@@ -97,26 +97,36 @@ export default function CommissionsPage() {
     const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
     setActiveCompanyName(companies.find(c => c.id === cid)?.name ?? "");
     const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
-    setStaffList(allStaff.filter(u => u.companyId === cid));
+    setStaffList(cid ? allStaff.filter(u => u.companyId === cid) : allStaff);
     setCommissions(lsGet<Commission[]>(COMMISSIONS_KEY, []));
   };
 
   useEffect(() => {
     reload();
     window.addEventListener("phidtech_companies_updated", reload);
-    return () => window.removeEventListener("phidtech_companies_updated", reload);
+    window.addEventListener("storage", reload);
+    return () => {
+      window.removeEventListener("phidtech_companies_updated", reload);
+      window.removeEventListener("storage", reload);
+    };
   }, []);
 
   const canManage = session?.isSuperAdmin === true ||
     session?.role?.toLowerCase().includes("accountant") ||
     session?.position?.toLowerCase().includes("accountant") ||
     session?.role?.toLowerCase().includes("manager") ||
-    session?.position?.toLowerCase().includes("manager");
+    session?.position?.toLowerCase().includes("manager") ||
+    session?.role?.toLowerCase().includes("admin");
+
+  // Regular staff (not managers/admins) can claim their own commission
+  const isRegularStaff = !canManage && !!session?.id;
 
   const cid = activeCompanyIdRef.current || activeCompanyId;
-  const companyCommissions = cid
-    ? commissions.filter(c => c.companyId === cid)
-    : commissions;
+  // Regular staff only see their own commissions; managers/admins see all for the company
+  const companyCommissions = (() => {
+    const base = cid ? commissions.filter(c => c.companyId === cid) : commissions;
+    return isRegularStaff ? base.filter(c => c.staffId === session?.id) : base;
+  })();
 
   const monthFiltered = companyCommissions.filter(
     c => c.month === filterMonth && c.year === filterYear
@@ -142,7 +152,7 @@ export default function CommissionsPage() {
 
   const openAdd = () => {
     setEditItem(null);
-    setForm(emptyForm());
+    setForm({ ...emptyForm(), staffId: isRegularStaff ? (session?.id ?? "") : "" });
     setFormError("");
     setShowDialog(true);
   };
@@ -233,11 +243,18 @@ export default function CommissionsPage() {
         subtitle="Track staff sales commissions per customer and month"
         icon={TrendingUp}
         actions={
-          canManage ? (
-            <Button size="sm" onClick={openAdd}>
-              <Plus className="w-4 h-4 mr-2" /> Add Commission
-            </Button>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            {isRegularStaff && (
+              <Button size="sm" variant="outline" onClick={openAdd}>
+                <Plus className="w-4 h-4 mr-2" /> Claim Commission
+              </Button>
+            )}
+            {canManage && (
+              <Button size="sm" onClick={openAdd}>
+                <Plus className="w-4 h-4 mr-2" /> Add Commission
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -273,10 +290,13 @@ export default function CommissionsPage() {
             </div>
             <p className="font-semibold text-gray-700">No commissions for {filterMonth} {filterYear}</p>
             <p className="text-sm text-gray-400">
-              {canManage ? 'Click "Add Commission" to record a new one.' : "No commission records found."}
+              {canManage ? 'Click "Add Commission" to record a new one.' : isRegularStaff ? 'Click "Claim Commission" to submit your commission.' : "No commission records found."}
             </p>
             {canManage && (
               <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4 mr-2" />Add Commission</Button>
+            )}
+            {isRegularStaff && (
+              <Button size="sm" variant="outline" onClick={openAdd}><Plus className="w-4 h-4 mr-2" />Claim Commission</Button>
             )}
           </div>
         ) : (
@@ -362,7 +382,7 @@ export default function CommissionsPage() {
       <Dialog open={showDialog} onOpenChange={v => { if (!v) setShowDialog(false); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editItem ? "Edit Commission" : "Add Commission"}</DialogTitle>
+            <DialogTitle>{editItem ? "Edit Commission" : isRegularStaff ? "Claim Commission" : "Add Commission"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             {formError && (
@@ -371,17 +391,24 @@ export default function CommissionsPage() {
                 <p className="text-sm text-red-600">{formError}</p>
               </div>
             )}
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Staff Member</label>
-              <Select value={form.staffId} onValueChange={v => setForm(f => ({...f, staffId: v}))}>
-                <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
-                <SelectContent>
-                  {staffList.filter(u => u.status === "active").map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.name} — {u.position}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {isRegularStaff ? (
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <p className="text-xs text-gray-400 mb-0.5">Claiming as</p>
+                <p className="font-semibold text-gray-900 text-sm">{session?.name}</p>
+              </div>
+            ) : (
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Staff Member</label>
+                <Select value={form.staffId} onValueChange={v => setForm(f => ({...f, staffId: v}))}>
+                  <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
+                  <SelectContent>
+                    {staffList.filter(u => u.status === "active").map(u => (
+                      <SelectItem key={u.id} value={u.id}>{u.name} — {u.position}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Customer Name</label>
               <Input placeholder="e.g. Acme Corporation" value={form.customerName} onChange={e => setForm(f => ({...f, customerName: e.target.value}))} />
@@ -440,7 +467,7 @@ export default function CommissionsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button onClick={saveForm}>{editItem ? "Save Changes" : "Add Commission"}</Button>
+            <Button onClick={saveForm}>{editItem ? "Save Changes" : isRegularStaff ? "Submit Claim" : "Add Commission"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
