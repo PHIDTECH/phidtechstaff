@@ -369,17 +369,22 @@ export default function AttendancePage() {
                           ) : <span className="text-gray-300">—</span>}
                         </TableCell>
                         <TableCell>
-                          {record?.location === "office" ? (
-                            <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-emerald-100 text-emerald-700">
-                              <Wifi className="w-3 h-3" /> In Office
-                            </span>
-                          ) : record?.location === "remote" ? (
-                            <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-orange-100 text-orange-700">
-                              <WifiOff className="w-3 h-3" /> Remote
-                            </span>
-                          ) : record?.clockIn ? (
-                            <span className="text-xs text-gray-300">—</span>
-                          ) : null}
+                          <div className="flex flex-col gap-0.5">
+                            {record?.location === "office" ? (
+                              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-emerald-100 text-emerald-700">
+                                <Wifi className="w-3 h-3" /> In Office
+                              </span>
+                            ) : record?.location === "remote" ? (
+                              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-orange-100 text-orange-700">
+                                <WifiOff className="w-3 h-3" /> Remote
+                              </span>
+                            ) : record?.clockIn ? (
+                              <span className="text-xs text-gray-300">—</span>
+                            ) : null}
+                            {record?.clockInIP && (
+                              <span className="text-[10px] font-mono text-gray-400">{record.clockInIP}</span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColors[record?.status ?? "absent"]}`}>
