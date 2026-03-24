@@ -75,30 +75,51 @@ export default function LeavePage() {
   const [form, setForm]                   = useState(emptyForm());
   const [formError, setFormError]         = useState("");
 
-  const reload = () => {
+  const loadSession = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
     const cid = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setActiveCompanyId(cid);
     cidRef.current = cid;
-    setLeaves(lsGet<LeaveRequest[]>(LEAVE_KEY, []));
     setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
     const cos = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
     setGroupCompanyId(gc);
   };
 
+  const fetchLeaves = async () => {
+    try {
+      const res = await fetch("/api/leave", { cache: "no-store" });
+      if (res.ok) {
+        const data: LeaveRequest[] = await res.json();
+        setLeaves(Array.isArray(data) ? data : []);
+        const local = lsGet<LeaveRequest[]>(LEAVE_KEY, []);
+        if (local.length > 0) {
+          const serverIds = new Set(data.map(l => l.id));
+          const toMigrate = local.filter(l => !serverIds.has(l.id));
+          if (toMigrate.length > 0) {
+            await fetch("/api/leave", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toMigrate) });
+            const r2 = await fetch("/api/leave", { cache: "no-store" });
+            if (r2.ok) setLeaves(await r2.json());
+          }
+          lsSet(LEAVE_KEY, []);
+        }
+      }
+    } catch { setLeaves(lsGet<LeaveRequest[]>(LEAVE_KEY, [])); }
+  };
+
+  const reload = () => { loadSession(); fetchLeaves(); };
+
   useEffect(() => {
-    reload();
+    loadSession();
+    fetchLeaves();
     window.addEventListener("phidtech_companies_updated", reload);
     window.addEventListener("storage", reload);
     return () => {
       window.removeEventListener("phidtech_companies_updated", reload);
       window.removeEventListener("storage", reload);
     };
-  }, []); 
-
-  const save = (list: LeaveRequest[]) => { lsSet(LEAVE_KEY, list); setLeaves(list); };
+  }, []);
 
   const cid = cidRef.current || activeCompanyId;
   const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
@@ -135,18 +156,18 @@ export default function LeavePage() {
   const rejected  = visibleLeaves.filter(l => l.status === "rejected").length;
   const totalDays = visibleLeaves.filter(l => l.status === "approved").reduce((s, l) => s + l.days, 0);
 
-  const updateStatus = (id: string, status: "approved" | "rejected") => {
-    save(leaves.map(l => l.id === id ? {
-      ...l, status,
-      approvedBy: session?.id, approvedByName: session?.name,
-    } : l));
+  const updateStatus = async (id: string, status: "approved" | "rejected") => {
+    await fetch("/api/leave", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status, approvedBy: session?.id, approvedByName: session?.name }) });
+    await fetchLeaves();
   };
 
-  const deleteLeave = (id: string) => {
-    save(leaves.filter(l => l.id !== id));
+  const deleteLeave = async (id: string) => {
+    await fetch(`/api/leave?id=${id}`, { method: "DELETE" });
+    await fetchLeaves();
   };
 
-  const submitForm = () => {
+  const submitForm = async () => {
     if (!form.userId)      { setFormError("Select an employee."); return; }
     if (!form.type)        { setFormError("Select leave type."); return; }
     if (!form.startDate)   { setFormError("Select a start date."); return; }
@@ -167,10 +188,11 @@ export default function LeavePage() {
       status: "pending",
       createdAt: new Date().toISOString(),
     };
-    save([...leaves, newLeave]);
+    await fetch("/api/leave", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newLeave) });
     setShowAddDialog(false);
     setForm(emptyForm());
     setFormError("");
+    await fetchLeaves();
   };
 
   // Calendar helpers

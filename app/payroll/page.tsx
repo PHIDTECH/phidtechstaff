@@ -108,7 +108,7 @@ export default function PayrollPage() {
       .catch(() => {});
   };
 
-  const reload = () => {
+  const loadSession = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
     const cid = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
@@ -121,38 +121,35 @@ export default function PayrollPage() {
     setAllStaffList(allStaff);
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_PAYROLL.includes(sess.position ?? sess.role ?? "");
     setStaffList(allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
-    setPayrollEntries(lsGet<PayrollEntry[]>(PAYROLL_KEY, []));
   };
 
-  useEffect(() => {
-    reload();
-    // Migrate any advances still in localStorage to server API
-    const migrateKey = "phidtech_advances_migrated";
-    const alreadyMigrated = localStorage.getItem(migrateKey);
-    if (!alreadyMigrated) {
-      try {
-        const lsAdvances: SalaryAdvance[] = JSON.parse(localStorage.getItem("phidtech_advances") || "[]");
-        if (lsAdvances.length > 0) {
-          Promise.all(lsAdvances.map(adv =>
-            fetch("/api/advances", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(adv),
-            }).catch(() => {})
-          )).then(() => {
-            localStorage.setItem(migrateKey, "1");
-            fetchAdvances();
-          });
-        } else {
-          localStorage.setItem(migrateKey, "1");
-          fetchAdvances();
+  const fetchPayroll = async () => {
+    try {
+      const res = await fetch("/api/payroll", { cache: "no-store" });
+      if (res.ok) {
+        const data: PayrollEntry[] = await res.json();
+        setPayrollEntries(Array.isArray(data) ? data : []);
+        const local = lsGet<PayrollEntry[]>(PAYROLL_KEY, []);
+        if (local.length > 0) {
+          const serverIds = new Set(data.map(p => p.id));
+          const toMigrate = local.filter(p => !serverIds.has(p.id));
+          if (toMigrate.length > 0) {
+            await fetch("/api/payroll", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toMigrate) });
+            const r2 = await fetch("/api/payroll", { cache: "no-store" });
+            if (r2.ok) setPayrollEntries(await r2.json());
+          }
+          lsSet(PAYROLL_KEY, []);
         }
-      } catch {
-        fetchAdvances();
       }
-    } else {
-      fetchAdvances();
-    }
+    } catch { setPayrollEntries(lsGet<PayrollEntry[]>(PAYROLL_KEY, [])); }
+  };
+
+  const reload = () => { loadSession(); fetchPayroll(); fetchAdvances(); };
+
+  useEffect(() => {
+    loadSession();
+    fetchPayroll();
+    fetchAdvances();
     window.addEventListener("phidtech_companies_updated", reload);
     window.addEventListener("storage", reload);
     return () => {
@@ -177,10 +174,14 @@ export default function PayrollPage() {
 
   const alreadyRun = companyEntries.length > 0;
 
-  const runPayroll = () => {
+  const runPayroll = async () => {
     const activeStaff = staffList.filter(u => u.status === "active" && u.salary > 0);
     if (activeStaff.length === 0) { setRunConfirm(false); return; }
-    const allCommissions = lsGet<StoredCommission[]>(COMMISSIONS_KEY, []);
+    let allCommissions: StoredCommission[] = [];
+    try {
+      const cr = await fetch("/api/commissions", { cache: "no-store" });
+      if (cr.ok) allCommissions = await cr.json();
+    } catch { allCommissions = lsGet<StoredCommission[]>(COMMISSIONS_KEY, []); }
     const newEntries: PayrollEntry[] = activeStaff.map(emp => {
       const basic = emp.salary;
       // Use staff's manually set allowances; fall back to empty if none set
@@ -218,28 +219,26 @@ export default function PayrollPage() {
         generatedAt: new Date().toISOString(),
       };
     });
-    const other = payrollEntries.filter(
-      p => !(p.companyId === activeCompanyId && p.month === selectedMonth && p.year === selectedYear)
-    );
-    const updated = [...other, ...newEntries];
-    lsSet(PAYROLL_KEY, updated);
-    setPayrollEntries(updated);
+    // Delete existing entries for this company/month/year, then post new ones
+    await fetch(`/api/payroll?companyId=${activeCompanyId}&month=${encodeURIComponent(selectedMonth)}&year=${selectedYear}`, { method: "DELETE" });
+    await fetch("/api/payroll", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newEntries) });
+    await fetchPayroll();
     setRunConfirm(false);
   };
 
-  const markPaid = (id: string) => {
-    const updated = payrollEntries.map(p => p.id === id ? { ...p, status: "paid" as const } : p);
-    lsSet(PAYROLL_KEY, updated);
-    setPayrollEntries(updated);
+  const markPaid = async (id: string) => {
+    await fetch("/api/payroll", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status: "paid" }) });
+    await fetchPayroll();
   };
 
-  const markAllPaid = () => {
-    const updated = payrollEntries.map(p =>
-      p.companyId === activeCompanyId && p.month === selectedMonth && p.year === selectedYear
-        ? { ...p, status: "paid" as const } : p
+  const markAllPaid = async () => {
+    const toMark = payrollEntries.filter(p =>
+      p.companyId === activeCompanyId && p.month === selectedMonth && p.year === selectedYear && p.status !== "paid"
     );
-    lsSet(PAYROLL_KEY, updated);
-    setPayrollEntries(updated);
+    for (const p of toMark) {
+      await fetch("/api/payroll", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: p.id, status: "paid" }) });
+    }
+    await fetchPayroll();
   };
 
   const saveAdvance = (staffIdOverride?: string) => {
@@ -269,11 +268,10 @@ export default function PayrollPage() {
     setShowAdvanceDialog(false);
   };
 
-  const deletePayrollEntry = (id: string) => {
-    const updated = payrollEntries.filter(p => p.id !== id);
-    lsSet(PAYROLL_KEY, updated);
-    setPayrollEntries(updated);
+  const deletePayrollEntry = async (id: string) => {
+    await fetch(`/api/payroll?id=${id}`, { method: "DELETE" });
     setDeleteConfirmId(null);
+    await fetchPayroll();
   };
 
   const openEditEntry = (entry: PayrollEntry) => {
@@ -284,7 +282,7 @@ export default function PayrollPage() {
     });
   };
 
-  const saveEditEntry = () => {
+  const saveEditEntry = async () => {
     if (!editEntry || !editForm) return;
     const basic = Number(editForm.basicSalary) || 0;
     const alws = editForm.allowances.filter(a => a.name.trim() && a.amount > 0);
@@ -294,8 +292,8 @@ export default function PayrollPage() {
     const nssf = calcNSSF(gross);
     const sdl  = calcSDL(gross);
     const net  = gross - paye - nssf - sdl;
-    const updated = payrollEntries.map(p => p.id === editEntry.id ? {
-      ...p,
+    await fetch("/api/payroll", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      id: editEntry.id,
       basicSalary: basic,
       allowances: alws,
       deductions: [
@@ -305,11 +303,10 @@ export default function PayrollPage() {
       ],
       grossSalary: gross,
       netSalary: net,
-    } : p);
-    lsSet(PAYROLL_KEY, updated);
-    setPayrollEntries(updated);
+    }) });
     setEditEntry(null);
     setEditForm(null);
+    await fetchPayroll();
   };
 
   const exportCSV = () => {

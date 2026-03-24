@@ -96,13 +96,12 @@ export default function OfficeExpensesPage() {
   const [form, setForm]                   = useState(emptyForm());
   const [formError, setFormError]         = useState("");
 
-  const reload = () => {
+  const loadSession = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
     const cid = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setActiveCompanyId(cid);
     cidRef.current = cid;
-    setExpenses(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, []));
     setAllStaff(lsGet<StaffUser[]>(USERS_KEY, []));
     const cos = lsGet<Company[]>(COMPANIES_KEY, []);
     setCompanies(cos);
@@ -110,8 +109,32 @@ export default function OfficeExpensesPage() {
     setGroupCompanyId(gc);
   };
 
+  const fetchExpenses = async () => {
+    try {
+      const res = await fetch("/api/office-expenses", { cache: "no-store" });
+      if (res.ok) {
+        const data: OfficeExpense[] = await res.json();
+        setExpenses(Array.isArray(data) ? data : []);
+        const local = lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, []);
+        if (local.length > 0) {
+          const serverIds = new Set(data.map(e => e.id));
+          const toMigrate = local.filter(e => !serverIds.has(e.id));
+          if (toMigrate.length > 0) {
+            await fetch("/api/office-expenses", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toMigrate) });
+            const r2 = await fetch("/api/office-expenses", { cache: "no-store" });
+            if (r2.ok) setExpenses(await r2.json());
+          }
+          lsSet(OFFICE_EXP_KEY, []);
+        }
+      }
+    } catch { setExpenses(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, [])); }
+  };
+
+  const reload = () => { loadSession(); fetchExpenses(); };
+
   useEffect(() => {
-    reload();
+    loadSession();
+    fetchExpenses();
     window.addEventListener("phidtech_companies_updated", reload);
     window.addEventListener("storage", reload);
     return () => {
@@ -146,8 +169,6 @@ export default function OfficeExpensesPage() {
     return matchSearch && matchStatus && matchCategory;
   });
 
-  const save = (list: OfficeExpense[]) => { lsSet(OFFICE_EXP_KEY, list); setExpenses(list); };
-
   const openAdd = () => {
     setEditItem(null);
     setForm({ ...emptyForm(), recordedBy: session?.id ?? "" });
@@ -162,39 +183,44 @@ export default function OfficeExpensesPage() {
     setShowDialog(true);
   };
 
-  const saveForm = () => {
+  const saveForm = async () => {
     if (!form.title.trim()) { setFormError("Enter an expense title."); return; }
     if (!form.amount)       { setFormError("Enter an amount."); return; }
     if (!form.date)         { setFormError("Select a date."); return; }
     if (editItem) {
-      save(expenses.map(e => e.id === editItem.id
-        ? { ...e, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description, referenceNo: form.referenceNo, date: form.date, recordedBy: form.recordedBy }
-        : e));
+      await fetch("/api/office-expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editItem.id, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description, referenceNo: form.referenceNo, date: form.date, recordedBy: form.recordedBy }) });
     } else {
-      save([...expenses, {
-        id: `oexp-${Date.now()}`,
-        companyId: cidRef.current || activeCompanyId,
-        recordedBy: form.recordedBy || (session?.id ?? ""),
-        title: form.title.trim(),
-        category: form.category,
-        amount: Number(form.amount) || 0,
-        description: form.description,
-        referenceNo: form.referenceNo,
-        status: "pending",
-        date: form.date,
-        createdAt: new Date().toISOString(),
-      }]);
+      await fetch("/api/office-expenses", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: `oexp-${Date.now()}`,
+          companyId: cidRef.current || activeCompanyId,
+          recordedBy: form.recordedBy || (session?.id ?? ""),
+          title: form.title.trim(),
+          category: form.category,
+          amount: Number(form.amount) || 0,
+          description: form.description,
+          referenceNo: form.referenceNo,
+          status: "pending",
+          date: form.date,
+          createdAt: new Date().toISOString(),
+        }) });
     }
     setShowDialog(false);
+    await fetchExpenses();
   };
 
-  const updateStatus = (id: string, status: OfficeExpense["status"]) => {
-    save(expenses.map(e => e.id === id
-      ? { ...e, status, approvedBy: (status === "approved" || status === "paid") ? (session?.id ?? "") : e.approvedBy }
-      : e));
+  const updateStatus = async (id: string, status: OfficeExpense["status"]) => {
+    await fetch("/api/office-expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status, approvedBy: (status === "approved" || status === "paid") ? (session?.id ?? "") : undefined }) });
+    await fetchExpenses();
   };
 
-  const deleteExp = (id: string) => { save(expenses.filter(e => e.id !== id)); setDeleteId(null); };
+  const deleteExp = async (id: string) => {
+    await fetch(`/api/office-expenses?id=${id}`, { method: "DELETE" });
+    setDeleteId(null);
+    await fetchExpenses();
+  };
   const sf = (f: Partial<typeof form>) => setForm(p => ({ ...p, ...f }));
 
   return (
