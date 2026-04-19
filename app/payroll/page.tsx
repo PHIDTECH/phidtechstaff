@@ -69,10 +69,11 @@ const MONTHS = ["January","February","March","April","May","June",
   "July","August","September","October","November","December"];
 
 // ── Tanzania Statutory Deductions (TRA / NSSF Act 2018) ────────────────────
-// NSSF: Employee 5% of gross salary (deducted first, before PAYE)
-function calcNSSF_employee(gross: number): number { return Math.round(gross * 0.05); }
-// NSSF: Employer 5% of gross (employer cost only, NOT deducted from employee)
-function calcNSSF_employer(gross: number): number { return Math.round(gross * 0.05); }
+// NSSF: Employee 10% of gross salary (deducted first, before PAYE)
+// NSSF total remitted = 20% (employer 10% + employee 10%) per nssf.go.tz
+function calcNSSF_employee(gross: number): number { return Math.round(gross * 0.10); }
+// NSSF: Employer 10% of gross (employer cost only, NOT deducted from employee)
+function calcNSSF_employer(gross: number): number { return Math.round(gross * 0.10); }
 // SDL: Skills & Development Levy — 3.5% of gross, employer only (NOT deducted from employee)
 function calcSDL(gross: number): number { return Math.round(gross * 0.035); }
 // WCF: Workers Compensation Fund — 0.5% of gross, employer only (NOT deducted from employee)
@@ -231,10 +232,10 @@ export default function PayrollPage() {
         allowances: combinedAllowances,
         deductions: [
           { name: "PAYE", amount: paye },
-          { name: "NSSF (Employee 5%)", amount: nssf_emp },
+          { name: "NSSF (Employee 10%)", amount: nssf_emp },
         ],
         employerCosts: [
-          { name: "NSSF (Employer 5%)", amount: nssf_er },
+          { name: "NSSF (Employer 10%)", amount: nssf_er },
           { name: "SDL (3.5%)", amount: sdl },
           { name: "WCF (0.5%)", amount: wcf },
         ],
@@ -324,10 +325,10 @@ export default function PayrollPage() {
       allowances: alws,
       deductions: [
         { name: "PAYE", amount: paye },
-        { name: "NSSF (Employee 5%)", amount: nssf_emp },
+        { name: "NSSF (Employee 10%)", amount: nssf_emp },
       ],
       employerCosts: [
-        { name: "NSSF (Employer 5%)", amount: nssf_er },
+        { name: "NSSF (Employer 10%)", amount: nssf_er },
         { name: "SDL (3.5%)", amount: sdl },
         { name: "WCF (0.5%)", amount: wcf },
       ],
@@ -1012,7 +1013,7 @@ export default function PayrollPage() {
                 <p className="text-xs text-yellow-700">Payroll already exists for this month. Running again will <strong>replace</strong> existing entries.</p>
               </div>
             )}
-            <p className="text-xs text-gray-400">Employee deductions: PAYE (TRA rates) + NSSF 5%. Employer costs: NSSF 5%, SDL 4.5%, WCF 0.5%.</p>
+            <p className="text-xs text-gray-400">Employee deductions: PAYE (TRA rates) + NSSF 10%. Employer costs: NSSF 10%, SDL 3.5%, WCF 0.5%.</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRunConfirm(false)}>Cancel</Button>
@@ -1261,7 +1262,7 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
                       <span className="font-medium">{formatCurrency(previewGross)}</span>
                     </div>
                     <div className="flex justify-between text-gray-600">
-                      <span>NSSF Employee (5%)</span>
+                      <span>NSSF Employee (10%)</span>
                       <span className="text-red-500">-{formatCurrency(nssfEmp)}</span>
                     </div>
                     <div className="flex justify-between text-gray-500 text-xs">
@@ -1279,7 +1280,7 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
                     <div className="border-t border-dashed border-gray-200 pt-2 mt-1">
                       <p className="text-xs text-gray-400 font-semibold mb-1">Employer Costs (not deducted from employee)</p>
                       <div className="flex justify-between text-xs text-gray-400">
-                        <span>NSSF Employer (5%)</span>
+                        <span>NSSF Employer (10%)</span>
                         <span>{formatCurrency(calcNSSF_employer(previewGross))}</span>
                       </div>
                       <div className="flex justify-between text-xs text-gray-400">
