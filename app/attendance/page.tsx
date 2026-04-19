@@ -29,7 +29,7 @@ function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
 interface Session { id: string; name: string; role: string; position: string; isSuperAdmin: boolean; companyId: string; branchId?: string | null; }
-interface StaffUser { id: string; name: string; companyId: string; branchId?: string | null; department?: string; status?: string; }
+interface StaffUser { id: string; name: string; companyId: string; branchId?: string | null; department?: string; position?: string; status?: string; }
 interface Branch { id: string; companyId: string; name: string; allowedIPs?: string; }
 interface AttendanceRecord {
   id: string; companyId: string; userId: string; date: string;
@@ -117,13 +117,24 @@ export default function AttendancePage() {
 
   const [session, setSession] = useState<Session | null>(null);
 
-  const loadSession = () => {
+  const loadSession = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
     const cid  = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setActiveCompanyId(cid);
     cidRef.current = cid;
-    setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
+    // Load staff from server API first, fall back to localStorage
+    try {
+      const res = await fetch("/api/users", { cache: "no-store" });
+      if (res.ok) {
+        const data: StaffUser[] = await res.json();
+        setStaff(Array.isArray(data) ? data : []);
+      } else {
+        setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
+      }
+    } catch {
+      setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
+    }
   };
 
   const fetchRecords = async () => {
@@ -162,7 +173,7 @@ export default function AttendancePage() {
     }
   };
 
-  const reload = () => { loadSession(); fetchRecords(); };
+  const reload = async () => { await loadSession(); await fetchRecords(); };
 
   useEffect(() => {
     loadSession();
@@ -507,81 +518,182 @@ export default function AttendancePage() {
         </TabsContent>
       </Tabs>
 
-      {/* Record Attendance Dialog */}
+      {/* Clock In/Out Dialog */}
       <Dialog open={showDialog} onOpenChange={v => { if (!v) setShowDialog(false); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Record Attendance</DialogTitle></DialogHeader>
-          <div className="space-y-3">
+        <DialogContent className="max-w-md p-0 overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold">Clock In / Clock Out</h2>
+                <p className="text-blue-200 text-xs mt-0.5">
+                  {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                </p>
+              </div>
+              <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full font-medium ${
+                ipStatus === "detecting" ? "bg-white/20 text-white" :
+                ipStatus === "office"    ? "bg-emerald-500/80 text-white" :
+                ipStatus === "remote"    ? "bg-orange-400/80 text-white" :
+                "bg-white/20 text-white"
+              }`}>
+                {ipStatus === "detecting" ? <><Clock className="w-3 h-3" /> Detecting…</> :
+                 ipStatus === "office"    ? <><Wifi className="w-3 h-3" /> Office</> :
+                 ipStatus === "remote"    ? <><WifiOff className="w-3 h-3" /> Remote</> :
+                 <><Clock className="w-3 h-3" /> Unknown</>}
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-4">
             {formError && (
               <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
                 <p className="text-sm text-red-600">{formError}</p>
               </div>
             )}
-            {/* IP / Location Status */}
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium ${
-              ipStatus === "detecting" ? "bg-gray-50 text-gray-500" :
-              ipStatus === "office"    ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-              ipStatus === "remote"    ? "bg-orange-50 text-orange-700 border border-orange-200" :
-              "bg-gray-50 text-gray-400"
-            }`}>
-              {ipStatus === "detecting" ? <><Clock className="w-3.5 h-3.5" /> Detecting location…</> :
-               ipStatus === "office"    ? <><Wifi className="w-3.5 h-3.5" /> In Office — {currentIP}</> :
-               ipStatus === "remote"    ? <><WifiOff className="w-3.5 h-3.5" /> Remote — {currentIP}</> :
-               <><Clock className="w-3.5 h-3.5" /> Location not determined</>}
-            </div>
+
+            {/* Employee selector */}
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Employee</label>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Employee</label>
               <Select value={form.userId} onValueChange={v => sf({ userId: v })}>
-                <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                <SelectContent>
-                  {companyStaff.map(u => (
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Select employee…" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {companyStaff.length === 0 ? (
+                    <div className="px-3 py-4 text-center text-sm text-gray-400">No staff found</div>
+                  ) : companyStaff.map(u => (
                     <SelectItem key={u.id} value={u.id}>
-                      {u.name}{u.department ? ` – ${u.department}` : ""}
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+                          {getInitials(u.name)}
+                        </div>
+                        <span>{u.name}</span>
+                        {u.department && <span className="text-gray-400 text-xs">· {u.department}</span>}
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+
+            {/* Employee today's status preview */}
+            {form.userId && (() => {
+              const emp = companyStaff.find(u => u.id === form.userId);
+              const existingRec = records.find(r => r.userId === form.userId && r.date === form.date && r.companyId === (cidRef.current || activeCompanyId));
+              const suggestedAction = existingRec?.clockIn && !existingRec?.clockOut ? "out" : "in";
+              return (
+                <div className="bg-gray-50 rounded-xl border border-gray-100 p-3.5 space-y-2.5">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="w-10 h-10">
+                      <AvatarFallback className="bg-blue-100 text-blue-700 text-sm font-bold">{getInitials(emp?.name ?? "?")}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-semibold text-gray-900 text-sm">{emp?.name}</p>
+                      <p className="text-xs text-gray-400">{emp?.position ?? emp?.department ?? "Staff"}</p>
+                    </div>
+                    {existingRec && (
+                      <span className={`ml-auto text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[existingRec.status]}`}>
+                        {existingRec.status}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-gray-100">
+                    <div className="text-center">
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">Clock In</p>
+                      <p className="text-sm font-semibold text-gray-800 font-mono">{existingRec?.clockIn ?? "—"}</p>
+                    </div>
+                    <div className="text-center border-x border-gray-100">
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">Clock Out</p>
+                      <p className="text-sm font-semibold text-gray-800 font-mono">{existingRec?.clockOut ?? "—"}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] text-gray-400 uppercase font-medium">Hours</p>
+                      <p className="text-sm font-semibold text-gray-800">{existingRec?.hoursWorked ? `${existingRec.hoursWorked.toFixed(1)}h` : "—"}</p>
+                    </div>
+                  </div>
+                  {/* Auto-suggest action */}
+                  {form.action !== suggestedAction && (
+                    <button
+                      type="button"
+                      onClick={() => sf({ action: suggestedAction })}
+                      className="w-full text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg py-1.5 font-medium hover:bg-blue-100 transition"
+                    >
+                      Suggested: Switch to Clock {suggestedAction === "in" ? "In" : "Out"}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Date, Action, Time row */}
+            <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Date</label>
-                <Input type="date" value={form.date} onChange={e => sf({ date: e.target.value })} />
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Date</label>
+                <Input type="date" value={form.date} onChange={e => sf({ date: e.target.value })} className="h-11" />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Action</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Action</label>
                 <Select value={form.action} onValueChange={v => sf({ action: v as "in"|"out" })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="in">Clock In</SelectItem>
-                    <SelectItem value="out">Clock Out</SelectItem>
+                    <SelectItem value="in">
+                      <span className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-green-500" /> Clock In</span>
+                    </SelectItem>
+                    <SelectItem value="out">
+                      <span className="flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 text-orange-500" /> Clock Out</span>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Time</label>
+                <Input type="time" value={form.time} onChange={e => sf({ time: e.target.value })} className="h-11 font-mono" />
+              </div>
             </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Time</label>
-              <Input type="time" value={form.time} onChange={e => sf({ time: e.target.value })} />
-            </div>
+
+            {/* Status override (clock in only) */}
             {form.action === "in" && (
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Status Override</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Status</label>
                 <Select value={form.status} onValueChange={v => sf({ status: v as AttendanceRecord["status"] })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="present">Present</SelectItem>
-                    <SelectItem value="late">Late</SelectItem>
-                    <SelectItem value="half-day">Half Day</SelectItem>
-                    <SelectItem value="absent">Absent</SelectItem>
+                    <SelectItem value="present"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Present</span></SelectItem>
+                    <SelectItem value="late"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" /> Late</span></SelectItem>
+                    <SelectItem value="half-day"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Half Day</span></SelectItem>
+                    <SelectItem value="absent"><span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Absent</span></SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-400 mt-1">Auto-set to &quot;late&quot; if clock-in is after {WORK_START}</p>
+                <p className="text-xs text-gray-400 mt-1.5 flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Auto-set to Late if clock-in is after {WORK_START}
+                </p>
+              </div>
+            )}
+
+            {/* IP info */}
+            {currentIP && (
+              <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100">
+                {ipStatus === "office" ? <Wifi className="w-3.5 h-3.5 text-emerald-500" /> : <WifiOff className="w-3.5 h-3.5 text-orange-400" />}
+                <span className="font-mono">{currentIP}</span>
+                <span className="text-gray-300">·</span>
+                <span className={ipStatus === "office" ? "text-emerald-600 font-medium" : "text-orange-500 font-medium"}>
+                  {ipStatus === "office" ? "Office Network" : "Remote / External"}
+                </span>
               </div>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button onClick={saveRecord}>Record</Button>
+
+          <DialogFooter className="px-5 pb-5 pt-0 gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => setShowDialog(false)}>Cancel</Button>
+            <Button
+              className={`flex-1 ${form.action === "in" ? "bg-green-600 hover:bg-green-700" : "bg-orange-500 hover:bg-orange-600"}`}
+              onClick={saveRecord}
+            >
+              {form.action === "in"
+                ? <><CheckCircle className="w-4 h-4 mr-2" /> Confirm Clock In</>
+                : <><AlertTriangle className="w-4 h-4 mr-2" /> Confirm Clock Out</>}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
