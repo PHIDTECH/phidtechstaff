@@ -19,6 +19,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 const SESSION_KEY   = "phidtech_session";
 const ACTIVE_KEY    = "phidtech_active_company";
 const USERS_KEY     = "phidtech_users";
+const BRANCHES_KEY  = "phidtech_branches";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -29,12 +30,13 @@ const ASSET_CATEGORIES = ["Laptop","Desktop","Vehicle","Furniture","Machinery","
 const ASSET_STATUSES   = ["active","maintenance","disposed"] as const;
 
 interface Session { id: string; isSuperAdmin: boolean; companyId: string; }
-interface StaffUser { id: string; name: string; companyId: string; position?: string; }
+interface StaffUser { id: string; name: string; companyId: string; position?: string; branchId?: string; }
+interface Branch { id: string; name: string; location?: string; companyId?: string; }
 interface Asset {
   id: string; companyId: string; name: string; category: string;
   serialNumber: string; purchaseDate: string; purchaseCost: number;
   currentValue: number; depreciationRate: number;
-  assignedTo: string; location: string;
+  assignedTo: string; location: string; branchId?: string;
   status: "active" | "maintenance" | "disposed";
   nextMaintenance?: string; notes?: string; createdAt: string;
 }
@@ -43,7 +45,7 @@ const emptyForm = (): Omit<Asset,"id"|"companyId"|"createdAt"> => ({
   name: "", category: "Laptop", serialNumber: "",
   purchaseDate: new Date().toISOString().slice(0,10),
   purchaseCost: 0, currentValue: 0, depreciationRate: 20,
-  assignedTo: "", location: "", status: "active",
+  assignedTo: "", location: "", branchId: "", status: "active",
   nextMaintenance: "", notes: "",
 });
 
@@ -57,6 +59,7 @@ export default function AssetsPage() {
   usePermissionGuard("assets");
   const [assetList, setAssetList]   = useState<Asset[]>([]);
   const [staffList, setStaffList]   = useState<StaffUser[]>([]);
+  const [branches, setBranches]     = useState<Branch[]>([]);
   const [cid, setCid]               = useState("");
   const cidRef                      = useRef("");
   const [search, setSearch]         = useState("");
@@ -81,6 +84,12 @@ export default function AssetsPage() {
       if (ur.ok) setStaffList(await ur.json());
       else setStaffList(lsGet<StaffUser[]>(USERS_KEY, []));
     } catch { setStaffList(lsGet<StaffUser[]>(USERS_KEY, [])); }
+    // Load branches (all branches shared across companies)
+    try {
+      const br = await fetch("/api/branches", { cache: "no-store" });
+      if (br.ok) setBranches(await br.json());
+      else setBranches(lsGet<Branch[]>(BRANCHES_KEY, []));
+    } catch { setBranches(lsGet<Branch[]>(BRANCHES_KEY, [])); }
     // Load assets
     try {
       setLoading(true);
@@ -124,7 +133,7 @@ export default function AssetsPage() {
       name: a.name, category: a.category, serialNumber: a.serialNumber ?? "",
       purchaseDate: a.purchaseDate, purchaseCost: a.purchaseCost, currentValue: a.currentValue,
       depreciationRate: a.depreciationRate, assignedTo: a.assignedTo ?? "",
-      location: a.location ?? "", status: a.status,
+      location: a.location ?? "", branchId: a.branchId ?? "", status: a.status,
       nextMaintenance: a.nextMaintenance ?? "", notes: a.notes ?? "",
     });
     setFormError("");
@@ -234,6 +243,7 @@ export default function AssetsPage() {
                     <TableHead>Purchase Cost</TableHead>
                     <TableHead>Current Value</TableHead>
                     <TableHead>Deprec. Rate</TableHead>
+                    <TableHead>Branch</TableHead>
                     <TableHead>Assigned To</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Status</TableHead>
@@ -242,7 +252,8 @@ export default function AssetsPage() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((asset: Asset) => {
-                    const assignee = coStaff.find(u => u.id === asset.assignedTo);
+                    const assignee  = coStaff.find(u => u.id === asset.assignedTo);
+                    const assetBranch = branches.find(b => b.id === asset.branchId);
                     const deprecPct = asset.purchaseCost > 0 ? Math.round(((asset.purchaseCost - asset.currentValue) / asset.purchaseCost) * 100) : 0;
                     return (
                       <TableRow key={asset.id}>
@@ -259,6 +270,11 @@ export default function AssetsPage() {
                         <TableCell>
                           <span className="text-xs text-orange-600 font-medium">{asset.depreciationRate}%/yr</span>
                           <p className="text-xs text-gray-400">{deprecPct}% depreciated</p>
+                        </TableCell>
+                        <TableCell>
+                          {assetBranch
+                            ? <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium">{assetBranch.name}</span>
+                            : <span className="text-xs text-gray-400">—</span>}
                         </TableCell>
                         <TableCell>
                           {assignee ? (
@@ -345,6 +361,7 @@ export default function AssetsPage() {
                   { label: "Purchase Cost",      value: formatCurrency(selectedAsset.purchaseCost) },
                   { label: "Current Value",      value: formatCurrency(selectedAsset.currentValue) },
                   { label: "Depreciation Rate",  value: `${selectedAsset.depreciationRate}% per year` },
+                  { label: "Branch",            value: branches.find(b => b.id === selectedAsset.branchId)?.name ?? "—" },
                   { label: "Assigned To",        value: coStaff.find(u => u.id === selectedAsset.assignedTo)?.name ?? "Unassigned" },
                   { label: "Status",             value: selectedAsset.status },
                   { label: "Next Maintenance",   value: selectedAsset.nextMaintenance ? formatDate(selectedAsset.nextMaintenance) : "—" },
@@ -417,6 +434,23 @@ export default function AssetsPage() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {ASSET_STATUSES.map(s => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2">
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Branch</label>
+                <Select value={form.branchId ?? ""} onValueChange={v => sf({ branchId: v })}>  
+                  <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+                  <SelectContent className="max-h-48">
+                    <SelectItem value="__none">No specific branch</SelectItem>
+                    {branches.map((b: Branch) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{b.name}</span>
+                          {b.location && <span className="text-gray-400 text-xs">· {b.location}</span>}
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
