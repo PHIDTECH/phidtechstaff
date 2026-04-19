@@ -24,6 +24,7 @@ const DEPTS_KEY     = "phidtech_departments";
 const SESSION_KEY   = "phidtech_session";
 const COMPANIES_KEY = "phidtech_companies";
 const GROUP_KEY     = "phidtech_group_company";
+const BRANCHES_KEY  = "phidtech_branches_cache";
 
 const DEFAULT_DEPARTMENTS = [
   "Administration", "Human Resources", "Finance & Accounting", "Sales & Marketing",
@@ -45,8 +46,19 @@ interface Task {
   priority: "low"|"medium"|"high"|"critical"; status: "pending"|"in-progress"|"completed"|"cancelled";
   dueDate: string; createdAt: string;
   attachments: Attachment[]; comments: Comment[];
+  customerId?: string; customerName?: string;
+  branchId?: string;
 }
 interface StaffUser { id: string; name: string; position: string; department: string; companyId: string; branchId?: string | null; status: string; }
+interface Branch { id: string; name: string; companyId: string; }
+interface CustomerAttachment { name: string; size: number; dataUrl: string; }
+interface Customer {
+  id: string; companyId: string; name: string; company: string;
+  email: string; phone: string; type: string; address: string;
+  serviceProduct: string; date: string; branch: string; status: string;
+  totalRevenue: number; createdAt: string;
+  attachments?: CustomerAttachment[];
+}
 interface Notification { id: string; userId: string; message: string; read: boolean; createdAt: string; taskId?: string; }
 interface Department { id: string; name: string; companyId: string; }
 
@@ -63,7 +75,7 @@ const STATUS_COLOR: Record<string,string> = {
   "cancelled":   "bg-gray-100 text-gray-600",
 };
 
-const emptyForm = () => ({ title:"", description:"", assignedTo:"", priority:"medium" as Task["priority"], department:"", dueDate:"", attachments:[] as Attachment[] });
+const emptyForm = () => ({ title:"", description:"", assignedTo:"", priority:"medium" as Task["priority"], department:"", dueDate:"", attachments:[] as Attachment[], customerId:"", branchId:"" });
 
 export default function TasksPage() {
   usePermissionGuard("tasks");
@@ -82,23 +94,21 @@ export default function TasksPage() {
   const [session, setSession] = useState<{id:string;name:string;position?:string;role?:string;isSuperAdmin:boolean;branchId?:string|null;companyId?:string}|null>(null);
   const [groupCompanyId, setGroupCompanyId] = useState("");
   const [allStaffList, setAllStaffList] = useState<StaffUser[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const GENERAL_ROLES_TASKS = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
 
-  const loadSession = () => {
+  const loadSession = async () => {
     const sess = lsGet<{id:string;name:string;position?:string;role?:string;isSuperAdmin:boolean;branchId?:string|null;companyId?:string}>(SESSION_KEY, null as never);
     setSession(sess);
     const cid = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setActiveCompanyId(cid);
-    const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
-    setAllStaffList(allStaff);
     const cos = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
     setGroupCompanyId(gc);
-    const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_TASKS.includes(sess.position ?? sess.role ?? "");
-    setStaffList(allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
     const rawDepts = lsGet<(Department|string)[]>(DEPTS_KEY, []);
     const deptObjs: Department[] = rawDepts.map((d, i) =>
       typeof d === "string" ? { id: String(i), name: d, companyId: cid } : d
@@ -106,6 +116,33 @@ export default function TasksPage() {
     setAllDepts(deptObjs);
     const companyDepts = deptObjs.filter(d => !d.companyId || d.companyId === cid).map(d => d.name);
     setDeptsList(companyDepts.length > 0 ? companyDepts : DEFAULT_DEPARTMENTS);
+    // Load staff from server API, fall back to localStorage
+    try {
+      const res = await fetch("/api/users", { cache: "no-store" });
+      if (res.ok) {
+        const data: StaffUser[] = await res.json();
+        const active = Array.isArray(data) ? data.filter(u => u.status !== "inactive") : [];
+        setAllStaffList(active);
+        const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_TASKS.includes(sess.position ?? sess.role ?? "");
+        setStaffList(active.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
+      } else throw new Error();
+    } catch {
+      const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
+      setAllStaffList(allStaff);
+      const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_TASKS.includes(sess.position ?? sess.role ?? "");
+      setStaffList(allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
+    }
+    // Load branches
+    try {
+      const br = await fetch("/api/branches", { cache: "no-store" });
+      if (br.ok) setBranches(await br.json());
+      else setBranches(lsGet<Branch[]>(BRANCHES_KEY, []));
+    } catch { setBranches(lsGet<Branch[]>(BRANCHES_KEY, [])); }
+    // Load customers
+    try {
+      const cr = await fetch("/api/customers", { cache: "no-store" });
+      if (cr.ok) { const d: Customer[] = await cr.json(); setCustomers(Array.isArray(d) ? d : []); }
+    } catch {}
   };
 
   const fetchTasks = async () => {
@@ -129,7 +166,7 @@ export default function TasksPage() {
     } catch { setTasksList(lsGet<Task[]>(TASKS_KEY, [])); }
   };
 
-  const reload = () => { loadSession(); fetchTasks(); };
+  const reload = async () => { await loadSession(); await fetchTasks(); };
 
   useEffect(() => {
     loadSession();
@@ -215,6 +252,7 @@ export default function TasksPage() {
     if (!form.priority)   { setFormError("Select a priority."); return; }
     if (!form.dueDate)    { setFormError("Set a due date."); return; }
     const assignee = staffList.find(u => u.id === form.assignedTo);
+    const customer = customers.find(c => c.id === form.customerId);
     const task: Task = {
       id: `task-${Date.now()}`,
       companyId: activeCompanyId,
@@ -229,6 +267,9 @@ export default function TasksPage() {
       createdAt: new Date().toISOString(),
       attachments: form.attachments,
       comments: [],
+      customerId: customer?.id,
+      customerName: customer?.name,
+      branchId: form.branchId || undefined,
     };
     await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(task) });
     pushNotification(form.assignedTo, `You have been assigned a new task: "${task.title}"`, task.id);
@@ -503,6 +544,33 @@ export default function TasksPage() {
               {selectedTask.description && (
                 <p className="px-6 py-2 text-sm text-gray-600 border-b border-gray-100">{selectedTask.description}</p>
               )}
+              {/* Customer info on task detail */}
+              {selectedTask.customerName && (() => {
+                const cust = customers.find(c => c.id === selectedTask.customerId);
+                return (
+                  <div className="px-6 py-2 border-b border-gray-100">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Linked Customer</p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-gray-800">{selectedTask.customerName}</p>
+                        {cust?.company && <p className="text-xs text-gray-400">{cust.company}</p>}
+                        {cust?.email   && <p className="text-xs text-gray-400">{cust.email} · {cust.phone}</p>}
+                        {cust?.serviceProduct && <p className="text-xs text-blue-600">{cust.serviceProduct}</p>}
+                      </div>
+                      {cust?.attachments && cust.attachments.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {cust.attachments.map((a, i) => (
+                            <a key={i} href={a.dataUrl} download={a.name}
+                              className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-lg hover:bg-blue-100">
+                              <FileText className="w-3 h-3" />{a.name}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               {/* Attachments */}
               {selectedTask.attachments.length > 0 && (
                 <div className="px-6 py-2 border-b border-gray-100 flex flex-wrap gap-2">
@@ -593,21 +661,110 @@ export default function TasksPage() {
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Description</label>
               <Textarea placeholder="Describe the task..." rows={3} value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} />
             </div>
+
+            {/* Branch + Customer row */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Assign To *</label>
-                <Select value={form.assignedTo} onValueChange={v => setForm(f => ({...f, assignedTo: v}))}>
-                  <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Branch</label>
+                <Select value={form.branchId} onValueChange={v => setForm(f => ({...f, branchId: v, assignedTo: ""}))}>  
+                  <SelectTrigger><SelectValue placeholder="All branches" /></SelectTrigger>
                   <SelectContent>
-                    {staffList.map(u => (
-                      <SelectItem key={u.id} value={u.id}>{u.name} — {u.position}</SelectItem>
+                    <SelectItem value="__all">All Branches</SelectItem>
+                    {branches.filter(b => b.companyId === activeCompanyId).map(b => (
+                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Customer (optional)</label>
+                <Select value={form.customerId} onValueChange={v => setForm(f => ({...f, customerId: v}))}>
+                  <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
+                  <SelectContent className="max-h-52">
+                    <SelectItem value="__none">None</SelectItem>
+                    {customers.filter(c => c.companyId === activeCompanyId).map(c => (
+                      <SelectItem key={c.id} value={c.id}>
+                        <div className="flex items-center gap-2">
+                          <span>{c.name}</span>
+                          {c.company && <span className="text-gray-400 text-xs">· {c.company}</span>}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Customer details card (shown when customer selected) */}
+            {form.customerId && form.customerId !== "__none" && (() => {
+              const cust = customers.find(c => c.id === form.customerId);
+              if (!cust) return null;
+              return (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold text-gray-900 text-sm">{cust.name}</p>
+                      {cust.company && <p className="text-xs text-gray-500">{cust.company}</p>}
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      cust.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                    }`}>{cust.status}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {cust.email    && <div><span className="text-gray-400">Email: </span><span className="text-gray-700">{cust.email}</span></div>}
+                    {cust.phone    && <div><span className="text-gray-400">Phone: </span><span className="text-gray-700">{cust.phone}</span></div>}
+                    {cust.serviceProduct && <div className="col-span-2"><span className="text-gray-400">Service: </span><span className="text-gray-700">{cust.serviceProduct}</span></div>}
+                    {cust.address  && <div className="col-span-2"><span className="text-gray-400">Address: </span><span className="text-gray-700">{cust.address}</span></div>}
+                  </div>
+                  {cust.attachments && cust.attachments.length > 0 && (
+                    <div className="pt-1.5 border-t border-blue-100">
+                      <p className="text-xs text-gray-400 mb-1.5 font-medium">Customer Attachments</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {cust.attachments.map((a, i) => (
+                          <a key={i} href={a.dataUrl} download={a.name}
+                            className="flex items-center gap-1 text-xs bg-white border border-blue-200 text-blue-700 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition-colors">
+                            <FileText className="w-3 h-3" />{a.name}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Assign To *</label>
+                <Select value={form.assignedTo} onValueChange={v => setForm(f => ({...f, assignedTo: v}))}>
+                  <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
+                  <SelectContent className="max-h-52">
+                    {(() => {
+                      const filtered = staffList.filter(u =>
+                        !form.branchId || form.branchId === "__all" || u.branchId === form.branchId
+                      );
+                      if (filtered.length === 0) return (
+                        <div className="px-3 py-4 text-center text-sm text-gray-400">No staff found</div>
+                      );
+                      return filtered.map(u => {
+                        const br = branches.find(b => b.id === u.branchId);
+                        return (
+                          <SelectItem key={u.id} value={u.id}>
+                            <div className="flex items-center gap-2">
+                              <span>{u.name}</span>
+                              <span className="text-gray-400 text-xs">· {u.position || u.department}</span>
+                              {br && <span className="text-blue-500 text-xs font-medium">· {br.name}</span>}
+                            </div>
+                          </SelectItem>
+                        );
+                      });
+                    })()}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Priority *</label>
-                <Select value={form.priority} onValueChange={v => setForm(f => ({...f, priority: v as Task["priority"]}))}>
+                <Select value={form.priority} onValueChange={v => setForm(f => ({...f, priority: v as Task["priority"]}))}>  
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="low">Low</SelectItem>
