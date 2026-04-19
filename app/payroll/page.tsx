@@ -49,10 +49,12 @@ interface StoredCommission {
   id: string; staffId: string; companyId: string;
   month: string; year: number; commissionAmount: number; status: string;
 }
+interface EmployerCost { name: string; amount: number; }
 interface PayrollEntry {
   id: string; staffId: string; companyId: string;
   month: string; year: number;
   basicSalary: number; allowances: Allowance[]; deductions: Deduction[];
+  employerCosts?: EmployerCost[];
   grossSalary: number; netSalary: number;
   status: "draft" | "paid";
   generatedAt: string;
@@ -66,15 +68,23 @@ interface SalaryAdvance {
 const MONTHS = ["January","February","March","April","May","June",
   "July","August","September","October","November","December"];
 
+// ── Tanzania Statutory Deductions ──────────────────────────────────────────
+// PAYE: progressive rates per TRA (monthly basis)
 function calcPAYE(gross: number): number {
   if (gross <= 270000) return 0;
-  if (gross <= 520000) return (gross - 270000) * 0.09;
-  if (gross <= 760000) return 22500 + (gross - 520000) * 0.20;
-  if (gross <= 1000000) return 70500 + (gross - 760000) * 0.25;
-  return 130500 + (gross - 1000000) * 0.30;
+  if (gross <= 520000) return Math.round((gross - 270000) * 0.09);
+  if (gross <= 760000) return Math.round(22500 + (gross - 520000) * 0.20);
+  if (gross <= 1000000) return Math.round(70500 + (gross - 760000) * 0.25);
+  return Math.round(130500 + (gross - 1000000) * 0.30);
 }
-function calcNSSF(gross: number): number { return Math.round(gross * 0.10); }
-function calcSDL(gross: number): number { return Math.round(gross * 0.04); }
+// NSSF: Employee portion = 5% of gross (NSSF Act 2018)
+function calcNSSF_employee(gross: number): number { return Math.round(gross * 0.05); }
+// NSSF: Employer portion = 5% of gross (paid by employer, not deducted from employee)
+function calcNSSF_employer(gross: number): number { return Math.round(gross * 0.05); }
+// SDL: 4.5% paid entirely by employer (not deducted from employee)
+function calcSDL(gross: number): number { return Math.round(gross * 0.045); }
+// WCF: Workers Compensation Fund — 0.5% paid by employer only
+function calcWCF(gross: number): number { return Math.round(gross * 0.005); }
 
 export default function PayrollPage() {
   usePermissionGuard("payroll");
@@ -198,11 +208,13 @@ export default function PayrollPage() {
       const combinedAllowances = [...staffAllowances, ...commissionAllowances];
       const totalAllowanceAmt = combinedAllowances.reduce((s, a) => s + a.amount, 0);
       const gross = basic + totalAllowanceAmt;
-      const paye = Math.round(calcPAYE(gross));
-      const nssf = calcNSSF(gross);
-      const sdl  = calcSDL(gross);
-      const totalDed = paye + nssf + sdl;
-      const net = gross - totalDed;
+      const paye      = calcPAYE(gross);
+      const nssf_emp  = calcNSSF_employee(gross);
+      const nssf_er   = calcNSSF_employer(gross);
+      const sdl       = calcSDL(gross);
+      const wcf       = calcWCF(gross);
+      const totalDed  = paye + nssf_emp;
+      const net       = gross - totalDed;
       return {
         id: `pr-${emp.id}-${monthKey}-${Date.now()}`,
         staffId: emp.id, companyId: activeCompanyId,
@@ -211,8 +223,12 @@ export default function PayrollPage() {
         allowances: combinedAllowances,
         deductions: [
           { name: "PAYE", amount: paye },
-          { name: "NSSF (10%)", amount: nssf },
-          { name: "SDL (4%)", amount: sdl },
+          { name: "NSSF (Employee 5%)", amount: nssf_emp },
+        ],
+        employerCosts: [
+          { name: "NSSF (Employer 5%)", amount: nssf_er },
+          { name: "SDL (4.5%)", amount: sdl },
+          { name: "WCF (0.5%)", amount: wcf },
         ],
         grossSalary: gross, netSalary: net,
         status: "draft",
@@ -288,18 +304,24 @@ export default function PayrollPage() {
     const alws = editForm.allowances.filter(a => a.name.trim() && a.amount > 0);
     const totalAlw = alws.reduce((s, a) => s + a.amount, 0);
     const gross = basic + totalAlw;
-    const paye = Math.round(calcPAYE(gross));
-    const nssf = calcNSSF(gross);
-    const sdl  = calcSDL(gross);
-    const net  = gross - paye - nssf - sdl;
+    const paye     = calcPAYE(gross);
+    const nssf_emp = calcNSSF_employee(gross);
+    const nssf_er  = calcNSSF_employer(gross);
+    const sdl      = calcSDL(gross);
+    const wcf      = calcWCF(gross);
+    const net      = gross - paye - nssf_emp;
     await fetch("/api/payroll", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
       id: editEntry.id,
       basicSalary: basic,
       allowances: alws,
       deductions: [
         { name: "PAYE", amount: paye },
-        { name: "NSSF (10%)", amount: nssf },
-        { name: "SDL (4%)", amount: sdl },
+        { name: "NSSF (Employee 5%)", amount: nssf_emp },
+      ],
+      employerCosts: [
+        { name: "NSSF (Employer 5%)", amount: nssf_er },
+        { name: "SDL (4.5%)", amount: sdl },
+        { name: "WCF (0.5%)", amount: wcf },
       ],
       grossSalary: gross,
       netSalary: net,
@@ -565,10 +587,33 @@ export default function PayrollPage() {
                   <span className="font-bold text-gray-900">Net Pay</span>
                   <span className="text-2xl font-bold text-green-700">{formatCurrency(myEntry.netSalary)}</span>
                 </div>
+                {/* Employer costs */}
+                {(myEntry.employerCosts ?? []).length > 0 && (
+                  <div className="mx-6 mb-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Employer Statutory Costs <span className="normal-case font-normal text-slate-400">(not deducted from your salary)</span></p>
+                    <div className="space-y-2">
+                      {(myEntry.employerCosts ?? []).map(c => (
+                        <div key={c.name} className="flex justify-between text-sm">
+                          <span className="text-slate-500">{c.name}</span>
+                          <span className="text-slate-700">{formatCurrency(c.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <p className="text-center text-xs text-gray-400 pb-4">Generated by PHIDTECH MS · {new Date(myEntry.generatedAt).toLocaleDateString()}</p>
                 {/* Actions */}
                 <div className="px-6 pb-5 flex justify-end">
-                  <Button onClick={() => window.print()}>
+                  <Button onClick={() => {
+                    const ec = myEntry.employerCosts ?? [];
+                    const tec = ec.reduce((s,c) => s+c.amount, 0);
+                    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payslip</title><style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-width:600px}.hdr{display:flex;justify-content:space-between;background:#1e3a8a;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0}.hdr h1{font-size:15px;margin:0 0 3px;color:#fff}.hdr p{font-size:11px;margin:2px 0;opacity:.85}.body{border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:16px 18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px}.stitle{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}.row{display:flex;justify-content:space-between;padding:3px 0;font-size:11.5px}.row.tot{font-weight:700;border-top:1px solid #e5e7eb;margin-top:4px;padding-top:5px}.net{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin:12px 0}.net .lbl{font-weight:700;font-size:14px}.net .val{font-weight:800;font-size:20px;color:#15803d}.employer{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;margin-top:10px;font-size:11px}.emp-title{font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px}.footer{text-align:center;font-size:10px;color:#9ca3af;margin-top:16px;border-top:1px solid #f3f4f6;padding-top:10px}@media print{@page{margin:12mm}}</style></head><body>
+<div class="hdr"><div><h1>${activeCompanyName}</h1><p>Payslip — ${myEntry.month} ${myEntry.year}</p></div><div style="text-align:right"><p style="font-size:13px;font-weight:700;margin:0">${myStaff?.name ?? session?.name ?? ""}</p><p>${myStaff?.position ?? ""}</p><p>${myStaff?.department ?? ""}</p></div></div>
+<div class="body"><div class="grid"><div><div class="stitle">Earnings</div><div class="row"><span>Basic Salary</span><span>TZS ${myEntry.basicSalary.toLocaleString()}</span></div>${myEntry.allowances.map(a=>`<div class="row"><span>${a.name}</span><span style="color:#16a34a">+TZS ${a.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Gross Salary</span><span>TZS ${myEntry.grossSalary.toLocaleString()}</span></div></div><div><div class="stitle">Employee Deductions</div>${myEntry.deductions.map(d=>`<div class="row"><span>${d.name}</span><span style="color:#dc2626">-TZS ${d.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Total Deductions</span><span style="color:#dc2626">-TZS ${myEntry.deductions.reduce((s,d)=>s+d.amount,0).toLocaleString()}</span></div></div></div><div class="net"><span class="lbl">NET PAY</span><span class="val">TZS ${myEntry.netSalary.toLocaleString()}</span></div>${ec.length>0?`<div class="employer"><div class="emp-title">Employer Statutory Costs (not deducted from employee)</div>${ec.map(c=>`<div class="row"><span>${c.name}</span><span>TZS ${c.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Total</span><span>TZS ${tec.toLocaleString()}</span></div></div>`:""}<div class="footer">PHIDTECH Management System | CONFIDENTIAL | Tanzania Labour Laws Compliant</div></div>
+<script>window.onload=()=>window.print();</script></body></html>`;
+                    const w = window.open("", "_blank", "width=720,height=900");
+                    if (w) { w.document.write(html); w.document.close(); }
+                  }}>
                     <Download className="w-4 h-4 mr-2" /> Download / Print PDF
                   </Button>
                 </div>
@@ -694,7 +739,7 @@ export default function PayrollPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard title="Total Gross" value={formatCurrency(totalGross)} icon={DollarSign} iconBg="bg-blue-50" iconColor="text-blue-600" subtitle={`${selectedMonth} ${selectedYear}`} />
         <StatCard title="Total Net Pay" value={formatCurrency(totalNet)} icon={CheckCircle} iconBg="bg-green-50" iconColor="text-green-600" subtitle="After deductions" />
-        <StatCard title="Total Deductions" value={formatCurrency(totalDeductions)} icon={DollarSign} iconBg="bg-red-50" iconColor="text-red-500" subtitle="PAYE, NSSF, SDL" />
+        <StatCard title="Total Deductions" value={formatCurrency(totalDeductions)} icon={DollarSign} iconBg="bg-red-50" iconColor="text-red-500" subtitle="PAYE + NSSF (employee)" />
         <StatCard title="Paid Staff" value={`${paidCount}/${companyEntries.length}`} icon={CheckCircle} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="This month" />
       </div>
 
@@ -959,7 +1004,7 @@ export default function PayrollPage() {
                 <p className="text-xs text-yellow-700">Payroll already exists for this month. Running again will <strong>replace</strong> existing entries.</p>
               </div>
             )}
-            <p className="text-xs text-gray-400">Deductions applied: PAYE (Tanzania rates), NSSF 10%, SDL 4%</p>
+            <p className="text-xs text-gray-400">Employee deductions: PAYE (TRA rates) + NSSF 5%. Employer costs: NSSF 5%, SDL 4.5%, WCF 0.5%.</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRunConfirm(false)}>Cancel</Button>
@@ -976,8 +1021,60 @@ export default function PayrollPage() {
           </DialogHeader>
           {showSlipDialog && (() => {
             const emp = staffList.find(u => u.id === showSlipDialog.staffId);
+            const empCosts = showSlipDialog.employerCosts ?? [];
+            const totalEmpCost = empCosts.reduce((s, c) => s + c.amount, 0);
+            const printSlip = () => {
+              const coName = activeCompanyName;
+              const slipHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Payslip</title><style>
+body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-width:600px}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;background:#1e3a8a;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0}
+.hdr h1{font-size:15px;margin:0 0 3px;color:#fff}.hdr p{font-size:11px;margin:2px 0;opacity:.85}
+.body{border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:16px 18px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px}
+.stitle{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}
+.row{display:flex;justify-content:space-between;padding:3px 0;font-size:11.5px}
+.row.tot{font-weight:700;border-top:1px solid #e5e7eb;margin-top:4px;padding-top:5px}
+.net{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin:12px 0}
+.net .lbl{font-weight:700;font-size:14px}.net .val{font-weight:800;font-size:20px;color:#15803d}
+.employer{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;margin-top:10px;font-size:11px}
+.emp-title{font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px}
+.footer{text-align:center;font-size:10px;color:#9ca3af;margin-top:16px;border-top:1px solid #f3f4f6;padding-top:10px}
+@media print{@page{margin:12mm}}
+</style></head><body>
+<div class="hdr">
+  <div><h1>${coName}</h1><p>Payslip — ${showSlipDialog.month} ${showSlipDialog.year}</p><p>Generated: ${new Date(showSlipDialog.generatedAt).toLocaleDateString()}</p></div>
+  <div style="text-align:right"><p style="font-size:13px;font-weight:700;margin:0">${emp?.name ?? "Unknown"}</p><p>${emp?.position ?? ""}</p><p>${emp?.department ?? ""}</p><p style="margin-top:4px;padding:2px 8px;background:${showSlipDialog.status==="paid"?"#22c55e":"#eab308"};color:#fff;border-radius:4px;font-size:10px;display:inline-block">${showSlipDialog.status.toUpperCase()}</p></div>
+</div>
+<div class="body">
+  <div class="grid">
+    <div>
+      <div class="stitle">Earnings</div>
+      <div class="row"><span>Basic Salary</span><span>TZS ${showSlipDialog.basicSalary.toLocaleString()}</span></div>
+      ${showSlipDialog.allowances.map(a => `<div class="row"><span>${a.name}</span><span style="color:#16a34a">+TZS ${a.amount.toLocaleString()}</span></div>`).join("")}
+      <div class="row tot"><span>Gross Salary</span><span>TZS ${showSlipDialog.grossSalary.toLocaleString()}</span></div>
+    </div>
+    <div>
+      <div class="stitle">Employee Deductions</div>
+      ${showSlipDialog.deductions.map(d => `<div class="row"><span>${d.name}</span><span style="color:#dc2626">-TZS ${d.amount.toLocaleString()}</span></div>`).join("")}
+      <div class="row tot"><span>Total Deductions</span><span style="color:#dc2626">-TZS ${showSlipDialog.deductions.reduce((s,d)=>s+d.amount,0).toLocaleString()}</span></div>
+    </div>
+  </div>
+  <div class="net"><span class="lbl">NET PAY</span><span class="val">TZS ${showSlipDialog.netSalary.toLocaleString()}</span></div>
+  ${empCosts.length > 0 ? `<div class="employer">
+    <div class="emp-title">Employer Statutory Costs (paid by employer, not deducted from employee)</div>
+    ${empCosts.map(c => `<div class="row"><span>${c.name}</span><span>TZS ${c.amount.toLocaleString()}</span></div>`).join("")}
+    <div class="row tot"><span>Total Employer Cost</span><span>TZS ${totalEmpCost.toLocaleString()}</span></div>
+  </div>` : ""}
+  <div class="footer">PHIDTECH Management System &nbsp;|&nbsp; CONFIDENTIAL &nbsp;|&nbsp; Tanzania Labour Laws Compliant</div>
+</div>
+<script>window.onload=()=>window.print();</script>
+</body></html>`;
+              const w = window.open("", "_blank", "width=720,height=900");
+              if (w) { w.document.write(slipHtml); w.document.close(); }
+            };
             return (
-              <div className="space-y-4">
+              <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
                 <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
                   <div>
                     <p className="font-bold text-gray-900">{emp?.name ?? "Unknown"}</p>
@@ -987,6 +1084,9 @@ export default function PayrollPage() {
                     <p className="text-xs text-gray-400">Company</p>
                     <p className="font-semibold text-gray-800 text-sm">{activeCompanyName}</p>
                     <p className="text-xs text-gray-500">{showSlipDialog.month} {showSlipDialog.year}</p>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium mt-1 inline-block ${
+                      showSlipDialog.status === "paid" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                    }`}>{showSlipDialog.status}</span>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -1010,7 +1110,7 @@ export default function PayrollPage() {
                     </div>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Deductions</p>
+                    <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Employee Deductions</p>
                     <div className="space-y-1.5">
                       {showSlipDialog.deductions.map(d => (
                         <div key={d.name} className="flex justify-between text-sm">
@@ -1029,13 +1129,41 @@ export default function PayrollPage() {
                   <span className="font-bold text-gray-900">Net Pay</span>
                   <span className="text-xl font-bold text-green-700">{formatCurrency(showSlipDialog.netSalary)}</span>
                 </div>
+                {empCosts.length > 0 && (
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Employer Statutory Costs <span className="normal-case font-normal text-slate-400">(not deducted from employee)</span></p>
+                    <div className="space-y-1.5">
+                      {empCosts.map(c => (
+                        <div key={c.name} className="flex justify-between text-sm">
+                          <span className="text-slate-500">{c.name}</span>
+                          <span className="text-slate-700">{formatCurrency(c.amount)}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between text-sm font-bold border-t border-slate-200 pt-1.5">
+                        <span>Total Employer Cost</span>
+                        <span className="text-slate-800">{formatCurrency(totalEmpCost)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <p className="text-center text-xs text-gray-400">Generated by PHIDTECH MS · {new Date(showSlipDialog.generatedAt).toLocaleDateString()}</p>
               </div>
             );
           })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSlipDialog(null)}>Close</Button>
-            <Button onClick={() => window.print()}>
+            <Button onClick={() => {
+              if (!showSlipDialog) return;
+              const emp = staffList.find(u => u.id === showSlipDialog.staffId);
+              const empCosts = showSlipDialog.employerCosts ?? [];
+              const totalEmpCost = empCosts.reduce((s, c) => s + c.amount, 0);
+              const slipHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payslip</title><style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-width:600px}.hdr{display:flex;justify-content:space-between;background:#1e3a8a;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0}.hdr h1{font-size:15px;margin:0 0 3px;color:#fff}.hdr p{font-size:11px;margin:2px 0;opacity:.85}.body{border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:16px 18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px}.stitle{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}.row{display:flex;justify-content:space-between;padding:3px 0;font-size:11.5px}.row.tot{font-weight:700;border-top:1px solid #e5e7eb;margin-top:4px;padding-top:5px}.net{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin:12px 0}.net .lbl{font-weight:700;font-size:14px}.net .val{font-weight:800;font-size:20px;color:#15803d}.employer{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;margin-top:10px;font-size:11px}.emp-title{font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px}.footer{text-align:center;font-size:10px;color:#9ca3af;margin-top:16px;border-top:1px solid #f3f4f6;padding-top:10px}@media print{@page{margin:12mm}}</style></head><body>
+<div class="hdr"><div><h1>${activeCompanyName}</h1><p>Payslip — ${showSlipDialog.month} ${showSlipDialog.year}</p><p>Generated: ${new Date(showSlipDialog.generatedAt).toLocaleDateString()}</p></div><div style="text-align:right"><p style="font-size:13px;font-weight:700;margin:0">${emp?.name ?? "Unknown"}</p><p>${emp?.position ?? ""}</p><p>${emp?.department ?? ""}</p></div></div>
+<div class="body"><div class="grid"><div><div class="stitle">Earnings</div><div class="row"><span>Basic Salary</span><span>TZS ${showSlipDialog.basicSalary.toLocaleString()}</span></div>${showSlipDialog.allowances.map(a=>`<div class="row"><span>${a.name}</span><span style="color:#16a34a">+TZS ${a.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Gross Salary</span><span>TZS ${showSlipDialog.grossSalary.toLocaleString()}</span></div></div><div><div class="stitle">Employee Deductions</div>${showSlipDialog.deductions.map(d=>`<div class="row"><span>${d.name}</span><span style="color:#dc2626">-TZS ${d.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Total Deductions</span><span style="color:#dc2626">-TZS ${showSlipDialog.deductions.reduce((s,d)=>s+d.amount,0).toLocaleString()}</span></div></div></div><div class="net"><span class="lbl">NET PAY</span><span class="val">TZS ${showSlipDialog.netSalary.toLocaleString()}</span></div>${empCosts.length>0?`<div class="employer"><div class="emp-title">Employer Statutory Costs (not deducted from employee)</div>${empCosts.map(c=>`<div class="row"><span>${c.name}</span><span>TZS ${c.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Total Employer Cost</span><span>TZS ${totalEmpCost.toLocaleString()}</span></div></div>`:""}<div class="footer">PHIDTECH Management System | CONFIDENTIAL | Tanzania Labour Laws Compliant</div></div>
+<script>window.onload=()=>window.print();</script></body></html>`;
+              const w = window.open("", "_blank", "width=720,height=900");
+              if (w) { w.document.write(slipHtml); w.document.close(); }
+            }}>
               <Download className="w-4 h-4 mr-2" />Print / Save PDF
             </Button>
           </DialogFooter>
@@ -1053,7 +1181,7 @@ export default function PayrollPage() {
             const previewBasic = Number(editForm.basicSalary) || 0;
             const previewAlwTotal = editForm.allowances.reduce((s, a) => s + (a.amount || 0), 0);
             const previewGross = previewBasic + previewAlwTotal;
-            const previewNet = previewGross - Math.round(calcPAYE(previewGross)) - calcNSSF(previewGross) - calcSDL(previewGross);
+            const previewNet = previewGross - Math.round(calcPAYE(previewGross)) - calcNSSF_employee(previewGross);
             return (
               <div className="space-y-4">
                 <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
@@ -1124,16 +1252,27 @@ export default function PayrollPage() {
                     <span className="text-red-500">-{formatCurrency(Math.round(calcPAYE(previewGross)))}</span>
                   </div>
                   <div className="flex justify-between text-gray-600">
-                    <span>NSSF (10%)</span>
-                    <span className="text-red-500">-{formatCurrency(calcNSSF(previewGross))}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>SDL (4%)</span>
-                    <span className="text-red-500">-{formatCurrency(calcSDL(previewGross))}</span>
+                    <span>NSSF Employee (5%)</span>
+                    <span className="text-red-500">-{formatCurrency(calcNSSF_employee(previewGross))}</span>
                   </div>
                   <div className="flex justify-between font-bold border-t border-gray-200 pt-1 mt-1">
                     <span>Net Pay</span>
-                    <span className="text-green-700">{formatCurrency(previewNet)}</span>
+                    <span className="text-green-700">{formatCurrency(previewGross - Math.round(calcPAYE(previewGross)) - calcNSSF_employee(previewGross))}</span>
+                  </div>
+                  <div className="border-t border-dashed border-gray-200 pt-2 mt-1">
+                    <p className="text-xs text-gray-400 font-semibold mb-1">Employer Costs (not deducted)</p>
+                    <div className="flex justify-between text-xs text-gray-400">
+                      <span>NSSF Employer (5%)</span>
+                      <span>{formatCurrency(calcNSSF_employer(previewGross))}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-400">
+                      <span>SDL (4.5%)</span>
+                      <span>{formatCurrency(calcSDL(previewGross))}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-400">
+                      <span>WCF (0.5%)</span>
+                      <span>{formatCurrency(calcWCF(previewGross))}</span>
+                    </div>
                   </div>
                 </div>
               </div>
