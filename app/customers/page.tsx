@@ -99,6 +99,7 @@ export default function CustomersPage() {
   const [form, setForm]                   = useState(emptyForm());
   const [formError, setFormError]         = useState("");
   const [deleteId, setDeleteId]           = useState<string | null>(null);
+  const [loading, setLoading]             = useState(true);
 
   const loadSession = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
@@ -113,6 +114,7 @@ export default function CustomersPage() {
   };
 
   const fetchCustomers = async () => {
+    setLoading(true);
     try {
       const res = await fetch("/api/customers", { cache: "no-store" });
       if (res.ok) {
@@ -138,6 +140,8 @@ export default function CustomersPage() {
     } catch {
       // Fallback to localStorage if server unreachable
       setCustomers(lsGet<Customer[]>(CUSTOMERS_KEY, []));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -311,7 +315,22 @@ export default function CustomersPage() {
 
         <TabsContent value="list">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="divide-y divide-gray-50">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex items-center gap-4 px-5 py-4 animate-pulse">
+                    <div className="w-9 h-9 rounded-full bg-gray-100 shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3 bg-gray-100 rounded w-1/3" />
+                      <div className="h-2.5 bg-gray-50 rounded w-1/4" />
+                    </div>
+                    <div className="h-3 bg-gray-100 rounded w-24" />
+                    <div className="h-3 bg-gray-100 rounded w-20" />
+                    <div className="h-5 bg-gray-100 rounded-full w-16" />
+                  </div>
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
                 <div className="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center">
                   <UserCheck className="w-7 h-7 text-blue-400" />

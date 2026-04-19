@@ -562,17 +562,21 @@ export default function AttendancePage() {
                 <SelectContent className="max-h-60">
                   {companyStaff.length === 0 ? (
                     <div className="px-3 py-4 text-center text-sm text-gray-400">No staff found</div>
-                  ) : companyStaff.map(u => (
-                    <SelectItem key={u.id} value={u.id}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold shrink-0">
-                          {getInitials(u.name)}
+                  ) : companyStaff.map(u => {
+                    const branch = branches.find(b => b.id === u.branchId);
+                    return (
+                      <SelectItem key={u.id} value={u.id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+                            {getInitials(u.name)}
+                          </div>
+                          <span>{u.name}</span>
+                          {u.department && <span className="text-gray-400 text-xs">· {u.department}</span>}
+                          {branch && <span className="text-blue-500 text-xs font-medium">· {branch.name}</span>}
                         </div>
-                        <span>{u.name}</span>
-                        {u.department && <span className="text-gray-400 text-xs">· {u.department}</span>}
-                      </div>
-                    </SelectItem>
-                  ))}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>

@@ -146,27 +146,42 @@ export default function DocumentsPage() {
   const [uploading, setUploading]       = useState(false);
   const [deleteId, setDeleteId]         = useState<string | null>(null);
   const [previewDoc, setPreviewDoc]     = useState<Doc | null>(null);
+  const [loading, setLoading]           = useState(true);
   const fileInputRef                    = useRef<HTMLInputElement>(null);
   const dropZoneRef                     = useRef<HTMLDivElement>(null);
 
-  const reload = () => {
+  const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
     const c = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setCid(c); cidRef.current = c;
-    setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
     const cos = lsGet<Company[]>(COMPANIES_KEY, []);
     setCompanies(cos);
     const storedGroup = lsStr(GROUP_KEY);
     const gc = storedGroup || (cos.find(co => co.isGroup)?.id ?? cos[0]?.id ?? "");
     setGroupCid(gc);
+    // Load staff from server API, fall back to localStorage
+    try {
+      const res = await fetch("/api/users", { cache: "no-store" });
+      if (res.ok) {
+        const data: StaffUser[] = await res.json();
+        setStaff(Array.isArray(data) ? data : []);
+      } else throw new Error();
+    } catch {
+      setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
+    }
   };
 
-  const fetchDocs = () => {
-    fetch("/api/documents")
-      .then(r => r.json())
-      .then((data: Doc[]) => setDocs(Array.isArray(data) ? data : []))
-      .catch(() => {});
+  const fetchDocs = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/documents", { cache: "no-store" });
+      if (res.ok) {
+        const data: Doc[] = await res.json();
+        setDocs(Array.isArray(data) ? data : []);
+      }
+    } catch {}
+    finally { setLoading(false); }
   };
 
   useEffect(() => {
@@ -349,7 +364,22 @@ export default function DocumentsPage() {
 
         <TabsContent value="list">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="divide-y divide-gray-50">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex items-center gap-4 px-5 py-4 animate-pulse">
+                    <div className="w-8 h-8 rounded bg-gray-100 shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3 bg-gray-100 rounded w-2/5" />
+                      <div className="h-2.5 bg-gray-50 rounded w-1/4" />
+                    </div>
+                    <div className="h-3 bg-gray-100 rounded w-20" />
+                    <div className="h-3 bg-gray-100 rounded w-24" />
+                    <div className="h-5 bg-gray-100 rounded-full w-16" />
+                  </div>
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
                 <FileText className="w-12 h-12 text-gray-200" />
                 <p className="font-semibold text-gray-500">No documents yet</p>

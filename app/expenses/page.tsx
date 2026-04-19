@@ -29,7 +29,8 @@ function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
 interface Session { id: string; name: string; role: string; isSuperAdmin: boolean; companyId: string; }
-interface StaffUser { id: string; name: string; companyId: string; position?: string; department?: string; }
+interface Branch { id: string; name: string; companyId: string; }
+interface StaffUser { id: string; name: string; companyId: string; branchId?: string | null; position?: string; department?: string; status?: string; }
 interface Expense {
   id: string; companyId: string; userId: string; title: string;
   category: string; amount: number; description: string;
@@ -70,19 +71,36 @@ export default function ExpensesPage() {
 
   const [groupCompanyId, setGroupCompanyId] = useState("");
   const [allStaff, setAllStaff] = useState<StaffUser[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
 
-  const loadSession = () => {
+  const loadSession = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const cid  = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setSession(sess);
     setActiveCompanyId(cid);
     cidRef.current = cid;
-    const allS = lsGet<StaffUser[]>(USERS_KEY, []);
-    setAllStaff(allS);
-    setStaff(allS.filter(u => u.companyId === cid));
     const cos = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
     setGroupCompanyId(gc);
+    // Load staff from server API, fall back to localStorage
+    try {
+      const res = await fetch("/api/users", { cache: "no-store" });
+      if (res.ok) {
+        const data: StaffUser[] = await res.json();
+        const active = Array.isArray(data) ? data.filter(u => u.status !== "inactive") : [];
+        setAllStaff(active);
+        setStaff(active.filter(u => u.companyId === cid));
+      } else throw new Error();
+    } catch {
+      const allS = lsGet<StaffUser[]>(USERS_KEY, []);
+      setAllStaff(allS);
+      setStaff(allS.filter(u => u.companyId === cid));
+    }
+    // Load branches
+    try {
+      const br = await fetch("/api/branches", { cache: "no-store" });
+      if (br.ok) setBranches(await br.json());
+    } catch {}
   };
 
   const fetchExpenses = async () => {
@@ -106,7 +124,7 @@ export default function ExpensesPage() {
     } catch { setExpenses(lsGet<Expense[]>(EXPENSES_KEY, [])); }
   };
 
-  const reload = () => { loadSession(); fetchExpenses(); };
+  const reload = async () => { await loadSession(); await fetchExpenses(); };
 
   useEffect(() => {
     loadSession();
@@ -386,7 +404,21 @@ export default function ExpensesPage() {
               <Select value={form.userId} onValueChange={v => sf({ userId: v })}>
                 <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
                 <SelectContent>
-                  {companyStaff.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                  {companyStaff.length === 0 && (
+                    <div className="px-3 py-4 text-center text-sm text-gray-400">No staff found</div>
+                  )}
+                  {companyStaff.map(u => {
+                    const branch = branches.find(b => b.id === u.branchId);
+                    return (
+                      <SelectItem key={u.id} value={u.id}>
+                        <div className="flex items-center gap-2">
+                          <span>{u.name}</span>
+                          {u.department && <span className="text-gray-400 text-xs">· {u.department}</span>}
+                          {branch && <span className="text-blue-500 text-xs font-medium">· {branch.name}</span>}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
