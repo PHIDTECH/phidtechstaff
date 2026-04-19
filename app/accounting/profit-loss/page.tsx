@@ -17,6 +17,7 @@ const SALES_KEY     = "phidtech_accounting_sales";
 const EXP_KEY        = "phidtech_expenses";
 const OFFICE_EXP_KEY = "phidtech_office_expenses";
 const PAYROLL_KEY    = "phidtech_payroll";
+const COMPANIES_KEY  = "phidtech_companies";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -118,14 +119,34 @@ export default function ProfitLossPage() {
   const cidRef                  = useRef("");
   const [period, setPeriod]     = useState<Period>("monthly");
 
-  const reload = () => {
+  const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const c    = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setCid(c); cidRef.current = c;
-    setSales(lsGet<Sale[]>(SALES_KEY, []));
-    setExpenses(lsGet<Expense[]>(EXP_KEY, []));
-    setOfficeExp(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, []));
-    setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, []));
+    // Sales from server API
+    try {
+      const sr = await fetch("/api/accounting/sales", { cache: "no-store" });
+      if (sr.ok) setSales(await sr.json());
+      else setSales(lsGet<Sale[]>(SALES_KEY, []));
+    } catch { setSales(lsGet<Sale[]>(SALES_KEY, [])); }
+    // Expense claims from server API
+    try {
+      const er = await fetch("/api/expenses", { cache: "no-store" });
+      if (er.ok) setExpenses(await er.json());
+      else setExpenses(lsGet<Expense[]>(EXP_KEY, []));
+    } catch { setExpenses(lsGet<Expense[]>(EXP_KEY, [])); }
+    // Office expenses from server API
+    try {
+      const or = await fetch("/api/office-expenses", { cache: "no-store" });
+      if (or.ok) setOfficeExp(await or.json());
+      else setOfficeExp(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, []));
+    } catch { setOfficeExp(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, [])); }
+    // Payroll from server API
+    try {
+      const pr = await fetch("/api/payroll", { cache: "no-store" });
+      if (pr.ok) setPayroll(await pr.json());
+      else setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, []));
+    } catch { setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, [])); }
   };
 
   useEffect(() => {
@@ -136,7 +157,7 @@ export default function ProfitLossPage() {
       window.removeEventListener("phidtech_companies_updated", reload);
       window.removeEventListener("storage", reload);
     };
-  }, []);
+  }, []);  // eslint-disable-line
 
   const co    = cidRef.current || cid;
   const coS   = co ? sales.filter(s => s.companyId === co) : sales;

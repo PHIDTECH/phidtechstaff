@@ -25,7 +25,12 @@ function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
 interface Session { id: string; name: string; role: string; isSuperAdmin: boolean; companyId: string; }
-interface Customer { id: string; name: string; companyId: string; phone?: string; address?: string; email?: string; }
+interface Customer {
+  id: string; name: string; companyId: string;
+  phone?: string; address?: string; email?: string;
+  company?: string; serviceProduct?: string; status?: string;
+  totalRevenue?: number;
+}
 interface SaleItem { description: string; quantity: number; unitPrice: number; total: number; }
 interface Sale {
   id: string; companyId: string; date: string;
@@ -64,15 +69,43 @@ export default function AccountingSalesPage() {
   const [formError, setFormError]   = useState("");
   const [selCustomer, setSelCustomer] = useState<Customer | null>(null);
 
-  const reload = () => {
+  const [loading, setLoading] = useState(true);
+
+  const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const c    = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setCid(c); cidRef.current = c;
-    setSales(lsGet<Sale[]>(SALES_KEY, []));
-    setCustomers(lsGet<Customer[]>(CUSTOMERS_KEY, []));
+    // Load customers from server API
+    try {
+      const cr = await fetch("/api/customers", { cache: "no-store" });
+      if (cr.ok) { const d: Customer[] = await cr.json(); setCustomers(Array.isArray(d) ? d : []); }
+      else setCustomers(lsGet<Customer[]>(CUSTOMERS_KEY, []));
+    } catch { setCustomers(lsGet<Customer[]>(CUSTOMERS_KEY, [])); }
+    // Load sales from server API
+    try {
+      setLoading(true);
+      const sr = await fetch("/api/accounting/sales", { cache: "no-store" });
+      if (sr.ok) {
+        const d: Sale[] = await sr.json();
+        setSales(Array.isArray(d) ? d : []);
+        // Migrate local-only sales
+        const local = lsGet<Sale[]>(SALES_KEY, []);
+        if (local.length > 0) {
+          const srvIds = new Set(d.map(s => s.id));
+          const toMigrate = local.filter(s => !srvIds.has(s.id));
+          if (toMigrate.length > 0) {
+            await fetch("/api/accounting/sales", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toMigrate) });
+            const r2 = await fetch("/api/accounting/sales", { cache: "no-store" });
+            if (r2.ok) setSales(await r2.json());
+          }
+          lsSet(SALES_KEY, []);
+        }
+      } else setSales(lsGet<Sale[]>(SALES_KEY, []));
+    } catch { setSales(lsGet<Sale[]>(SALES_KEY, [])); }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => { reload(); }, []);  // eslint-disable-line
 
   const co        = cidRef.current || cid;
   const coSales   = (co ? sales.filter(s => s.companyId === co) : sales).sort((a,b) => b.date.localeCompare(a.date));
@@ -91,7 +124,10 @@ export default function AccountingSalesPage() {
   const dailyRev  = coSales.filter(s => s.date === today).reduce((s,e) => s + e.amount, 0);
   const monthRev  = coSales.filter(s => s.date.startsWith(thisMonth)).reduce((s,e) => s + e.amount, 0);
 
-  const save = (list: Sale[]) => { lsSet(SALES_KEY, list); setSales(list); };
+  const save = async (list: Sale[]) => {
+    setSales(list);
+    lsSet(SALES_KEY, list); // local fallback
+  };
 
   const sf = (f: Partial<typeof form>) => setForm(p => ({ ...p, ...f }));
 
@@ -129,32 +165,33 @@ export default function AccountingSalesPage() {
     setFormError(""); setShowDialog(true);
   };
 
-  const saveForm = () => {
+  const saveForm = async () => {
     if (!form.customerId) { setFormError("Select a customer."); return; }
     const filled = form.items.filter(it => it.description.trim());
     if (filled.length === 0) { setFormError("Add at least one item."); return; }
     const cust   = coCusts.find(c => c.id === form.customerId);
     const { subtotal, tax, amount, paid, balance, status } = recalc(filled, form.paid);
     if (editItem) {
-      save(sales.map(s => s.id === editItem.id ? {
-        ...s, date: form.date, customerId: form.customerId,
-        customerName: cust?.name ?? s.customerName,
-        customerPhone: cust?.phone ?? s.customerPhone,
-        customerAddress: cust?.address ?? s.customerAddress,
-        items: filled, subtotal, tax, amount, paid, balance, status, notes: form.notes,
-      } : s));
+      const updated = { ...editItem, date: form.date, customerId: form.customerId,
+        customerName: cust?.name ?? editItem.customerName,
+        customerPhone: cust?.phone ?? editItem.customerPhone,
+        customerAddress: cust?.address ?? editItem.customerAddress,
+        items: filled, subtotal, tax, amount, paid, balance, status, notes: form.notes };
+      await fetch("/api/accounting/sales", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updated) });
     } else {
       const saleNum = `SAL-${Date.now().toString().slice(-6)}`;
-      save([...sales, {
+      const newSale: Sale = {
         id: saleNum, companyId: cidRef.current || cid,
         date: form.date, customerId: form.customerId,
         customerName: cust?.name ?? "", customerPhone: cust?.phone ?? "",
         customerAddress: cust?.address ?? "",
         items: filled, subtotal, tax, amount, paid, balance, status,
         notes: form.notes, createdAt: new Date().toISOString(),
-      }]);
+      };
+      await fetch("/api/accounting/sales", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newSale) });
     }
     setShowDialog(false);
+    await reload();
   };
 
   const previewCalc = recalc(form.items, form.paid);
@@ -327,9 +364,31 @@ export default function AccountingSalesPage() {
                 }}>
                   <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
                   <SelectContent>
-                    {coCusts.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}{c.phone ? ` – ${c.phone}` : ""}</SelectItem>
-                    ))}
+                    {coCusts.length === 0 && (
+                      <div className="px-3 py-4 text-center text-sm text-gray-400">No customers found</div>
+                    )}
+                    {coCusts.map(c => {
+                      const custSales = coSales.filter(s => s.customerId === c.id);
+                      const custPaid  = custSales.reduce((s, x) => s + x.paid, 0);
+                      const custBal   = custSales.reduce((s, x) => s + x.balance, 0);
+                      return (
+                        <SelectItem key={c.id} value={c.id}>
+                          <div className="flex items-center justify-between gap-3 w-full">
+                            <div>
+                              <span className="font-medium">{c.name}</span>
+                              {c.company && <span className="text-gray-400 text-xs ml-1">· {c.company}</span>}
+                              {c.phone   && <span className="text-gray-400 text-xs ml-1">· {c.phone}</span>}
+                            </div>
+                            {custSales.length > 0 && (
+                              <div className="text-xs shrink-0">
+                                <span className="text-green-600 font-medium">{formatCurrency(custPaid)}</span>
+                                {custBal > 0 && <span className="text-red-500 ml-1">/ {formatCurrency(custBal)} due</span>}
+                              </div>
+                            )}
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
                 {selCustomer && (
@@ -405,7 +464,13 @@ export default function AccountingSalesPage() {
           <p className="text-sm text-gray-600 py-2">Are you sure? This cannot be undone.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => { if (deleteId) { save(sales.filter(s => s.id !== deleteId)); setDeleteId(null); } }}>
+            <Button variant="destructive" onClick={async () => {
+              if (deleteId) {
+                await fetch(`/api/accounting/sales?id=${deleteId}`, { method: "DELETE" });
+                setDeleteId(null);
+                await reload();
+              }
+            }}>
               <Trash2 className="w-4 h-4 mr-2" />Delete
             </Button>
           </DialogFooter>
