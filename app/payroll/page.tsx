@@ -68,23 +68,31 @@ interface SalaryAdvance {
 const MONTHS = ["January","February","March","April","May","June",
   "July","August","September","October","November","December"];
 
-// ── Tanzania Statutory Deductions ──────────────────────────────────────────
-// PAYE: progressive rates per TRA (monthly basis)
-function calcPAYE(gross: number): number {
-  if (gross <= 270000) return 0;
-  if (gross <= 520000) return Math.round((gross - 270000) * 0.09);
-  if (gross <= 760000) return Math.round(22500 + (gross - 520000) * 0.20);
-  if (gross <= 1000000) return Math.round(70500 + (gross - 760000) * 0.25);
-  return Math.round(130500 + (gross - 1000000) * 0.30);
-}
-// NSSF: Employee portion = 5% of gross (NSSF Act 2018)
+// ── Tanzania Statutory Deductions (TRA / NSSF Act 2018) ────────────────────
+// NSSF: Employee 5% of gross salary (deducted first, before PAYE)
 function calcNSSF_employee(gross: number): number { return Math.round(gross * 0.05); }
-// NSSF: Employer portion = 5% of gross (paid by employer, not deducted from employee)
+// NSSF: Employer 5% of gross (employer cost only, NOT deducted from employee)
 function calcNSSF_employer(gross: number): number { return Math.round(gross * 0.05); }
-// SDL: 4.5% paid entirely by employer (not deducted from employee)
-function calcSDL(gross: number): number { return Math.round(gross * 0.045); }
-// WCF: Workers Compensation Fund — 0.5% paid by employer only
+// SDL: Skills & Development Levy — 3.5% of gross, employer only (NOT deducted from employee)
+function calcSDL(gross: number): number { return Math.round(gross * 0.035); }
+// WCF: Workers Compensation Fund — 0.5% of gross, employer only (NOT deducted from employee)
 function calcWCF(gross: number): number { return Math.round(gross * 0.005); }
+
+// PAYE: Progressive TRA bands applied on TAXABLE income = gross - NSSF_employee
+// Monthly bands (Tanzania Mainland, 2024/2025):
+//   0        – 270,000  →  0%
+//   270,001  – 520,000  →  8%   of excess over 270,000
+//   520,001  – 760,000  →  20,000 + 20% of excess over 520,000
+//   760,001  – 1,000,000 → 68,000 + 25% of excess over 760,000
+//   1,000,001+           → 128,000 + 30% of excess over 1,000,000
+function calcPAYE(gross: number): number {
+  const taxable = gross - calcNSSF_employee(gross); // NSSF is deducted before PAYE
+  if (taxable <= 270000)  return 0;
+  if (taxable <= 520000)  return Math.round((taxable - 270000) * 0.08);
+  if (taxable <= 760000)  return Math.round(20000 + (taxable - 520000) * 0.20);
+  if (taxable <= 1000000) return Math.round(68000 + (taxable - 760000) * 0.25);
+  return Math.round(128000 + (taxable - 1000000) * 0.30);
+}
 
 export default function PayrollPage() {
   usePermissionGuard("payroll");
@@ -227,7 +235,7 @@ export default function PayrollPage() {
         ],
         employerCosts: [
           { name: "NSSF (Employer 5%)", amount: nssf_er },
-          { name: "SDL (4.5%)", amount: sdl },
+          { name: "SDL (3.5%)", amount: sdl },
           { name: "WCF (0.5%)", amount: wcf },
         ],
         grossSalary: gross, netSalary: net,
@@ -320,7 +328,7 @@ export default function PayrollPage() {
       ],
       employerCosts: [
         { name: "NSSF (Employer 5%)", amount: nssf_er },
-        { name: "SDL (4.5%)", amount: sdl },
+        { name: "SDL (3.5%)", amount: sdl },
         { name: "WCF (0.5%)", amount: wcf },
       ],
       grossSalary: gross,
@@ -1181,7 +1189,6 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
             const previewBasic = Number(editForm.basicSalary) || 0;
             const previewAlwTotal = editForm.allowances.reduce((s, a) => s + (a.amount || 0), 0);
             const previewGross = previewBasic + previewAlwTotal;
-            const previewNet = previewGross - Math.round(calcPAYE(previewGross)) - calcNSSF_employee(previewGross);
             return (
               <div className="space-y-4">
                 <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
@@ -1242,39 +1249,51 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
                 </div>
 
                 {/* Live preview */}
-                <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-sm space-y-1">
-                  <div className="flex justify-between text-gray-600">
-                    <span>Gross Salary</span>
-                    <span className="font-medium">{formatCurrency(previewGross)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>PAYE</span>
-                    <span className="text-red-500">-{formatCurrency(Math.round(calcPAYE(previewGross)))}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>NSSF Employee (5%)</span>
-                    <span className="text-red-500">-{formatCurrency(calcNSSF_employee(previewGross))}</span>
-                  </div>
-                  <div className="flex justify-between font-bold border-t border-gray-200 pt-1 mt-1">
-                    <span>Net Pay</span>
-                    <span className="text-green-700">{formatCurrency(previewGross - Math.round(calcPAYE(previewGross)) - calcNSSF_employee(previewGross))}</span>
-                  </div>
-                  <div className="border-t border-dashed border-gray-200 pt-2 mt-1">
-                    <p className="text-xs text-gray-400 font-semibold mb-1">Employer Costs (not deducted)</p>
-                    <div className="flex justify-between text-xs text-gray-400">
-                      <span>NSSF Employer (5%)</span>
-                      <span>{formatCurrency(calcNSSF_employer(previewGross))}</span>
+                {(() => {
+                  const nssfEmp = calcNSSF_employee(previewGross);
+                  const taxable = previewGross - nssfEmp;
+                  const paye = calcPAYE(previewGross);
+                  const net = previewGross - nssfEmp - paye;
+                  return (
+                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-sm space-y-1">
+                    <div className="flex justify-between text-gray-600">
+                      <span>Gross Salary</span>
+                      <span className="font-medium">{formatCurrency(previewGross)}</span>
                     </div>
-                    <div className="flex justify-between text-xs text-gray-400">
-                      <span>SDL (4.5%)</span>
-                      <span>{formatCurrency(calcSDL(previewGross))}</span>
+                    <div className="flex justify-between text-gray-600">
+                      <span>NSSF Employee (5%)</span>
+                      <span className="text-red-500">-{formatCurrency(nssfEmp)}</span>
                     </div>
-                    <div className="flex justify-between text-xs text-gray-400">
-                      <span>WCF (0.5%)</span>
-                      <span>{formatCurrency(calcWCF(previewGross))}</span>
+                    <div className="flex justify-between text-gray-500 text-xs">
+                      <span>Taxable Income (after NSSF)</span>
+                      <span>{formatCurrency(taxable)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>PAYE (on taxable income)</span>
+                      <span className="text-red-500">-{formatCurrency(paye)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold border-t border-gray-200 pt-1 mt-1">
+                      <span>Net Pay</span>
+                      <span className="text-green-700">{formatCurrency(net)}</span>
+                    </div>
+                    <div className="border-t border-dashed border-gray-200 pt-2 mt-1">
+                      <p className="text-xs text-gray-400 font-semibold mb-1">Employer Costs (not deducted from employee)</p>
+                      <div className="flex justify-between text-xs text-gray-400">
+                        <span>NSSF Employer (5%)</span>
+                        <span>{formatCurrency(calcNSSF_employer(previewGross))}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-400">
+                        <span>SDL (3.5%)</span>
+                        <span>{formatCurrency(calcSDL(previewGross))}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-400">
+                        <span>WCF (0.5%)</span>
+                        <span>{formatCurrency(calcWCF(previewGross))}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                  );
+                })()}
               </div>
             );
           })()}
