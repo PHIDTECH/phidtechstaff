@@ -10,8 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Briefcase, Plus, Search, Edit, Trash2, AlertCircle, Tag, DollarSign, CheckCircle, ToggleLeft } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { Briefcase, Plus, Search, Edit, Trash2, AlertCircle, Tag, DollarSign, CheckCircle, ToggleLeft, Eye, X, Calendar } from "lucide-react";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY  = "phidtech_session";
 const SERVICES_KEY = "phidtech_services";
@@ -67,6 +67,7 @@ export default function ServicesPage() {
   const [form, setForm]           = useState(emptyForm());
   const [formError, setFormError] = useState("");
   const [deleteId, setDeleteId]   = useState<string | null>(null);
+  const [viewItem, setViewItem]   = useState<Service | null>(null);
 
   const reload = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
@@ -219,12 +220,12 @@ export default function ServicesPage() {
                   <TableHead>Price</TableHead>
                   <TableHead>Unit</TableHead>
                   <TableHead>Status</TableHead>
-                  {canManage && <TableHead className="text-right">Actions</TableHead>}
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map(svc => (
-                  <TableRow key={svc.id}>
+                  <TableRow key={svc.id} className="cursor-pointer hover:bg-blue-50/40" onClick={() => setViewItem(svc)}>
                     <TableCell>
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
@@ -238,7 +239,7 @@ export default function ServicesPage() {
                         {svc.category}
                       </span>
                     </TableCell>
-                    <TableCell className="text-sm text-gray-500 max-w-[220px] truncate" title={svc.description}>
+                    <TableCell className="text-sm text-gray-500 max-w-[200px] truncate" title={svc.description}>
                       {svc.description || "—"}
                     </TableCell>
                     <TableCell>
@@ -255,27 +256,32 @@ export default function ServicesPage() {
                         {svc.status}
                       </span>
                     </TableCell>
-                    {canManage && (
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost" size="sm"
-                            className={`text-xs h-7 px-2 ${svc.status === "active" ? "text-gray-500" : "text-green-600"}`}
-                            onClick={() => toggleStatus(svc.id)}
-                            title={svc.status === "active" ? "Deactivate" : "Activate"}
-                          >
-                            <ToggleLeft className="w-4 h-4 mr-1" />
-                            {svc.status === "active" ? "Deactivate" : "Activate"}
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(svc)} title="Edit">
-                            <Edit className="w-4 h-4 text-blue-400" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => setDeleteId(svc.id)} title="Delete">
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    )}
+                    <TableCell onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => setViewItem(svc)} title="View details">
+                          <Eye className="w-4 h-4 text-blue-400" />
+                        </Button>
+                        {canManage && (
+                          <>
+                            <Button
+                              variant="ghost" size="sm"
+                              className={`text-xs h-7 px-2 ${svc.status === "active" ? "text-gray-500" : "text-green-600"}`}
+                              onClick={() => toggleStatus(svc.id)}
+                              title={svc.status === "active" ? "Deactivate" : "Activate"}
+                            >
+                              <ToggleLeft className="w-4 h-4 mr-1" />
+                              {svc.status === "active" ? "Deactivate" : "Activate"}
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => openEdit(svc)} title="Edit">
+                              <Edit className="w-4 h-4 text-blue-400" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => setDeleteId(svc.id)} title="Delete">
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -364,6 +370,77 @@ export default function ServicesPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
             <Button onClick={saveForm}>{editItem ? "Save Changes" : "Add Service"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Service Detail Dialog */}
+      <Dialog open={!!viewItem} onOpenChange={v => { if (!v) setViewItem(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                <Briefcase className="w-5 h-5 text-blue-500" />
+              </div>
+              <span>{viewItem?.name}</span>
+            </DialogTitle>
+          </DialogHeader>
+          {viewItem && (
+            <div className="space-y-4">
+              {/* Status + Category badges */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-purple-50 text-purple-700">
+                  {viewItem.category}
+                </span>
+                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                  viewItem.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                }`}>
+                  {viewItem.status === "active" ? "✓ Active" : "Inactive"}
+                </span>
+              </div>
+
+              {/* Price block */}
+              <div className="bg-blue-50 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-blue-500 font-medium uppercase tracking-wide mb-1">Price</p>
+                  <p className="text-2xl font-bold text-blue-900">
+                    {viewItem.currency === "TZS" ? "TZS " : viewItem.currency + " "}{viewItem.price.toLocaleString()}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-blue-500 font-medium uppercase tracking-wide mb-1">Billing</p>
+                  <p className="text-sm font-semibold text-blue-800">{viewItem.unit}</p>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Description</p>
+                <p className="text-sm text-gray-700 leading-relaxed">
+                  {viewItem.description || <span className="italic text-gray-400">No description provided.</span>}
+                </p>
+              </div>
+
+              {/* Meta */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-400 mb-0.5 flex items-center gap-1"><Calendar className="w-3 h-3" /> Created</p>
+                  <p className="text-sm font-medium text-gray-700">{formatDate(viewItem.createdAt)}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-400 mb-0.5 flex items-center gap-1"><Calendar className="w-3 h-3" /> Last Updated</p>
+                  <p className="text-sm font-medium text-gray-700">{formatDate(viewItem.updatedAt)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="mt-2">
+            {canManage && viewItem && (
+              <Button variant="outline" onClick={() => { openEdit(viewItem); setViewItem(null); }}>
+                <Edit className="w-4 h-4 mr-2" /> Edit Service
+              </Button>
+            )}
+            <Button onClick={() => setViewItem(null)}><X className="w-4 h-4 mr-2" /> Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
