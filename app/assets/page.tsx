@@ -2,6 +2,7 @@
 export const dynamic = "force-dynamic";
 import { useState, useEffect, useRef } from "react";
 import { usePermissionGuard } from "@/lib/usePermissionGuard";
+import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -76,7 +77,7 @@ export default function AssetsPage() {
 
   const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
-    const c    = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
+    const c = getActiveCid(sess);
     setCid(c); cidRef.current = c;
     // Load staff
     try {

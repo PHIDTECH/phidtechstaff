@@ -2,6 +2,7 @@
 export const dynamic = "force-dynamic";
 import { useEffect, useRef, useState } from "react";
 import { usePermissionGuard } from "@/lib/usePermissionGuard";
+import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -153,7 +154,7 @@ export default function DocumentsPage() {
   const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
-    const c = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
+    const c = getActiveCid(sess);
     setCid(c); cidRef.current = c;
     const cos = lsGet<Company[]>(COMPANIES_KEY, []);
     setCompanies(cos);

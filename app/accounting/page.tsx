@@ -13,6 +13,7 @@ import {
   ShoppingCart, ArrowRight, CreditCard, Activity,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { getActiveCid } from "@/lib/getActiveCid";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, LineChart, Line, AreaChart, Area,
@@ -51,7 +52,7 @@ export default function AccountingPage() {
 
   useEffect(() => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
-    const c    = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
+    const c = getActiveCid(sess);
     setCid(c); cidRef.current = c;
     // Load from server APIs, fall back to localStorage
     (async () => {

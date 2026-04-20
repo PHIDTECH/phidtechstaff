@@ -2,6 +2,7 @@
 export const dynamic = "force-dynamic";
 import { useState, useEffect, useRef } from "react";
 import { usePermissionGuard } from "@/lib/usePermissionGuard";
+import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -65,7 +66,7 @@ export default function InvoicesPage() {
   const reload = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
-    const cid  = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
+    const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
     cidRef.current = cid;
     setInvoices(lsGet<Invoice[]>(INVOICES_KEY, []));

@@ -5,6 +5,8 @@ import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TrendingUp, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
+import { getActiveCid } from "@/lib/getActiveCid";
 import { formatCurrency } from "@/lib/utils";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -121,7 +123,7 @@ export default function ProfitLossPage() {
 
   const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
-    const c    = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
+    const c = getActiveCid(sess);
     setCid(c); cidRef.current = c;
     // Sales from server API
     try {

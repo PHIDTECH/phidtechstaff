@@ -2,6 +2,7 @@
 export const dynamic = "force-dynamic";
 import { useState, useEffect } from "react";
 import { usePermissionGuard } from "@/lib/usePermissionGuard";
+import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -130,7 +131,7 @@ export default function PayrollPage() {
   const loadSession = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
-    const cid = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
+    const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
     const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
     setActiveCompanyName(companies.find(c => c.id === cid)?.name ?? "");

@@ -21,6 +21,7 @@ import {
   UserCheck, Edit, Eye, Lock, CheckSquare, Square, X, Plus, Trash2
 } from "lucide-react";
 import { formatDate, formatCurrency, getInitials, getStatusColor } from "@/lib/utils";
+import { getActiveCid } from "@/lib/getActiveCid";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Allowance {
@@ -219,10 +220,9 @@ export default function UsersPage() {
 
   // Load users from server API; load companies/depts from localStorage
   const reload = async () => {
-    const sess = lsGet<{id:string;role:string;position:string;branchId?:string|null;isSuperAdmin:boolean}>("phidtech_session", null as never);
+    const sess = lsGet<{id:string;role:string;position:string;branchId?:string|null;isSuperAdmin:boolean;companyId?:string}>("phidtech_session", null as never);
     setSessionData(sess);
-    const rawCid = localStorage.getItem(ACTIVE_KEY) ?? "";
-    const cid = rawCid && rawCid !== '""' ? rawCid.replace(/^"|"$/g, "") : "";
+    const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
     setCompaniesList(lsGet(COMPANIES_KEY, []));
     setDeptsList(lsGet<string[]>("phidtech_departments", DEFAULT_DEPARTMENTS));

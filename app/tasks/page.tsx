@@ -2,6 +2,7 @@
 export const dynamic = "force-dynamic";
 import { useState, useEffect, useRef } from "react";
 import { usePermissionGuard } from "@/lib/usePermissionGuard";
+import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -104,7 +105,7 @@ export default function TasksPage() {
   const loadSession = async () => {
     const sess = lsGet<{id:string;name:string;position?:string;role?:string;isSuperAdmin:boolean;branchId?:string|null;companyId?:string}>(SESSION_KEY, null as never);
     setSession(sess);
-    const cid = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
+    const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
     const cos = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");

@@ -5,6 +5,8 @@ import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
 import { Button } from "@/components/ui/button";
+import { usePermissionGuard } from "@/lib/usePermissionGuard";
+import { getActiveCid } from "@/lib/getActiveCid";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -72,7 +74,7 @@ export default function AccountingSalesPage() {
 
   const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
-    const c    = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
+    const c = getActiveCid(sess);
     setCid(c); cidRef.current = c;
     // Load customers from server API
     try {
