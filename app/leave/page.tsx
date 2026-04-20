@@ -341,7 +341,7 @@ export default function LeavePage() {
             ) : visibleStaff.map(emp => {
               const empLeaves = visibleLeaves.filter(l => l.userId === emp.id && l.status === "approved");
               const usedDays  = empLeaves.reduce((s, l) => s + l.days, 0);
-              const annualMax = 21;
+              const annualMax = 28;
               const usedPct   = Math.min(Math.round((usedDays / annualMax) * 100), 100);
               return (
                 <div key={emp.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
