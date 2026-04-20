@@ -106,8 +106,9 @@ const ALL_PERMISSIONS = [
   { key: "services",     label: "Services & Pricing" },
   { key: "commissions",  label: "Commissions" },
   { key: "notifications",label: "Messages & Notifications" },
-  { key: "petty_cash",   label: "Petty Cash" },
-  { key: "admin",        label: "Admin Panel" },
+  { key: "petty_cash",     label: "Petty Cash" },
+  { key: "office_expenses", label: "Office Expenses" },
+  { key: "admin",           label: "Admin Panel" },
 ];
 
 const GROUP_ALL = ALL_PERMISSIONS.map(p => p.key);
@@ -118,14 +119,14 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
   group_cfo:        GROUP_ALL,
   group_manager:    GROUP_ALL,
   group_controller: GROUP_ALL,
-  group_auditor:    ["dashboard","accounting","invoices","expenses","payroll","reports","kpis","documents","notifications"],
+  group_auditor:    ["dashboard","accounting","invoices","expenses","office_expenses","payroll","reports","kpis","documents","notifications"],
   group_hr:         ["dashboard","users","attendance","leave","payroll","reports","kpis","notifications"],
   group_legal:      ["dashboard","documents","reports","notifications"],
   group_it:         ["dashboard","users","tasks","assets","documents","reports","notifications"],
   // Company-level
   admin:            GROUP_ALL,
-  manager:          ["dashboard","attendance","leave","payroll","tasks","kpis","expenses","reports","services","commissions","notifications","petty_cash"],
-  accountant:       ["dashboard","accounting","invoices","expenses","payroll","reports","services","commissions","notifications","petty_cash"],
+  manager:          ["dashboard","attendance","leave","payroll","tasks","kpis","expenses","office_expenses","reports","services","commissions","notifications","petty_cash"],
+  accountant:       ["dashboard","accounting","invoices","expenses","office_expenses","payroll","reports","services","commissions","notifications","petty_cash"],
   hr:               ["dashboard","users","attendance","leave","payroll","reports","services","notifications"],
   sales:            ["dashboard","sales","customers","invoices","tasks","reports","services","commissions","notifications"],
   it:               ["dashboard","tasks","assets","documents","reports","services","notifications"],

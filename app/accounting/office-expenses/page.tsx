@@ -79,7 +79,7 @@ const emptyForm = () => ({
 });
 
 export default function OfficeExpensesPage() {
-  usePermissionGuard("accounting");
+  usePermissionGuard("office_expenses");
   const [expenses, setExpenses]           = useState<OfficeExpense[]>([]);
   const [allStaff, setAllStaff]           = useState<StaffUser[]>([]);
   const [companies, setCompanies]         = useState<Company[]>([]);
@@ -97,17 +97,22 @@ export default function OfficeExpensesPage() {
   const [form, setForm]                   = useState(emptyForm());
   const [formError, setFormError]         = useState("");
 
-  const loadSession = () => {
+  const loadSession = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
     const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
     cidRef.current = cid;
-    setAllStaff(lsGet<StaffUser[]>(USERS_KEY, []));
     const cos = lsGet<Company[]>(COMPANIES_KEY, []);
     setCompanies(cos);
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
     setGroupCompanyId(gc);
+    // Load staff from server API
+    try {
+      const r = await fetch("/api/users", { cache: "no-store" });
+      if (r.ok) setAllStaff(await r.json());
+      else setAllStaff(lsGet<StaffUser[]>(USERS_KEY, []));
+    } catch { setAllStaff(lsGet<StaffUser[]>(USERS_KEY, [])); }
   };
 
   const fetchExpenses = async () => {
@@ -149,9 +154,14 @@ export default function OfficeExpensesPage() {
   const isGroupMgr  = isGroupUser && (session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager");
   const canManage   = session?.isSuperAdmin || isGroupMgr || session?.role === "admin" || session?.role === "manager" || session?.role === "accountant";
 
-  const companyExpenses = cid ? expenses.filter(e => e.companyId === cid) : expenses;
-  const companyStaff    = cid ? allStaff.filter(u => u.companyId === cid) : allStaff;
-  const showCompanyCol  = !cid;
+  // SuperAdmin sees ALL subsidiaries unless they have explicitly switched to a specific company
+  const companyExpenses = (session?.isSuperAdmin && !cid)
+    ? expenses
+    : (cid ? expenses.filter(e => e.companyId === cid) : expenses);
+  const companyStaff    = (session?.isSuperAdmin && !cid)
+    ? allStaff
+    : (cid ? allStaff.filter(u => u.companyId === cid) : allStaff);
+  const showCompanyCol  = !cid || (session?.isSuperAdmin && !cid);
   const getCompanyName  = (id: string) => companies.find(c => c.id === id)?.name ?? id;
 
   const totalAll      = companyExpenses.reduce((s, e) => s + e.amount, 0);
