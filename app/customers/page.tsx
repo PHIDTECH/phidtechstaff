@@ -12,7 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { UserCheck, Plus, Search, Mail, Phone, Building2, TrendingUp, Eye, Edit, Trash2, AlertCircle, Paperclip, X, FileText, Download } from "lucide-react";
+import { UserCheck, Plus, Search, Mail, Phone, Building2, TrendingUp, Eye, Edit, Trash2, AlertCircle, Paperclip, X, FileText, Download, KeyRound } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency, getStatusColor, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -58,15 +59,17 @@ interface Customer {
   status: string;
   totalRevenue: number;
   createdAt: string;
+  credentials?: string;
   attachments?: CustomerAttachment[];
 }
 
-const MAX_ATTACHMENTS = 5;
+const MAX_ATTACHMENTS = 15;
 const emptyForm = () => ({
   name: "", company: "", email: "", phone: "",
   type: "business", address: "",
   serviceProduct: "", date: "", branch: "",
   status: "active",
+  credentials: "",
   attachments: [] as CustomerAttachment[],
 });
 
@@ -212,6 +215,7 @@ export default function CustomersPage() {
       name: c.name, company: c.company, email: c.email, phone: c.phone,
       type: c.type, address: c.address, serviceProduct: c.serviceProduct,
       date: c.date, branch: c.branch, status: c.status,
+      credentials: c.credentials ?? "",
       attachments: c.attachments ?? [],
     });
     setFormError("");
@@ -221,7 +225,7 @@ export default function CustomersPage() {
   const saveCustomer = async (isEdit: boolean) => {
     if (!form.name.trim()) { setFormError("Customer name is required."); return; }
     if (isEdit && editCustomer) {
-      const payload = { id: editCustomer.id, ...form, totalRevenue: editCustomer.totalRevenue };
+      const payload = { id: editCustomer.id, ...form, credentials: form.credentials, totalRevenue: editCustomer.totalRevenue };
       await fetch("/api/customers", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -238,6 +242,7 @@ export default function CustomersPage() {
         serviceProduct: form.serviceProduct.trim(),
         date: form.date, branch: form.branch,
         status: form.status,
+        credentials: form.credentials,
         totalRevenue: 0,
         createdAt: new Date().toISOString().slice(0, 10),
       };
@@ -513,6 +518,15 @@ export default function CustomersPage() {
                   </div>
                 ))}
               </div>
+              {/* Credentials in detail view */}
+              {selectedCustomer.credentials && (
+                <div className="bg-amber-50 border border-amber-100 rounded-lg p-4">
+                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5" /> Credentials / Notes
+                  </p>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{selectedCustomer.credentials}</p>
+                </div>
+              )}
               {/* Attachments in detail view */}
               {(selectedCustomer.attachments ?? []).length > 0 && (
                 <div>
@@ -627,6 +641,20 @@ export default function CustomersPage() {
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Address</label>
                 <Input placeholder="City, Country" value={form.address} onChange={e => setForm(f => ({...f, address: e.target.value}))} />
               </div>
+              {/* Credentials */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-gray-400" /> Credentials / Notes
+                </label>
+                <Textarea
+                  placeholder="e.g. TIN: 123-456-789, Business Reg No: BRN-2024-001, Login details, contract terms, account references..."
+                  rows={4}
+                  value={form.credentials}
+                  onChange={e => setForm(f => ({...f, credentials: e.target.value}))}
+                  className="resize-y text-sm"
+                />
+                <p className="text-xs text-gray-400 mt-1">TIN, Business Reg, login details, contract info, or any important reference notes.</p>
+              </div>
               {/* Attachments */}
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">
@@ -647,31 +675,36 @@ export default function CustomersPage() {
                   </div>
                 )}
                 {(form.attachments ?? []).length < MAX_ATTACHMENTS && (
-                  <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-gray-200 hover:border-blue-300 rounded-lg px-4 py-3 text-sm text-gray-500 hover:text-blue-600 transition-colors">
-                    <Paperclip className="w-4 h-4" />
-                    <span>Click to attach a file</span>
+                  <label className="flex flex-col items-center gap-1.5 cursor-pointer border-2 border-dashed border-gray-200 hover:border-blue-300 rounded-lg px-4 py-4 text-sm text-gray-500 hover:text-blue-600 transition-colors">
+                    <Paperclip className="w-5 h-5" />
+                    <span className="font-medium">Click to attach files</span>
+                    <span className="text-xs text-gray-400">{(form.attachments ?? []).length}/{MAX_ATTACHMENTS} attached</span>
                     <input
                       type="file"
                       className="hidden"
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt"
+                      multiple
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt,.zip,.csv"
                       onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        if (file.size > 10 * 1024 * 1024) return;
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                          setForm(f => ({
-                            ...f,
-                            attachments: [...(f.attachments ?? []), { name: file.name, size: file.size, dataUrl: reader.result as string }]
-                          }));
-                        };
-                        reader.readAsDataURL(file);
+                        const files = Array.from(e.target.files ?? []);
+                        const current = form.attachments ?? [];
+                        const slots = MAX_ATTACHMENTS - current.length;
+                        const toAdd = files.slice(0, slots).filter(f => f.size <= 10 * 1024 * 1024);
+                        toAdd.forEach(file => {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            setForm(f => ({
+                              ...f,
+                              attachments: [...(f.attachments ?? []), { name: file.name, size: file.size, dataUrl: reader.result as string }]
+                            }));
+                          };
+                          reader.readAsDataURL(file);
+                        });
                         e.target.value = "";
                       }}
                     />
                   </label>
                 )}
-                <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, Images — max 10 MB each</p>
+                <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, Images, ZIP, CSV — max 10 MB each · up to {MAX_ATTACHMENTS} files</p>
               </div>
             </div>
             <DialogFooter>
