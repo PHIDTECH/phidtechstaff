@@ -53,8 +53,19 @@ export default function AccountingPage() {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const c    = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setCid(c); cidRef.current = c;
-    setSales(lsGet<SaleEntry[]>(SALES_KEY, []));
-    setExpenses(lsGet<ExpenseEntry[]>(EXP_KEY, []));
+    // Load from server APIs, fall back to localStorage
+    (async () => {
+      try {
+        const sr = await fetch("/api/accounting/sales", { cache: "no-store" });
+        if (sr.ok) setSales(await sr.json());
+        else setSales(lsGet<SaleEntry[]>(SALES_KEY, []));
+      } catch { setSales(lsGet<SaleEntry[]>(SALES_KEY, [])); }
+      try {
+        const er = await fetch("/api/expenses", { cache: "no-store" });
+        if (er.ok) setExpenses(await er.json());
+        else setExpenses(lsGet<ExpenseEntry[]>(EXP_KEY, []));
+      } catch { setExpenses(lsGet<ExpenseEntry[]>(EXP_KEY, [])); }
+    })();
   }, []);
 
   const co = cidRef.current || cid;

@@ -141,6 +141,7 @@ export default function ExpensesPage() {
   const isGroupUser  = !!groupCompanyId && session?.companyId === groupCompanyId;
   const isGroupMgr   = isGroupUser && (session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager");
   const companyExpenses = cid ? expenses.filter(e => e.companyId === cid) : expenses;
+  // Show ALL active staff for the company regardless of branch
   const companyStaff    = cid ? allStaff.filter(u => u.companyId === cid) : allStaff;
   const canManage = session?.isSuperAdmin || isGroupMgr || session?.role === "manager" || session?.role === "accountant" || session?.role === "admin";
 
@@ -182,9 +183,12 @@ export default function ExpensesPage() {
       await fetch("/api/expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: editItem.id, userId: form.userId, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description }) });
     } else {
+      // Use selected staff member's own companyId so cross-branch staff submit correctly
+      const selectedStaff = allStaff.find(u => u.id === form.userId);
+      const expCompanyId  = selectedStaff?.companyId || cidRef.current || activeCompanyId;
       const newExp: Expense = {
         id: `exp-${Date.now()}`,
-        companyId: cidRef.current || activeCompanyId,
+        companyId: expCompanyId,
         userId: form.userId, title: form.title.trim(),
         category: form.category, amount: Number(form.amount) || 0,
         description: form.description, status: "pending",
