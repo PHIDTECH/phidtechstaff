@@ -1,7 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useState, useEffect } from "react";
-import { usePermissionGuard } from "@/lib/usePermissionGuard";
+import { useRouter } from "next/navigation";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -57,7 +57,7 @@ const emptyForm = () => ({
 });
 
 export default function ServicesPage() {
-  usePermissionGuard("services");
+  const router = useRouter();
   const [session, setSession]     = useState<Session | null>(null);
   const [services, setServices]   = useState<Service[]>([]);
   const [search, setSearch]       = useState("");
@@ -70,13 +70,14 @@ export default function ServicesPage() {
 
   const reload = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
+    if (!sess) { router.replace("/login"); return; }
     setSession(sess);
     setServices(lsGet<Service[]>(SERVICES_KEY, []));
   };
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => { reload(); }, [router]);
 
-  const isSuperAdmin = session?.isSuperAdmin === true;
+  const canManage = session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager" || session?.role === "accountant";
 
   const filtered = services.filter(s => {
     const q = search.toLowerCase();
@@ -162,7 +163,7 @@ export default function ServicesPage() {
         subtitle="Manage company services and their prices — available across all subsidiaries"
         icon={Briefcase}
         actions={
-          isSuperAdmin ? (
+          canManage ? (
             <Button size="sm" onClick={openAdd}>
               <Plus className="w-4 h-4 mr-2" /> Add Service
             </Button>
@@ -201,9 +202,9 @@ export default function ServicesPage() {
             </div>
             <p className="font-semibold text-gray-700">No services found</p>
             <p className="text-sm text-gray-400">
-              {isSuperAdmin ? 'Click "Add Service" to add your first service.' : "No services have been added yet."}
+              {canManage ? 'Click "Add Service" to add your first service.' : "No services have been added yet."}
             </p>
-            {isSuperAdmin && (
+            {canManage && (
               <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4 mr-2" />Add Service</Button>
             )}
           </div>
@@ -218,7 +219,7 @@ export default function ServicesPage() {
                   <TableHead>Price</TableHead>
                   <TableHead>Unit</TableHead>
                   <TableHead>Status</TableHead>
-                  {isSuperAdmin && <TableHead className="text-right">Actions</TableHead>}
+                  {canManage && <TableHead className="text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -254,7 +255,7 @@ export default function ServicesPage() {
                         {svc.status}
                       </span>
                     </TableCell>
-                    {isSuperAdmin && (
+                    {canManage && (
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
                           <Button

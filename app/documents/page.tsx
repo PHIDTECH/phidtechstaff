@@ -269,9 +269,13 @@ export default function DocumentsPage() {
       const assignedStaff = form.permissions === "specific_staff" && form.assignedTo
         ? allActiveStaff.find(u => u.id === form.assignedTo)
         : undefined;
+      // Resolve companyId: for regular staff use their own companyId; for superadmin use active company
+      const docCompanyId = session?.isSuperAdmin
+        ? (cidRef.current || cid)
+        : (session?.companyId ?? cidRef.current ?? cid);
       const newDoc: Doc = {
         id:             `doc-${Date.now()}`,
-        companyId:      cidRef.current || cid,
+        companyId:      docCompanyId,
         name:           form.docName.trim() || selectedFile.name,
         category:       form.category,
         permissions:    form.permissions,

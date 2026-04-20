@@ -70,28 +70,35 @@ export default function AccountingExpensesPage() {
   const [form, setForm]                   = useState(emptyForm());
   const [formError, setFormError]         = useState("");
 
-  const reload = () => {
+  const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
     const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
     cidRef.current = cid;
-    setExpenses(lsGet<Expense[]>(EXPENSES_KEY, []));
-    setAllStaff(lsGet<StaffUser[]>(USERS_KEY, []));
     const cos = lsGet<Company[]>(COMPANIES_KEY, []);
     setCompanies(cos);
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
     setGroupCompanyId(gc);
+    // Load expenses from server API so all submitted claims appear
+    try {
+      const r = await fetch("/api/expenses", { cache: "no-store" });
+      if (r.ok) setExpenses(await r.json());
+      else setExpenses(lsGet<Expense[]>(EXPENSES_KEY, []));
+    } catch { setExpenses(lsGet<Expense[]>(EXPENSES_KEY, [])); }
+    // Load staff from server API
+    try {
+      const r = await fetch("/api/users", { cache: "no-store" });
+      if (r.ok) setAllStaff(await r.json());
+      else setAllStaff(lsGet<StaffUser[]>(USERS_KEY, []));
+    } catch { setAllStaff(lsGet<StaffUser[]>(USERS_KEY, [])); }
   };
 
   useEffect(() => {
     reload();
-    window.addEventListener("phidtech_companies_updated", reload);
-    window.addEventListener("storage", reload);
-    return () => {
-      window.removeEventListener("phidtech_companies_updated", reload);
-      window.removeEventListener("storage", reload);
-    };
+    const onUpdate = () => reload();
+    window.addEventListener("phidtech_companies_updated", onUpdate);
+    return () => window.removeEventListener("phidtech_companies_updated", onUpdate);
   }, []);
 
   const cid = cidRef.current || activeCompanyId;
@@ -108,8 +115,11 @@ export default function AccountingExpensesPage() {
   const getCompanyName = (id: string) => companies.find(c => c.id === id)?.name ?? id;
 
   const pending         = companyExpenses.filter(e => e.status === "pending").length;
+  const rejected        = companyExpenses.filter(e => e.status === "rejected").length;
   const approved        = companyExpenses.filter(e => e.status === "approved" || e.status === "paid").length;
-  const totalApproved   = companyExpenses.filter(e => e.status === "approved" || e.status === "paid").reduce((s, e) => s + e.amount, 0);
+  // Only approved/paid count in books of accounts
+  const inBooksExpenses = companyExpenses.filter(e => e.status === "approved" || e.status === "paid");
+  const totalInBooks    = inBooksExpenses.reduce((s, e) => s + e.amount, 0);
   const totalPending    = companyExpenses.filter(e => e.status === "pending").reduce((s, e) => s + e.amount, 0);
   const totalReimbursed = companyExpenses.filter(e => e.status === "paid").reduce((s, e) => s + e.amount, 0);
 
@@ -122,8 +132,6 @@ export default function AccountingExpensesPage() {
     const matchCategory = categoryFilter === "all" || e.category === categoryFilter;
     return matchSearch && matchStatus && matchCategory;
   });
-
-  const save = (list: Expense[]) => { lsSet(EXPENSES_KEY, list); setExpenses(list); };
 
   const openAdd = () => {
     setEditItem(null);
@@ -139,34 +147,35 @@ export default function AccountingExpensesPage() {
     setShowDialog(true);
   };
 
-  const saveForm = () => {
+  const saveForm = async () => {
     if (!form.userId)       { setFormError("Select an employee."); return; }
     if (!form.title.trim()) { setFormError("Enter a claim title."); return; }
     if (!form.amount)       { setFormError("Enter an amount."); return; }
     if (editItem) {
-      save(expenses.map(e => e.id === editItem.id
-        ? { ...e, userId: form.userId, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description }
-        : e));
+      await fetch("/api/expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editItem.id, userId: form.userId, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description }) });
     } else {
-      save([...expenses, {
-        id: `exp-${Date.now()}`,
-        companyId: cidRef.current || activeCompanyId,
-        userId: form.userId, title: form.title.trim(),
-        category: form.category, amount: Number(form.amount) || 0,
-        description: form.description, status: "pending",
-        submittedAt: new Date().toISOString(),
-      }]);
+      await fetch("/api/expenses", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: `exp-${Date.now()}`, companyId: cidRef.current || activeCompanyId,
+          userId: form.userId, title: form.title.trim(), category: form.category,
+          amount: Number(form.amount) || 0, description: form.description,
+          status: "pending", submittedAt: new Date().toISOString() }) });
     }
     setShowDialog(false);
+    await reload();
   };
 
-  const updateStatus = (id: string, status: Expense["status"]) => {
-    save(expenses.map(e => e.id === id
-      ? { ...e, status, approvedBy: (status === "approved" || status === "paid") ? (session?.id ?? "") : e.approvedBy }
-      : e));
+  const updateStatus = async (id: string, status: Expense["status"]) => {
+    await fetch("/api/expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status, approvedBy: (status === "approved" || status === "paid") ? (session?.id ?? "") : undefined }) });
+    await reload();
   };
 
-  const deleteExp = (id: string) => { save(expenses.filter(e => e.id !== id)); setDeleteId(null); };
+  const deleteExp = async (id: string) => {
+    await fetch(`/api/expenses?id=${id}`, { method: "DELETE" });
+    setDeleteId(null);
+    await reload();
+  };
   const sf = (f: Partial<typeof form>) => setForm(p => ({ ...p, ...f }));
 
   return (
@@ -185,10 +194,10 @@ export default function AccountingExpensesPage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Total Claims"     value={companyExpenses.length}          icon={Receipt}     iconBg="bg-blue-50"   iconColor="text-blue-600" />
-        <StatCard title="Pending Approval" value={pending}                          icon={Clock}       iconBg="bg-yellow-50" iconColor="text-yellow-600" subtitle={formatCurrency(totalPending)} />
-        <StatCard title="Approved / Paid"  value={approved}                         icon={CheckCircle} iconBg="bg-green-50"  iconColor="text-green-600" subtitle={formatCurrency(totalApproved)} />
-        <StatCard title="Total Reimbursed" value={formatCurrency(totalReimbursed)}  icon={DollarSign}  iconBg="bg-purple-50" iconColor="text-purple-600" />
+        <StatCard title="Total Claims"      value={companyExpenses.length}         icon={Receipt}     iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle={`${rejected} rejected`} />
+        <StatCard title="Pending Approval"  value={pending}                        icon={Clock}       iconBg="bg-yellow-50" iconColor="text-yellow-600" subtitle={formatCurrency(totalPending)} />
+        <StatCard title="In Books (Approved)" value={approved}                     icon={CheckCircle} iconBg="bg-green-50"  iconColor="text-green-600" subtitle={formatCurrency(totalInBooks)} />
+        <StatCard title="Reimbursed (Paid)" value={formatCurrency(totalReimbursed)} icon={DollarSign} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="Paid out to staff" />
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
