@@ -173,7 +173,6 @@ export default function ProfitLossPage() {
   const totalSalaries   = coP.filter(p => p.status === "paid").reduce((s,p) => s + p.netSalary, 0);
   const totalExp        = totalExpClaims + totalOfficeExp + totalSalaries;
   const grossProfit    = coS.reduce((s, e) => s + (e.subtotal ?? e.paid), 0);
-  const taxTotal       = coS.reduce((s, e) => s + (e.tax ?? 0), 0);
   const netProfit      = totalRev - totalExp;
   const margin         = totalRev > 0 ? ((netProfit / totalRev) * 100).toFixed(1) : "0.0";
 
@@ -230,9 +229,9 @@ export default function ProfitLossPage() {
           <div className="flex items-center gap-1 mt-1 text-xs text-gray-400">Margin: {margin}%</div>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-xs text-gray-500 mb-1">Tax Collected</p>
-          <p className="text-2xl font-bold text-purple-700">{formatCurrency(taxTotal)}</p>
-          <div className="text-xs text-gray-400 mt-1">18% VAT on sales</div>
+          <p className="text-xs text-gray-500 mb-1">Outstanding</p>
+          <p className="text-2xl font-bold text-red-600">{formatCurrency(coS.reduce((s,e) => s + (e.amount - e.paid), 0))}</p>
+          <div className="text-xs text-gray-400 mt-1">Uncollected balance</div>
         </div>
       </div>
 
@@ -276,9 +275,6 @@ export default function ProfitLossPage() {
             </div>
             <div className="flex justify-between py-1 text-sm text-gray-500 pl-4">
               <span>Gross Sales</span><span>{formatCurrency(grossProfit)}</span>
-            </div>
-            <div className="flex justify-between py-1 text-sm text-gray-500 pl-4">
-              <span>VAT (18%)</span><span>{formatCurrency(taxTotal)}</span>
             </div>
             {/* Expenses section */}
             <div className="flex justify-between py-1.5 font-semibold text-sm text-gray-700 border-b border-gray-100 mt-2">

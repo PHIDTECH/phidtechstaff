@@ -41,7 +41,6 @@ interface Sale {
   notes: string; createdAt: string;
 }
 
-const TAX_RATE = 0.18;
 const emptyItem = (): SaleItem => ({ description: "", quantity: 1, unitPrice: 0, total: 0 });
 const emptyForm = () => ({
   customerId: "", date: new Date().toISOString().slice(0, 10),
@@ -142,13 +141,12 @@ export default function AccountingSalesPage() {
   };
 
   const recalc = (items: SaleItem[], paidStr: string) => {
-    const sub  = items.reduce((s, it) => s + it.total, 0);
-    const tax  = Math.round(sub * TAX_RATE);
-    const total = sub + tax;
+    const sub   = items.reduce((s, it) => s + it.total, 0);
+    const total = sub;
     const paid  = Math.min(Number(paidStr) || 0, total);
     const bal   = total - paid;
     const status: Sale["status"] = paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid";
-    return { subtotal: sub, tax, amount: total, paid, balance: bal, status };
+    return { subtotal: sub, tax: 0, amount: total, paid, balance: bal, status };
   };
 
   const openAdd = () => {
@@ -326,8 +324,6 @@ export default function AccountingSalesPage() {
               </Table>
               <div className="flex justify-end">
                 <div className="w-56 space-y-1.5 text-sm">
-                  <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{formatCurrency(viewItem.subtotal)}</span></div>
-                  <div className="flex justify-between text-gray-500"><span>Tax (18%)</span><span>{formatCurrency(viewItem.tax)}</span></div>
                   <div className="flex justify-between font-bold border-t border-gray-200 pt-1.5"><span>Total</span><span className="text-blue-700">{formatCurrency(viewItem.amount)}</span></div>
                   <div className="flex justify-between text-green-700 font-semibold"><span>Paid</span><span>{formatCurrency(viewItem.paid)}</span></div>
                   <div className="flex justify-between text-red-600 font-semibold"><span>Balance</span><span>{formatCurrency(viewItem.balance)}</span></div>
@@ -433,8 +429,6 @@ export default function AccountingSalesPage() {
               <Button variant="ghost" size="sm" className="text-blue-600 text-xs" onClick={() => sf({ items: [...form.items, emptyItem()] })}>+ Add Item</Button>
               <div className="border-t border-gray-100 pt-2 flex justify-end">
                 <div className="w-52 space-y-1 text-sm">
-                  <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{formatCurrency(previewCalc.subtotal)}</span></div>
-                  <div className="flex justify-between text-gray-500"><span>Tax (18%)</span><span>{formatCurrency(previewCalc.tax)}</span></div>
                   <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-1"><span>Total</span><span>{formatCurrency(previewCalc.amount)}</span></div>
                   <div className="flex justify-between text-green-700"><span>Paid</span><span>{formatCurrency(previewCalc.paid)}</span></div>
                   <div className="flex justify-between text-red-600 font-semibold"><span>Balance Due</span><span>{formatCurrency(previewCalc.balance)}</span></div>
