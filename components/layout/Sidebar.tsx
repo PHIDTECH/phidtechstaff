@@ -168,7 +168,7 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
   const [activeCompanyId, setActiveCompanyId] = useState("");
 
   useEffect(() => {
-    const load = () => {
+    const load = async () => {
       try {
         const s = localStorage.getItem(SESSION_KEY);
         const rawCid = localStorage.getItem("phidtech_active_company") ?? "";
@@ -177,7 +177,19 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
         if (s) {
           const sess = JSON.parse(s);
           setSession(sess);
-          const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+          // Load companies from server API for always-fresh names
+          let companies: {id:string;name:string}[] = [];
+          try {
+            const r = await fetch("/api/companies", { cache: "no-store" });
+            if (r.ok) {
+              companies = await r.json();
+              try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(companies)); } catch {}
+            } else {
+              companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+            }
+          } catch {
+            companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+          }
           if (sess.isSuperAdmin) {
             setMyCompanyName(companies.find(c => c.id === cid)?.name ?? "");
           } else if (sess.companyId) {

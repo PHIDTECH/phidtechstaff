@@ -90,10 +90,30 @@ export default function DashboardPage() {
       const r = await fetch("/api/branches", { cache: "no-store" });
       if (r.ok) setBranches(await r.json());
     } catch {}
-    setTasks(lsGet<Task[]>(TASKS_KEY, []));
-    setLeaves(lsGet<LeaveReq[]>(LEAVE_KEY, []));
-    setSales(lsGet<Sale[]>(SALES_KEY, []));
-    setExpenses(lsGet<Expense[]>(EXPENSES_KEY, []));
+    // Load tasks from server
+    try {
+      const r = await fetch("/api/tasks", { cache: "no-store" });
+      if (r.ok) setTasks(await r.json());
+      else setTasks(lsGet<Task[]>(TASKS_KEY, []));
+    } catch { setTasks(lsGet<Task[]>(TASKS_KEY, [])); }
+    // Load leave requests from server
+    try {
+      const r = await fetch("/api/leave", { cache: "no-store" });
+      if (r.ok) setLeaves(await r.json());
+      else setLeaves(lsGet<LeaveReq[]>(LEAVE_KEY, []));
+    } catch { setLeaves(lsGet<LeaveReq[]>(LEAVE_KEY, [])); }
+    // Load sales from server
+    try {
+      const r = await fetch("/api/accounting/sales", { cache: "no-store" });
+      if (r.ok) setSales(await r.json());
+      else setSales(lsGet<Sale[]>(SALES_KEY, []));
+    } catch { setSales(lsGet<Sale[]>(SALES_KEY, [])); }
+    // Load expenses from server
+    try {
+      const r = await fetch("/api/expenses", { cache: "no-store" });
+      if (r.ok) setExpenses(await r.json());
+      else setExpenses(lsGet<Expense[]>(EXPENSES_KEY, []));
+    } catch { setExpenses(lsGet<Expense[]>(EXPENSES_KEY, [])); }
   };
 
   useEffect(() => {
