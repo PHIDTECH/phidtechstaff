@@ -75,7 +75,11 @@ export default function ExpensesPage() {
 
   const loadSession = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
-    const cid  = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
+    // Non-superadmin staff must ALWAYS use their own companyId — never ACTIVE_KEY
+    // (ACTIVE_KEY reflects the company an admin last switched to, not the staff's company)
+    const cid  = sess?.isSuperAdmin
+      ? lsStr(ACTIVE_KEY)
+      : (sess?.companyId ?? "");
     setSession(sess);
     setActiveCompanyId(cid);
     cidRef.current = cid;
@@ -162,7 +166,9 @@ export default function ExpensesPage() {
 
   const openAdd = () => {
     setEditItem(null);
-    setForm({ ...emptyForm(), userId: session?.isSuperAdmin ? "" : (session?.id ?? "") });
+    // Pre-fill the logged-in user as employee (admins/superadmin leave blank to pick)
+    const canPickAny = session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager" || session?.role === "accountant";
+    setForm({ ...emptyForm(), userId: canPickAny ? "" : (session?.id ?? "") });
     setFormError("");
     setShowDialog(true);
   };
@@ -183,9 +189,12 @@ export default function ExpensesPage() {
       await fetch("/api/expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: editItem.id, userId: form.userId, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description }) });
     } else {
-      // Use selected staff member's own companyId so cross-branch staff submit correctly
+      // Resolve companyId: selected staff's company → current session company → active company
       const selectedStaff = allStaff.find(u => u.id === form.userId);
-      const expCompanyId  = selectedStaff?.companyId || cidRef.current || activeCompanyId;
+      const expCompanyId  = selectedStaff?.companyId
+        || (!session?.isSuperAdmin ? session?.companyId : undefined)
+        || cidRef.current
+        || activeCompanyId;
       const newExp: Expense = {
         id: `exp-${Date.now()}`,
         companyId: expCompanyId,
@@ -403,29 +412,47 @@ export default function ExpensesPage() {
                 <p className="text-sm text-red-600">{formError}</p>
               </div>
             )}
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Employee</label>
-              <Select value={form.userId} onValueChange={v => sf({ userId: v })}>
-                <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                <SelectContent>
-                  {companyStaff.length === 0 && (
-                    <div className="px-3 py-4 text-center text-sm text-gray-400">No staff found</div>
-                  )}
-                  {companyStaff.map(u => {
-                    const branch = branches.find(b => b.id === u.branchId);
-                    return (
-                      <SelectItem key={u.id} value={u.id}>
-                        <div className="flex items-center gap-2">
-                          <span>{u.name}</span>
-                          {u.department && <span className="text-gray-400 text-xs">· {u.department}</span>}
-                          {branch && <span className="text-blue-500 text-xs font-medium">· {branch.name}</span>}
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
+            {(() => {
+              const canPickAny = session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager" || session?.role === "accountant";
+              if (canPickAny) {
+                return (
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1.5 block">Employee</label>
+                    <Select value={form.userId} onValueChange={v => sf({ userId: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                      <SelectContent>
+                        {companyStaff.length === 0 && (
+                          <div className="px-3 py-4 text-center text-sm text-gray-400">No staff found</div>
+                        )}
+                        {companyStaff.map(u => {
+                          const branch = branches.find(b => b.id === u.branchId);
+                          return (
+                            <SelectItem key={u.id} value={u.id}>
+                              <div className="flex items-center gap-2">
+                                <span>{u.name}</span>
+                                {u.department && <span className="text-gray-400 text-xs">· {u.department}</span>}
+                                {branch && <span className="text-blue-500 text-xs font-medium">· {branch.name}</span>}
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              }
+              const me = allStaff.find(u => u.id === session?.id);
+              return (
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">Employee</label>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
+                    <span className="font-medium">{me?.name ?? session?.name ?? "You"}</span>
+                    {me?.department && <span className="text-gray-400 text-xs">· {me.department}</span>}
+                    {me?.branchId && <span className="text-blue-500 text-xs">· {branches.find(b => b.id === me.branchId)?.name}</span>}
+                  </div>
+                </div>
+              );
+            })()}
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Claim Title</label>
               <Input placeholder="e.g. Client Visit - Arusha Trip" value={form.title} onChange={e => sf({ title: e.target.value })} />
