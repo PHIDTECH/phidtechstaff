@@ -258,66 +258,68 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
   return (
     <aside
       className={cn(
-        "flex flex-col h-full bg-gray-900 text-gray-100 transition-all duration-300",
+        "flex flex-col h-full transition-all duration-300",
+        "bg-[#0B1437] text-slate-300",
         collapsed && !mobile ? "w-16" : "w-64"
       )}
     >
       {/* Logo */}
-      <div className="flex items-center justify-between px-4 h-16 border-b border-gray-800 shrink-0">
+      <div className="flex items-center justify-between px-4 h-16 shrink-0 bg-[#0d1845] border-b border-white/5">
         {(!collapsed || mobile) && (
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isGroupMode ? "bg-gradient-to-br from-blue-700 to-indigo-800" : "bg-blue-600"}`}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-lg ${isGroupMode ? "bg-gradient-to-br from-violet-600 to-indigo-700" : "bg-gradient-to-br from-blue-500 to-blue-700"}`}>
               {isGroupMode
-                ? <span className="text-sm">👑</span>
+                ? <span className="text-base">👑</span>
                 : <Building2 className="w-4 h-4 text-white" />
               }
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-bold text-white leading-none truncate">PHIDTECH MS</p>
-              <p className="text-[10px] text-gray-400 truncate">
+              <p className="text-sm font-bold text-white leading-tight truncate tracking-wide">PHIDTECH MS</p>
+              <p className="text-[10px] text-blue-300/70 truncate">
                 {isGroupMode ? "Group HQ" : (myCompanyName || "Select company")}
               </p>
             </div>
           </div>
         )}
         {collapsed && !mobile && (
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center mx-auto ${isGroupMode ? "bg-gradient-to-br from-blue-700 to-indigo-800" : "bg-blue-600"}`}>
-            {isGroupMode ? <span className="text-sm">👑</span> : <Building2 className="w-4 h-4 text-white" />}
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center mx-auto shadow-lg ${isGroupMode ? "bg-gradient-to-br from-violet-600 to-indigo-700" : "bg-gradient-to-br from-blue-500 to-blue-700"}`}>
+            {isGroupMode ? <span className="text-base">👑</span> : <Building2 className="w-4 h-4 text-white" />}
           </div>
         )}
         {mobile ? (
-          <button onClick={onClose} className="p-1 hover:bg-gray-800 rounded-lg">
-            <X className="w-5 h-5" />
+          <button onClick={onClose} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+            <X className="w-4 h-4 text-slate-400" />
           </button>
         ) : (
-          <button
-            onClick={onToggle}
-            className="p-1.5 hover:bg-gray-800 rounded-lg ml-auto"
-          >
-            <Menu className="w-4 h-4 text-gray-400" />
+          <button onClick={onToggle} className="p-1.5 hover:bg-white/10 rounded-lg ml-auto transition-colors">
+            <Menu className="w-4 h-4 text-slate-400" />
           </button>
         )}
       </div>
 
       {/* Nav Items */}
-      <nav className="flex-1 overflow-y-auto py-3 scrollbar-thin">
-        {navigation.map((group) => (
-          <div key={group.title} className="mb-1">
+      <nav className="flex-1 overflow-y-auto py-2 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+        {navigation.map((group, gi) => (
+          <div key={group.title} className={cn("mb-0.5", gi > 0 && "mt-1")}>
             {(!collapsed || mobile) && (
               <button
                 onClick={() => toggleGroup(group.title)}
-                className="flex items-center justify-between w-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+                className="flex items-center justify-between w-full px-3 py-1.5 mt-1 transition-colors group"
               >
-                {group.title}
-                {expandedGroups.includes(group.title) ? (
-                  <ChevronDown className="w-3 h-3" />
-                ) : (
-                  <ChevronRight className="w-3 h-3" />
-                )}
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1 h-1 rounded-full bg-blue-500/60 group-hover:bg-blue-400 transition-colors" />
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-blue-300/60 group-hover:text-blue-300 transition-colors">
+                    {group.title}
+                  </span>
+                </div>
+                {expandedGroups.includes(group.title)
+                  ? <ChevronDown className="w-3 h-3 text-slate-600 group-hover:text-slate-400" />
+                  : <ChevronRight className="w-3 h-3 text-slate-600 group-hover:text-slate-400" />
+                }
               </button>
             )}
             {(expandedGroups.includes(group.title) || collapsed) && (
-              <div className="mt-0.5">
+              <div className="mt-0.5 space-y-0.5 px-2">
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const active = isActive(item.href);
@@ -328,27 +330,24 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
                   if (hasChildren && (!collapsed || mobile)) {
                     return (
                       <div key={item.href}>
-                        {/* Parent item with submenu toggle */}
                         <button
                           onClick={() => toggleItem(item.href)}
                           className={cn(
-                            "w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors rounded-lg mx-2 mb-0.5",
+                            "w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all duration-150",
                             parentActive
-                              ? "text-blue-400 bg-gray-800"
-                              : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                              ? "bg-blue-600/20 text-blue-300 font-medium"
+                              : "text-slate-400 hover:bg-white/5 hover:text-white"
                           )}
-                          style={{ width: "calc(100% - 1rem)" }}
                         >
-                          <Icon className="w-4 h-4 shrink-0" />
+                          <Icon className={cn("w-4 h-4 shrink-0", parentActive ? "text-blue-400" : "text-slate-500")} />
                           <span className="flex-1 text-left">{item.label}</span>
                           {itemExpanded
-                            ? <ChevronDown className="w-3 h-3 shrink-0 opacity-60" />
-                            : <ChevronRight className="w-3 h-3 shrink-0 opacity-60" />
+                            ? <ChevronDown className="w-3 h-3 shrink-0 opacity-50" />
+                            : <ChevronRight className="w-3 h-3 shrink-0 opacity-50" />
                           }
                         </button>
-                        {/* Sub-items */}
                         {itemExpanded && (
-                          <div className="ml-3 border-l border-gray-700 pl-2 mb-1">
+                          <div className="ml-4 mt-0.5 border-l-2 border-blue-600/30 pl-3 space-y-0.5 mb-1">
                             {item.children!.map(child => {
                               const CIcon = child.icon;
                               const cActive = isActive(child.href);
@@ -358,10 +357,10 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
                                   href={child.href}
                                   onClick={mobile ? onClose : undefined}
                                   className={cn(
-                                    "flex items-center gap-2.5 px-3 py-1.5 text-xs transition-colors rounded-lg mx-1 mb-0.5",
+                                    "flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md transition-all duration-150",
                                     cActive
-                                      ? "bg-blue-600 text-white"
-                                      : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                                      ? "bg-blue-600 text-white font-medium shadow-sm shadow-blue-900"
+                                      : "text-slate-500 hover:bg-white/5 hover:text-white"
                                   )}
                                 >
                                   <CIcon className="w-3.5 h-3.5 shrink-0" />
@@ -381,15 +380,15 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
                       href={item.href}
                       onClick={mobile ? onClose : undefined}
                       className={cn(
-                        "flex items-center gap-3 px-4 py-2 text-sm transition-colors rounded-lg mx-2 mb-0.5",
+                        "flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all duration-150",
                         active
-                          ? "bg-blue-600 text-white"
-                          : "text-gray-400 hover:bg-gray-800 hover:text-white",
+                          ? "bg-blue-600 text-white font-medium shadow-md shadow-blue-900/50"
+                          : "text-slate-400 hover:bg-white/5 hover:text-slate-100",
                         collapsed && !mobile && "justify-center px-2"
                       )}
                       title={collapsed && !mobile ? item.label : undefined}
                     >
-                      <Icon className="w-4 h-4 shrink-0" />
+                      <Icon className={cn("w-4 h-4 shrink-0", active ? "text-white" : "text-slate-500 group-hover:text-white")} />
                       {(!collapsed || mobile) && <span>{item.label}</span>}
                     </Link>
                   );
@@ -402,16 +401,18 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
 
       {/* Bottom user info */}
       {(!collapsed || mobile) && (
-        <div className="border-t border-gray-800 p-4 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
+        <div className="shrink-0 p-3 border-t border-white/5 bg-[#0d1845]">
+          <div className="flex items-center gap-3 px-1">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shrink-0 ring-2 ring-blue-500/30 shadow">
               {getInitials(session?.name ?? "SA")}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-white truncate">{session?.name ?? "System Administrator"}</p>
-              <p className="text-xs text-gray-400 truncate capitalize">{session?.position ?? session?.role ?? "Admin"}</p>
+              <p className="text-sm font-semibold text-white truncate leading-tight">{session?.name ?? "System Administrator"}</p>
+              <p className="text-[10px] text-blue-300/60 truncate capitalize mt-0.5">
+                {session?.isSuperAdmin ? "Super Admin" : (session?.position ?? session?.role ?? "Admin")}
+              </p>
               {!session?.isSuperAdmin && myCompanyName && (
-                <p className="text-[10px] text-gray-500 truncate mt-0.5">{myCompanyName}</p>
+                <p className="text-[10px] text-slate-500 truncate">{myCompanyName}</p>
               )}
             </div>
           </div>
