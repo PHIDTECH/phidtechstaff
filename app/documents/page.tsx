@@ -247,7 +247,7 @@ export default function DocumentsPage() {
 
   const handleFileChange = (file: File | null) => {
     if (!file) return;
-    if (file.size > 50 * 1024 * 1024) { setFormError("File exceeds 50 MB limit."); return; }
+    if (file.size > 3 * 1024 * 1024) { setFormError("File exceeds 3 MB limit. Please compress or reduce file size."); return; }
     setSelectedFile(file);
     setFormError("");
   };
@@ -293,9 +293,15 @@ export default function DocumentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newDoc),
       })
-        .then(r => r.json())
+        .then(async r => {
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            throw new Error(err?.error ?? `Server error (${r.status})`);
+          }
+          return r.json();
+        })
         .then(() => { fetchDocs(); setUploading(false); setShowUploadDialog(false); })
-        .catch(() => { setFormError("Failed to save document. Please try again."); setUploading(false); });
+        .catch((e: Error) => { setFormError(e.message || "Failed to save document. Please try again."); setUploading(false); });
     };
     reader.onerror = () => { setFormError("Failed to read file."); setUploading(false); };
     reader.readAsDataURL(selectedFile);
@@ -550,7 +556,7 @@ export default function DocumentsPage() {
                 <>
                   <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                   <p className="text-sm font-medium text-gray-700">Click to upload or drag &amp; drop</p>
-                  <p className="text-xs text-gray-400 mt-1">PDF, DOCX, XLSX, PPTX, images — up to 50 MB</p>
+                  <p className="text-xs text-gray-400 mt-1">PDF, DOCX, XLSX, PPTX, images — up to 3 MB</p>
                 </>
               )}
               <input

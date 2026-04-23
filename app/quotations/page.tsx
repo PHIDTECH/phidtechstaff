@@ -15,12 +15,10 @@ import { formatDate, formatCurrency, getStatusColor } from "@/lib/utils";
 import { getActiveCid } from "@/lib/getActiveCid";
 
 const SESSION_KEY   = "phidtech_session";
-const QUOTES_KEY    = "phidtech_quotations";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
 }
-function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 
 interface LineItem { description: string; qty: number; unitPrice: number; }
 interface Quotation {
@@ -62,13 +60,18 @@ export default function QuotationsPage() {
   const [form, setForm]             = useState(emptyForm());
   const [formError, setFormError]   = useState("");
 
-  useEffect(() => {
+  const reload = async () => {
     const sess = lsGet<{id:string;name:string;isSuperAdmin:boolean;companyId:string}>(SESSION_KEY, null as never);
     setSession(sess);
     const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
-    setQuotes(lsGet<Quotation[]>(QUOTES_KEY, []));
-  }, []);
+    try {
+      const r = await fetch("/api/quotations", { cache: "no-store" });
+      if (r.ok) setQuotes(await r.json());
+    } catch {}
+  };
+
+  useEffect(() => { reload(); }, []);
 
   const cid = activeCompanyId;
   const companyQuotes = cid ? quotes.filter(q => q.companyId === cid) : quotes;
@@ -111,24 +114,23 @@ export default function QuotationsPage() {
     setShowDialog(true);
   };
 
-  const saveQuote = (status: "draft" | "sent") => {
+  const saveQuote = async (status: "draft" | "sent") => {
     if (!form.clientName.trim()) { setFormError("Client name is required."); return; }
     if (!form.validUntil)        { setFormError("Valid Until date is required."); return; }
     if (form.items.every(i => !i.description.trim())) { setFormError("Add at least one line item."); return; }
     const { subtotal, taxAmount, total } = calcTotals(form.items, form.discount, form.taxRate);
     const now = new Date().toISOString();
-    const all = lsGet<Quotation[]>(QUOTES_KEY, []);
     if (editItem) {
-      const updated = all.map(q => q.id === editItem.id
-        ? { ...q, clientName: form.clientName.trim(), clientEmail: form.clientEmail,
-            clientPhone: form.clientPhone, clientAddress: form.clientAddress,
-            validUntil: form.validUntil, items: form.items, discount: form.discount,
-            taxRate: form.taxRate, subtotal, taxAmount, total, notes: form.notes, status }
-        : q);
-      lsSet(QUOTES_KEY, updated); setQuotes(updated);
+      const body = {
+        ...editItem, clientName: form.clientName.trim(), clientEmail: form.clientEmail,
+        clientPhone: form.clientPhone, clientAddress: form.clientAddress,
+        validUntil: form.validUntil, items: form.items, discount: form.discount,
+        taxRate: form.taxRate, subtotal, taxAmount, total, notes: form.notes, status,
+      };
+      await fetch("/api/quotations", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     } else {
-      const seq = (all.filter(q => q.companyId === cid).length + 1).toString().padStart(4, "0");
-      const newQ: Quotation = {
+      const seq = (quotes.filter(q => q.companyId === cid).length + 1).toString().padStart(4, "0");
+      const body: Quotation = {
         id: `q-${Date.now()}`, quoteNumber: `QT-${seq}`, companyId: cid,
         clientName: form.clientName.trim(), clientEmail: form.clientEmail,
         clientPhone: form.clientPhone, clientAddress: form.clientAddress,
@@ -137,21 +139,24 @@ export default function QuotationsPage() {
         subtotal, taxAmount, total, notes: form.notes,
         status, createdAt: now,
       };
-      const updated = [...all, newQ];
-      lsSet(QUOTES_KEY, updated); setQuotes(updated);
+      await fetch("/api/quotations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     }
+    await reload();
     setShowDialog(false);
   };
 
-  const markStatus = (id: string, status: Quotation["status"]) => {
-    const updated = quotes.map(q => q.id === id ? { ...q, status } : q);
-    lsSet(QUOTES_KEY, updated); setQuotes(updated);
-    if (viewQuote?.id === id) setViewQuote(q => q ? { ...q, status } : q);
+  const markStatus = async (id: string, status: Quotation["status"]) => {
+    const q = quotes.find(x => x.id === id);
+    if (!q) return;
+    await fetch("/api/quotations", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...q, status }) });
+    await reload();
+    if (viewQuote?.id === id) setViewQuote(v => v ? { ...v, status } : v);
   };
 
-  const deleteQuote = (id: string) => {
-    const updated = quotes.filter(q => q.id !== id);
-    lsSet(QUOTES_KEY, updated); setQuotes(updated); setDeleteId(null);
+  const deleteQuote = async (id: string) => {
+    await fetch(`/api/quotations?id=${id}`, { method: "DELETE" });
+    await reload();
+    setDeleteId(null);
   };
 
   return (

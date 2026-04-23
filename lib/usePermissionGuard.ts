@@ -32,16 +32,18 @@ export function usePermissionGuard(requiredPermission: string) {
       if (!perms.includes(requiredPermission)) {
         // Redirect to the first page they do have access to, or profile
         const fallbacks = [
-          { perm: "attendance",  href: "/attendance" },
-          { perm: "leave",       href: "/leave" },
-          { perm: "payroll",     href: "/payroll" },
-          { perm: "tasks",       href: "/tasks" },
-          { perm: "expenses",        href: "/expenses" },
-          { perm: "office_expenses", href: "/accounting/office-expenses" },
-          { perm: "accounting",      href: "/accounting" },
-          { perm: "invoices",    href: "/invoices" },
-          { perm: "sales",       href: "/sales" },
-          { perm: "reports",     href: "/reports" },
+          { perm: "attendance",        href: "/attendance" },
+          { perm: "leave",             href: "/leave" },
+          { perm: "payroll",           href: "/payroll" },
+          { perm: "tasks",             href: "/tasks" },
+          { perm: "expenses",          href: "/expenses" },
+          { perm: "office_expenses",   href: "/accounting/office-expenses" },
+          { perm: "accounting",        href: "/accounting" },
+          { perm: "invoices",          href: "/invoices" },
+          { perm: "sales",             href: "/sales" },
+          { perm: "reports",           href: "/reports" },
+          { perm: "marketing_reports", href: "/marketing-reports" },
+          { perm: "staff_meetings",    href: "/staff-meetings" },
         ];
         const fallback = fallbacks.find(f => perms.includes(f.perm));
         router.replace(fallback ? fallback.href : "/profile");

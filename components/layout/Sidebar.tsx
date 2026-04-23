@@ -7,7 +7,8 @@ import {
   BookOpen, UserCheck, Target, Bell, Settings, ChevronDown,
   ChevronRight, Building2, ShoppingCart, Megaphone, Package,
   Receipt, BarChart3, FileText, Warehouse, TrendingUp, Briefcase,
-  Clock, HelpCircle, X, Menu, Percent, Wrench, Activity, Scale, MapPin
+  Clock, HelpCircle, X, Menu, Percent, Wrench, Activity, Scale, MapPin,
+  Users2, MessageSquarePlus
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -20,27 +21,27 @@ function lsGet<T>(key: string, fallback: T): T {
 
 // Map permission keys to route prefixes
 const PERM_ROUTES: Record<string, string[]> = {
-  dashboard:   ["/dashboard"],
-  users:       ["/users"],
-  attendance:  ["/attendance"],
-  leave:       ["/leave"],
-  payroll:     ["/payroll"],
-  tasks:       ["/tasks"],
-  kpis:        ["/kpis"],
-  assets:      ["/assets"],
-  expenses:    ["/expenses"],
-  accounting:  ["/accounting"],
-  invoices:    ["/invoices"],
-  petty_cash:  ["/petty-cash"],
-  customers:   ["/customers"],
-  sales:       ["/sales", "/quotations", "/tickets"],
-  commissions: ["/commissions"],
-  marketing:   ["/marketing"],
-  inventory:   ["/inventory", "/vendors"],
-  documents:   ["/documents"],
-  reports:     ["/reports"],
-  services:    ["/services"],
-  admin:       ["/admin", "/notifications"],
+  dashboard:       ["/dashboard"],
+  users:           ["/users"],
+  attendance:      ["/attendance"],
+  leave:           ["/leave"],
+  payroll:         ["/payroll"],
+  tasks:           ["/tasks"],
+  kpis:            ["/kpis"],
+  assets:          ["/assets"],
+  expenses:        ["/expenses"],
+  accounting:      ["/accounting"],
+  invoices:        ["/invoices"],
+  petty_cash:      ["/petty-cash"],
+  customers:       ["/customers"],
+  sales:           ["/sales", "/quotations", "/tickets"],
+  commissions:     ["/commissions"],
+  marketing:       ["/marketing"],
+  inventory:       ["/inventory", "/vendors"],
+  documents:       ["/documents"],
+  reports:         ["/reports"],
+  services:        ["/services"],
+  admin:           ["/admin", "/notifications"],
 };
 
 interface NavItem {
@@ -69,6 +70,7 @@ const ALL_NAV: NavGroup[] = [
       { label: "Attendance", href: "/attendance", icon: Clock },
       { label: "Leave Management", href: "/leave", icon: Calendar },
       { label: "Payroll & Salary", href: "/payroll", icon: DollarSign },
+      { label: "Staff Meeting", href: "/staff-meetings", icon: Users2 },
     ]
   },
   {
@@ -115,6 +117,7 @@ const ALL_NAV: NavGroup[] = [
     title: "Marketing",
     items: [
       { label: "Campaigns", href: "/marketing", icon: Megaphone },
+      { label: "Marketing Report", href: "/marketing-reports", icon: MessageSquarePlus },
     ]
   },
   {
@@ -215,6 +218,13 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
     ...group,
     items: group.items.filter(item => {
       if (item.href === "/admin" || item.href === "/admin#branches") return isSuperAdmin;
+      // Staff Meeting: visible to admins and managers only
+      if (item.href === "/staff-meetings") {
+        if (!session) return false;
+        return isSuperAdmin || ["admin", "manager"].includes(session.role ?? "") || ["admin", "manager"].includes(session.position ?? "");
+      }
+      // Marketing Report: visible to all logged-in users
+      if (item.href === "/marketing-reports") return !!session;
       return canAccess(item.href, session ? perms : []);
     }),
   })).filter(group => group.items.length > 0);

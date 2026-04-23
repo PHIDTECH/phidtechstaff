@@ -1,7 +1,8 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePermissionGuard } from "@/lib/usePermissionGuard";
+import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -10,26 +11,109 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Building2, Plus, Search, DollarSign, Eye, Edit } from "lucide-react";
-import { vendors, purchaseOrders } from "@/lib/data";
+import { Building2, Plus, Search, DollarSign, Eye, Edit, Trash2, AlertCircle } from "lucide-react";
 import { formatDate, formatCurrency, getStatusColor, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
+const SESSION_KEY = "phidtech_session";
+
+function lsGet<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
+}
+
+interface Session { id: string; name: string; role: string; isSuperAdmin: boolean; companyId: string; }
+interface Vendor {
+  id: string; companyId: string; name: string; email: string;
+  phone: string; address: string; category: string;
+  status: "active"|"inactive"; totalPurchases: number; createdAt: string;
+}
+interface PurchaseOrder {
+  id: string; companyId: string; vendorId: string; poNumber: string;
+  total: number; status: string; orderDate: string;
+}
+
+const emptyForm = () => ({
+  name: "", email: "", phone: "", address: "", category: "", status: "active" as Vendor["status"],
+});
+
 export default function VendorsPage() {
   usePermissionGuard("vendors");
-  const [search, setSearch] = useState("");
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [selectedVendor, setSelectedVendor] = useState<typeof vendors[0] | null>(null);
+  const [vendors, setVendors]             = useState<Vendor[]>([]);
+  const [orders, setOrders]               = useState<PurchaseOrder[]>([]);
+  const [activeCompanyId, setActiveCompanyId] = useState("");
+  const cidRef                            = useRef("");
+  const [search, setSearch]               = useState("");
+  const [showDialog, setShowDialog]       = useState(false);
+  const [editItem, setEditItem]           = useState<Vendor | null>(null);
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [deleteId, setDeleteId]           = useState<string | null>(null);
+  const [form, setForm]                   = useState(emptyForm());
+  const [formError, setFormError]         = useState("");
 
-  const companyVendors = vendors.filter(v => v.companyId === "c1");
+  const reload = async () => {
+    const sess = lsGet<Session>(SESSION_KEY, null as never);
+    const cid  = getActiveCid(sess);
+    setActiveCompanyId(cid);
+    cidRef.current = cid;
+    try {
+      const [vr, or] = await Promise.all([
+        fetch("/api/vendors",           { cache: "no-store" }),
+        fetch("/api/inventory/orders",  { cache: "no-store" }),
+      ]);
+      if (vr.ok) setVendors(await vr.json());
+      if (or.ok) setOrders(await or.json());
+    } catch {}
+  };
+
+  useEffect(() => { reload(); }, []);
+
+  const cid = cidRef.current || activeCompanyId;
+  const companyVendors = cid ? vendors.filter(v => v.companyId === cid) : vendors;
+  const companyOrders  = cid ? orders.filter(o => o.companyId === cid) : orders;
+
   const filtered = companyVendors.filter(v =>
     v.name.toLowerCase().includes(search.toLowerCase()) ||
     v.category.toLowerCase().includes(search.toLowerCase())
   );
 
   const totalPurchases = companyVendors.reduce((s, v) => s + v.totalPurchases, 0);
-  const activeVendors = companyVendors.filter(v => v.status === "active").length;
-  const categories = [...new Set(companyVendors.map(v => v.category))];
+  const activeVendors  = companyVendors.filter(v => v.status === "active").length;
+  const categories     = [...new Set(companyVendors.map(v => v.category))];
+
+  const sf = (f: Partial<typeof form>) => setForm(p => ({ ...p, ...f }));
+
+  const openAdd = () => {
+    setEditItem(null); setForm(emptyForm()); setFormError(""); setShowDialog(true);
+  };
+
+  const openEdit = (v: Vendor) => {
+    setEditItem(v);
+    setForm({ name: v.name, email: v.email, phone: v.phone, address: v.address, category: v.category, status: v.status });
+    setFormError(""); setShowDialog(true);
+  };
+
+  const saveForm = async () => {
+    if (!form.name.trim()) { setFormError("Vendor name is required."); return; }
+    if (editItem) {
+      const body = { ...editItem, ...form, name: form.name.trim() };
+      await fetch("/api/vendors", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    } else {
+      const body: Vendor = {
+        id: `ven-${Date.now()}`, companyId: cid,
+        name: form.name.trim(), email: form.email, phone: form.phone,
+        address: form.address, category: form.category,
+        status: form.status, totalPurchases: 0,
+        createdAt: new Date().toISOString(),
+      };
+      await fetch("/api/vendors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    }
+    await reload(); setShowDialog(false);
+  };
+
+  const deleteVendor = async (id: string) => {
+    await fetch(`/api/vendors?id=${id}`, { method: "DELETE" });
+    await reload(); setDeleteId(null);
+  };
 
   return (
     <MainLayout>
@@ -38,7 +122,7 @@ export default function VendorsPage() {
         subtitle="Manage supplier profiles, contacts and purchase history"
         icon={Building2}
         actions={
-          <Button size="sm" onClick={() => setShowAddDialog(true)}>
+          <Button size="sm" onClick={openAdd}>
             <Plus className="w-4 h-4 mr-2" /> Add Vendor
           </Button>
         }
@@ -59,6 +143,13 @@ export default function VendorsPage() {
             <Input placeholder="Search vendors..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 w-52" />
           </div>
         </div>
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+            <Building2 className="w-10 h-10 text-gray-200" />
+            <p className="font-semibold text-gray-700">No vendors yet</p>
+            <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4 mr-2" />Add Vendor</Button>
+          </div>
+        ) : (
         <Table>
           <TableHeader>
             <TableRow>
@@ -74,7 +165,7 @@ export default function VendorsPage() {
           </TableHeader>
           <TableBody>
             {filtered.map(vendor => {
-              const vendorPOs = purchaseOrders.filter(po => po.vendorId === vendor.id);
+              const vendorPOs = companyOrders.filter(po => po.vendorId === vendor.id);
               return (
                 <TableRow key={vendor.id}>
                   <TableCell>
@@ -109,8 +200,11 @@ export default function VendorsPage() {
                       <Button variant="ghost" size="icon" onClick={() => setSelectedVendor(vendor)}>
                         <Eye className="w-4 h-4 text-gray-400" />
                       </Button>
-                      <Button variant="ghost" size="icon">
-                        <Edit className="w-4 h-4 text-gray-400" />
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(vendor)}>
+                        <Edit className="w-4 h-4 text-blue-400" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => setDeleteId(vendor.id)}>
+                        <Trash2 className="w-4 h-4 text-red-400" />
                       </Button>
                     </div>
                   </TableCell>
@@ -119,6 +213,7 @@ export default function VendorsPage() {
             })}
           </TableBody>
         </Table>
+        )}
       </div>
 
       {/* Vendor Detail */}
@@ -155,7 +250,7 @@ export default function VendorsPage() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-gray-700 mb-2">Purchase Orders</p>
-                {purchaseOrders.filter(po => po.vendorId === selectedVendor.id).map(po => (
+                {companyOrders.filter(po => po.vendorId === selectedVendor.id).map(po => (
                   <div key={po.id} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0 text-sm">
                     <span className="font-mono text-blue-700">{po.poNumber}</span>
                     <span className="text-gray-600">{formatCurrency(po.total)}</span>
@@ -167,42 +262,72 @@ export default function VendorsPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setSelectedVendor(null)}>Close</Button>
-            <Button>Edit Vendor</Button>
+            <Button onClick={() => { openEdit(selectedVendor!); setSelectedVendor(null); }}>Edit Vendor</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Add Vendor Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+      {/* Add / Edit Vendor Dialog */}
+      <Dialog open={showDialog} onOpenChange={v => { if (!v) setShowDialog(false); }}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Add New Vendor</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editItem ? "Edit Vendor" : "Add New Vendor"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
+            {formError && (
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                <p className="text-sm text-red-600">{formError}</p>
+              </div>
+            )}
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Vendor Name</label>
-              <Input placeholder="Company / supplier name" />
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Vendor Name *</label>
+              <Input placeholder="Company / supplier name" value={form.name} onChange={e => sf({ name: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Email</label>
-                <Input type="email" placeholder="email@vendor.com" />
+                <Input type="email" placeholder="email@vendor.com" value={form.email} onChange={e => sf({ email: e.target.value })} />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Phone</label>
-                <Input placeholder="+255 7XX XXX XXX" />
+                <Input placeholder="+255 7XX XXX XXX" value={form.phone} onChange={e => sf({ phone: e.target.value })} />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Category</label>
-                <Input placeholder="e.g. Hardware, Software" />
+                <Input placeholder="e.g. Hardware, Software" value={form.category} onChange={e => sf({ category: e.target.value })} />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Address</label>
-                <Input placeholder="City, Country" />
+                <Input placeholder="City, Country" value={form.address} onChange={e => sf({ address: e.target.value })} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Status</label>
+                <Select value={form.status} onValueChange={v => sf({ status: v as Vendor["status"] })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>Cancel</Button>
-            <Button onClick={() => setShowAddDialog(false)}>Add Vendor</Button>
+            <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
+            <Button onClick={saveForm}>{editItem ? "Save Changes" : "Add Vendor"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirm */}
+      <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete Vendor</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-600 py-2">Are you sure you want to delete this vendor? This cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteId && deleteVendor(deleteId)}>
+              <Trash2 className="w-4 h-4 mr-2" /> Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

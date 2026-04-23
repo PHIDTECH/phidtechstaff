@@ -16,13 +16,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 const SESSION_KEY    = "phidtech_session";
 const ACTIVE_KEY     = "phidtech_active_company";
-const CAMPAIGNS_KEY  = "phidtech_campaigns";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
-}
-function lsSet(key: string, val: unknown) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
 }
 function lsStr(key: string, fallback = "") {
   try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
@@ -64,12 +60,15 @@ export default function MarketingPage() {
   const [deleteId, setDeleteId]           = useState<string | null>(null);
   const [viewItem, setViewItem]           = useState<Campaign | null>(null);
 
-  const reload = () => {
+  const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const cid  = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setActiveCompanyId(cid);
     cidRef.current = cid;
-    setCampaigns(lsGet<Campaign[]>(CAMPAIGNS_KEY, []));
+    try {
+      const r = await fetch("/api/marketing", { cache: "no-store" });
+      if (r.ok) setCampaigns(await r.json());
+    } catch {}
   };
 
   useEffect(() => { reload(); }, []);
@@ -111,22 +110,21 @@ export default function MarketingPage() {
     setShowDialog(true);
   };
 
-  const saveForm = () => {
+  const saveForm = async () => {
     if (!form.name.trim())  { setFormError("Enter a campaign name."); return; }
     if (!form.startDate)    { setFormError("Select a start date."); return; }
     if (!form.endDate)      { setFormError("Select an end date."); return; }
 
     if (editItem) {
-      const updated = campaigns.map(c => c.id === editItem.id ? {
-        ...c, name: form.name.trim(), type: form.type,
+      const body = {
+        ...editItem, name: form.name.trim(), type: form.type,
         budget: Number(form.budget)||0, spent: Number(form.spent)||0,
         leads: Number(form.leads)||0, conversions: Number(form.conversions)||0,
         startDate: form.startDate, endDate: form.endDate, status: form.status,
-      } : c);
-      lsSet(CAMPAIGNS_KEY, updated);
-      setCampaigns(updated);
+      };
+      await fetch("/api/marketing", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     } else {
-      const newItem: Campaign = {
+      const body: Campaign = {
         id: `camp-${Date.now()}`,
         companyId: cidRef.current || activeCompanyId,
         name: form.name.trim(), type: form.type,
@@ -135,17 +133,15 @@ export default function MarketingPage() {
         startDate: form.startDate, endDate: form.endDate, status: form.status,
         createdAt: new Date().toISOString(),
       };
-      const updated = [...campaigns, newItem];
-      lsSet(CAMPAIGNS_KEY, updated);
-      setCampaigns(updated);
+      await fetch("/api/marketing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     }
+    await reload();
     setShowDialog(false);
   };
 
-  const deleteItem = (id: string) => {
-    const updated = campaigns.filter(c => c.id !== id);
-    lsSet(CAMPAIGNS_KEY, updated);
-    setCampaigns(updated);
+  const deleteItem = async (id: string) => {
+    await fetch(`/api/marketing?id=${id}`, { method: "DELETE" });
+    await reload();
     setDeleteId(null);
   };
 

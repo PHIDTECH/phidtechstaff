@@ -17,7 +17,6 @@ import { formatDate, formatCurrency, getStatusColor } from "@/lib/utils";
 const SESSION_KEY   = "phidtech_session";
 const ACTIVE_KEY    = "phidtech_active_company";
 const INVOICES_KEY  = "phidtech_invoices";
-const CUSTOMERS_KEY = "phidtech_customers";
 const COMPANIES_KEY = "phidtech_companies";
 const GROUP_KEY     = "phidtech_group_company";
 
@@ -32,6 +31,7 @@ interface Customer { id: string; name: string; companyId: string; email?: string
 interface LineItem { description: string; quantity: number; unitPrice: number; total: number; }
 interface Invoice {
   id: string; companyId: string; invoiceNumber: string; customerId: string;
+  customerName?: string;
   issueDate: string; dueDate: string;
   items: LineItem[]; subtotal: number; tax: number; total: number;
   status: "draft" | "sent" | "paid" | "overdue";
@@ -41,7 +41,7 @@ interface Invoice {
 const TAX_RATE = 0.18;
 const emptyLine = (): LineItem => ({ description: "", quantity: 1, unitPrice: 0, total: 0 });
 const emptyForm = () => ({
-  customerId: "", issueDate: "", dueDate: "",
+  customerName: "", issueDate: "", dueDate: "",
   status: "draft" as Invoice["status"],
   items: [emptyLine()],
 });
@@ -49,7 +49,6 @@ const emptyForm = () => ({
 export default function InvoicesPage() {
   usePermissionGuard("invoices");
   const [invoices, setInvoices]           = useState<Invoice[]>([]);
-  const [customers, setCustomers]         = useState<Customer[]>([]);
   const [activeCompanyId, setActiveCompanyId] = useState("");
   const cidRef                            = useRef("");
   const [search, setSearch]               = useState("");
@@ -70,7 +69,6 @@ export default function InvoicesPage() {
     setActiveCompanyId(cid);
     cidRef.current = cid;
     setInvoices(lsGet<Invoice[]>(INVOICES_KEY, []));
-    setCustomers(lsGet<Customer[]>(CUSTOMERS_KEY, []));
     const cos = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
     setGroupCompanyId(gc);
@@ -81,13 +79,11 @@ export default function InvoicesPage() {
   const cid = cidRef.current || activeCompanyId;
   const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
   const isGroupMgr  = isGroupUser && (session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager");
-  const companyInvoices  = (session?.isSuperAdmin || isGroupMgr) ? invoices : (cid ? invoices.filter(i => i.companyId === cid) : invoices);
-  const companyCustomers = (session?.isSuperAdmin || isGroupMgr) ? customers : (cid ? customers.filter(c => c.companyId === cid) : customers);
+  const companyInvoices = (session?.isSuperAdmin || isGroupMgr) ? invoices : (cid ? invoices.filter(i => i.companyId === cid) : invoices);
 
   const filtered = companyInvoices.filter(i => {
-    const cust        = companyCustomers.find(c => c.id === i.customerId);
-    const matchSearch = i.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-      (cust?.name ?? "").toLowerCase().includes(search.toLowerCase());
+    const name        = (i.customerName ?? i.customerId ?? "").toLowerCase();
+    const matchSearch = i.invoiceNumber.toLowerCase().includes(search.toLowerCase()) || name.includes(search.toLowerCase());
     const matchStatus = statusFilter === "all" || i.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -129,7 +125,8 @@ export default function InvoicesPage() {
   const openEdit = (inv: Invoice) => {
     setEditItem(inv);
     setForm({
-      customerId: inv.customerId, issueDate: inv.issueDate, dueDate: inv.dueDate,
+      customerName: inv.customerName ?? inv.customerId,
+      issueDate: inv.issueDate, dueDate: inv.dueDate,
       status: inv.status, items: inv.items.length ? inv.items : [emptyLine()],
     });
     setFormError("");
@@ -137,26 +134,29 @@ export default function InvoicesPage() {
   };
 
   const saveForm = (status: Invoice["status"]) => {
-    if (!form.customerId)  { setFormError("Select a customer."); return; }
-    if (!form.issueDate)   { setFormError("Select an issue date."); return; }
-    if (!form.dueDate)     { setFormError("Select a due date."); return; }
+    if (!form.customerName.trim()) { setFormError("Enter a customer name."); return; }
+    if (!form.issueDate)           { setFormError("Select an issue date."); return; }
+    if (!form.dueDate)             { setFormError("Select a due date."); return; }
     const filledItems = form.items.filter(it => it.description.trim());
-    if (filledItems.length === 0) { setFormError("Add at least one line item."); return; }
+    if (filledItems.length === 0)  { setFormError("Add at least one line item."); return; }
 
     const { subtotal, tax, total } = recalc(filledItems);
     const invNum = editItem?.invoiceNumber ?? `INV-${Date.now().toString().slice(-6)}`;
+    const customerName = form.customerName.trim();
 
     if (editItem) {
       const updated = invoices.map(i => i.id === editItem.id ? {
-        ...i, customerId: form.customerId, issueDate: form.issueDate,
-        dueDate: form.dueDate, items: filledItems, subtotal, tax, total, status,
+        ...i, customerId: customerName, customerName,
+        issueDate: form.issueDate, dueDate: form.dueDate,
+        items: filledItems, subtotal, tax, total, status,
       } : i);
       save(updated);
     } else {
       const newInv: Invoice = {
         id: `inv-${Date.now()}`,
         companyId: cidRef.current || activeCompanyId,
-        invoiceNumber: invNum, customerId: form.customerId,
+        invoiceNumber: invNum,
+        customerId: customerName, customerName,
         issueDate: form.issueDate, dueDate: form.dueDate,
         items: filledItems, subtotal, tax, total, status,
         createdAt: new Date().toISOString(),
@@ -237,13 +237,11 @@ export default function InvoicesPage() {
             </TableHeader>
             <TableBody>
               {filtered.map(inv => {
-                const cust = companyCustomers.find(c => c.id === inv.customerId);
                 return (
                   <TableRow key={inv.id}>
                     <TableCell className="font-mono font-medium text-blue-700">{inv.invoiceNumber}</TableCell>
                     <TableCell>
-                      <p className="font-medium text-gray-800">{cust?.name ?? "—"}</p>
-                      <p className="text-xs text-gray-400">{cust?.address ?? cust?.phone ?? ""}</p>
+                      <p className="font-medium text-gray-800">{inv.customerName ?? inv.customerId ?? "—"}</p>
                     </TableCell>
                     <TableCell className="text-sm text-gray-600">{formatDate(inv.issueDate)}</TableCell>
                     <TableCell className={`text-sm ${inv.status === "overdue" ? "text-red-600 font-medium" : "text-gray-600"}`}>
@@ -275,16 +273,12 @@ export default function InvoicesPage() {
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>Invoice {viewInvoice?.invoiceNumber}</DialogTitle></DialogHeader>
           {viewInvoice && (() => {
-            const cust = companyCustomers.find(c => c.id === viewInvoice.customerId);
             return (
               <div className="space-y-4">
                 <div className="flex justify-between">
                   <div>
                     <p className="text-xs text-gray-400 mb-0.5">Bill To</p>
-                    <p className="font-bold text-gray-900">{cust?.name ?? "—"}</p>
-                    {cust?.email   && <p className="text-sm text-gray-500">{cust.email}</p>}
-                    {cust?.phone   && <p className="text-sm text-gray-500">{cust.phone}</p>}
-                    {cust?.address && <p className="text-sm text-gray-500">{cust.address}</p>}
+                    <p className="font-bold text-gray-900">{viewInvoice.customerName ?? viewInvoice.customerId ?? "—"}</p>
                   </div>
                   <div className="text-right">
                     <span className={`text-sm px-3 py-1 rounded-full font-medium ${getStatusColor(viewInvoice.status)}`}>
@@ -347,34 +341,14 @@ export default function InvoicesPage() {
               </div>
             )}
 
-            {/* Customer selector */}
+            {/* Customer name — free text */}
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Customer</label>
-              <Select value={form.customerId} onValueChange={v => setForm(p => ({ ...p, customerId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
-                <SelectContent>
-                  {companyCustomers.map(c => (
-                    <SelectItem key={c.id} value={c.id}>
-                      <span className="font-medium">{c.name}</span>
-                      {(c.phone || c.address) && (
-                        <span className="text-gray-400 text-xs ml-2">{c.phone ?? c.address}</span>
-                      )}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {/* Show selected customer details */}
-              {form.customerId && (() => {
-                const c = companyCustomers.find(cu => cu.id === form.customerId);
-                if (!c) return null;
-                return (
-                  <div className="mt-2 p-2 bg-blue-50 rounded-lg text-xs text-blue-700 space-y-0.5">
-                    {c.phone   && <p>📞 {c.phone}</p>}
-                    {c.address && <p>📍 {c.address}</p>}
-                    {c.email   && <p>✉ {c.email}</p>}
-                  </div>
-                );
-              })()}
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Customer Name</label>
+              <Input
+                placeholder="e.g. Acme Corporation"
+                value={form.customerName}
+                onChange={e => setForm(p => ({ ...p, customerName: e.target.value }))}
+              />
             </div>
 
             <div className="grid grid-cols-3 gap-3">

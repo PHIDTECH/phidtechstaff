@@ -256,6 +256,8 @@ export default function AdminPage() {
     { module: "Commissions", admin: true, manager: true, staff: true },
     { module: "Messages & Notifications", admin: true, manager: true, staff: true },
     { module: "Petty Cash", admin: true, manager: true, staff: false },
+    { module: "Staff Meeting", admin: true, manager: true, staff: false },
+    { module: "Marketing Report", admin: true, manager: true, staff: true },
     { module: "Admin Panel", admin: true, manager: false, staff: false },
   ];
 

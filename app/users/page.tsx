@@ -228,7 +228,19 @@ export default function UsersPage() {
     setCompaniesList(lsGet(COMPANIES_KEY, []));
     setDeptsList(lsGet<string[]>("phidtech_departments", DEFAULT_DEPARTMENTS));
     // Fetch users from server so all devices share same data
-    const serverUsers = await apiGet<StaffUser[]>("/api/users", []);
+    let serverUsers = await apiGet<StaffUser[]>("/api/users", []);
+    // Migrate any localStorage users that are missing from the API (by email)
+    const localUsers = lsGet<StaffUser[]>(USERS_KEY, []);
+    if (localUsers.length > 0) {
+      const serverEmails = new Set(serverUsers.map(u => u.email.toLowerCase()));
+      const toMigrate = localUsers.filter(u => !serverEmails.has(u.email.toLowerCase()));
+      if (toMigrate.length > 0) {
+        for (const u of toMigrate) {
+          try { await apiPost("/api/users", u); } catch {}
+        }
+        serverUsers = await apiGet<StaffUser[]>("/api/users", [...serverUsers, ...toMigrate]);
+      }
+    }
     setUsersList(serverUsers);
     try { localStorage.setItem(USERS_KEY, JSON.stringify(serverUsers)); } catch {}
     // Fetch branches

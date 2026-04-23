@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -9,42 +10,97 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Warehouse, Plus, Search, AlertTriangle, ArrowLeftRight, Package } from "lucide-react";
-import { stockItems, products, warehouses } from "@/lib/data";
+import { Warehouse, Plus, Search, AlertTriangle, ArrowLeftRight, Package, AlertCircle } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 
+const SESSION_KEY = "phidtech_session";
+
+function lsGet<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
+}
+
+interface Session { id: string; name: string; isSuperAdmin: boolean; companyId: string; }
+interface Product {
+  id: string; companyId: string; name: string; sku: string;
+  category: string; costPrice: number; reorderLevel: number;
+}
+interface StockItem {
+  id: string; productId: string; companyId: string;
+  warehouseName: string; quantity: number; reservedQty: number; availableQty: number;
+}
+
 export default function StockPage() {
-  const [search, setSearch] = useState("");
+  const [products, setProducts]           = useState<Product[]>([]);
+  const [stockItems, setStockItems]       = useState<StockItem[]>([]);
+  const [activeCompanyId, setActiveCompanyId] = useState("");
+  const cidRef                            = useRef("");
+  const [search, setSearch]               = useState("");
   const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [showTransferDialog, setShowTransferDialog] = useState(false);
-  const [showReceiveDialog, setShowReceiveDialog] = useState(false);
+  const [showReceiveDialog, setShowReceiveDialog]   = useState(false);
+  const [receiveForm, setReceiveForm]     = useState({ productId: "", warehouseName: "", qty: "", reference: "" });
+  const [receiveError, setReceiveError]   = useState("");
 
-  const companyWarehouses = warehouses.filter(w => w.companyId === "c1");
-  const companyStock = stockItems.filter(s => s.companyId === "c1");
+  const reload = async () => {
+    const sess = lsGet<Session>(SESSION_KEY, null as never);
+    const cid  = getActiveCid(sess);
+    setActiveCompanyId(cid);
+    cidRef.current = cid;
+    try {
+      const [pr, sr] = await Promise.all([
+        fetch("/api/inventory/products", { cache: "no-store" }),
+        fetch("/api/inventory/stock",    { cache: "no-store" }),
+      ]);
+      if (pr.ok) setProducts(await pr.json());
+      if (sr.ok) setStockItems(await sr.json());
+    } catch {}
+  };
+
+  useEffect(() => { reload(); }, []);
+
+  const cid = cidRef.current || activeCompanyId;
+  const companyProducts = cid ? products.filter(p => p.companyId === cid) : products;
+  const companyStock    = cid ? stockItems.filter(s => s.companyId === cid) : stockItems;
+  const warehouses      = [...new Set(companyStock.map(s => s.warehouseName))].filter(Boolean);
 
   const filtered = companyStock.filter(s => {
-    const prod = products.find(p => p.id === s.productId);
-    const wh = warehouses.find(w => w.id === s.warehouseId);
-    const matchSearch = prod?.name.toLowerCase().includes(search.toLowerCase()) ||
-      prod?.sku.toLowerCase().includes(search.toLowerCase());
-    const matchWh = warehouseFilter === "all" || s.warehouseId === warehouseFilter;
+    const prod = companyProducts.find(p => p.id === s.productId);
+    const matchSearch = (prod?.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (prod?.sku ?? "").toLowerCase().includes(search.toLowerCase());
+    const matchWh = warehouseFilter === "all" || s.warehouseName === warehouseFilter;
     return matchSearch && matchWh;
   });
 
-  const totalItems = companyStock.reduce((s, i) => s + i.quantity, 0);
+  const totalItems     = companyStock.reduce((s, i) => s + i.quantity, 0);
   const totalAvailable = companyStock.reduce((s, i) => s + i.availableQty, 0);
-  const totalReserved = companyStock.reduce((s, i) => s + i.reservedQty, 0);
+  const totalReserved  = companyStock.reduce((s, i) => s + i.reservedQty, 0);
 
   const lowStockItems = companyStock.filter(s => {
-    const prod = products.find(p => p.id === s.productId);
+    const prod = companyProducts.find(p => p.id === s.productId);
     return prod && prod.reorderLevel > 0 && s.availableQty <= prod.reorderLevel;
   });
 
   const totalStockValue = companyStock.reduce((sum, s) => {
-    const prod = products.find(p => p.id === s.productId);
+    const prod = companyProducts.find(p => p.id === s.productId);
     return sum + (prod ? prod.costPrice * s.quantity : 0);
   }, 0);
+
+  const receiveStock = async () => {
+    if (!receiveForm.productId)  { setReceiveError("Select a product."); return; }
+    if (!receiveForm.warehouseName.trim()) { setReceiveError("Enter a warehouse name."); return; }
+    if (!receiveForm.qty || Number(receiveForm.qty) <= 0) { setReceiveError("Enter a valid quantity."); return; }
+    const qty = Number(receiveForm.qty);
+    const body: StockItem = {
+      id: `stk-${Date.now()}`, productId: receiveForm.productId, companyId: cid,
+      warehouseName: receiveForm.warehouseName.trim(),
+      quantity: qty, reservedQty: 0, availableQty: qty,
+    };
+    await fetch("/api/inventory/stock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    await reload();
+    setShowReceiveDialog(false);
+    setReceiveForm({ productId: "", warehouseName: "", qty: "", reference: "" });
+  };
 
   return (
     <MainLayout>
@@ -80,11 +136,10 @@ export default function StockPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {lowStockItems.map(s => {
-              const prod = products.find(p => p.id === s.productId);
-              const wh = warehouses.find(w => w.id === s.warehouseId);
+              const prod = companyProducts.find(p => p.id === s.productId);
               return (
                 <span key={s.id} className="text-xs bg-yellow-100 border border-yellow-300 text-yellow-800 px-3 py-1.5 rounded-full font-medium">
-                  {prod?.name} @ {wh?.name.split(" ")[0]} — {s.availableQty} left
+                  {prod?.name} @ {s.warehouseName} — {s.availableQty} left
                 </span>
               );
             })}
@@ -94,19 +149,18 @@ export default function StockPage() {
 
       {/* Warehouse Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-        {companyWarehouses.map(wh => {
-          const whStock = companyStock.filter(s => s.warehouseId === wh.id);
+        {warehouses.map(whName => {
+          const whStock = companyStock.filter(s => s.warehouseName === whName);
           const whValue = whStock.reduce((sum, s) => {
-            const prod = products.find(p => p.id === s.productId);
+            const prod = companyProducts.find(p => p.id === s.productId);
             return sum + (prod ? prod.costPrice * s.quantity : 0);
           }, 0);
           const whUnits = whStock.reduce((s, i) => s + i.quantity, 0);
           return (
-            <div key={wh.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <div key={whName} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className="font-semibold text-gray-900">{wh.name}</h3>
-                  <p className="text-xs text-gray-400">{wh.location}</p>
+                  <h3 className="font-semibold text-gray-900">{whName}</h3>
                 </div>
                 <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
                   <Warehouse className="w-4 h-4 text-blue-600" />
@@ -140,7 +194,7 @@ export default function StockPage() {
               <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Warehouses</SelectItem>
-                {companyWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                {warehouses.map(w => <SelectItem key={w} value={w}>{w}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -161,8 +215,7 @@ export default function StockPage() {
           </TableHeader>
           <TableBody>
             {filtered.map(si => {
-              const prod = products.find(p => p.id === si.productId);
-              const wh = warehouses.find(w => w.id === si.warehouseId);
+              const prod = companyProducts.find(p => p.id === si.productId);
               if (!prod) return null;
               const stockPct = prod.reorderLevel > 0 ? Math.round((si.availableQty / (prod.reorderLevel * 3)) * 100) : 100;
               const isLow = prod.reorderLevel > 0 && si.availableQty <= prod.reorderLevel;
@@ -171,7 +224,7 @@ export default function StockPage() {
                 <TableRow key={si.id}>
                   <TableCell className="font-medium text-gray-900">{prod.name}</TableCell>
                   <TableCell className="font-mono text-xs text-gray-500">{prod.sku}</TableCell>
-                  <TableCell className="text-sm text-gray-600">{wh?.name}</TableCell>
+                  <TableCell className="text-sm text-gray-600">{si.warehouseName}</TableCell>
                   <TableCell className="font-semibold text-gray-800">{si.quantity}</TableCell>
                   <TableCell className="text-yellow-700">{si.reservedQty}</TableCell>
                   <TableCell className={`font-bold ${isLow ? "text-red-600" : "text-green-700"}`}>{si.availableQty}</TableCell>
@@ -198,7 +251,7 @@ export default function StockPage() {
         </Table>
       </div>
 
-      {/* Transfer Dialog */}
+      {/* Transfer Dialog (UI only — no API for transfers yet) */}
       <Dialog open={showTransferDialog} onOpenChange={setShowTransferDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Transfer Stock</DialogTitle></DialogHeader>
@@ -208,9 +261,7 @@ export default function StockPage() {
               <Select>
                 <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
                 <SelectContent>
-                  {products.filter(p => p.companyId === "c1").map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
+                  {companyProducts.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -220,7 +271,7 @@ export default function StockPage() {
                 <Select>
                   <SelectTrigger><SelectValue placeholder="Source" /></SelectTrigger>
                   <SelectContent>
-                    {companyWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                    {warehouses.map(w => <SelectItem key={w} value={w}>{w}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -229,7 +280,7 @@ export default function StockPage() {
                 <Select>
                   <SelectTrigger><SelectValue placeholder="Destination" /></SelectTrigger>
                   <SelectContent>
-                    {companyWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                    {warehouses.map(w => <SelectItem key={w} value={w}>{w}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -247,44 +298,43 @@ export default function StockPage() {
       </Dialog>
 
       {/* Receive Stock Dialog */}
-      <Dialog open={showReceiveDialog} onOpenChange={setShowReceiveDialog}>
+      <Dialog open={showReceiveDialog} onOpenChange={v => { if (!v) { setShowReceiveDialog(false); setReceiveError(""); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Receive Stock (GRN)</DialogTitle></DialogHeader>
           <div className="space-y-3">
+            {receiveError && (
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                <p className="text-sm text-red-600">{receiveError}</p>
+              </div>
+            )}
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Product</label>
-              <Select>
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Product *</label>
+              <Select value={receiveForm.productId} onValueChange={v => setReceiveForm(p => ({ ...p, productId: v }))}>
                 <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
                 <SelectContent>
-                  {products.filter(p => p.companyId === "c1").map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
+                  {companyProducts.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Warehouse</label>
-                <Select>
-                  <SelectTrigger><SelectValue placeholder="Select warehouse" /></SelectTrigger>
-                  <SelectContent>
-                    {companyWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Warehouse Name *</label>
+                <Input placeholder="e.g. Main Warehouse" value={receiveForm.warehouseName} onChange={e => setReceiveForm(p => ({ ...p, warehouseName: e.target.value }))} />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Quantity Received</label>
-                <Input type="number" placeholder="0" />
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Quantity Received *</label>
+                <Input type="number" placeholder="0" value={receiveForm.qty} onChange={e => setReceiveForm(p => ({ ...p, qty: e.target.value }))} />
               </div>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Reference / PO Number</label>
-              <Input placeholder="PO-2026-XXX" />
+              <Input placeholder="PO-2026-XXX" value={receiveForm.reference} onChange={e => setReceiveForm(p => ({ ...p, reference: e.target.value }))} />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowReceiveDialog(false)}>Cancel</Button>
-            <Button onClick={() => setShowReceiveDialog(false)}>Confirm Receipt</Button>
+            <Button onClick={receiveStock}>Confirm Receipt</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

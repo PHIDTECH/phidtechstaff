@@ -19,13 +19,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 const SESSION_KEY = "phidtech_session";
 const ACTIVE_KEY  = "phidtech_active_company";
-const LEADS_KEY   = "phidtech_sales_leads";
-const USERS_KEY   = "phidtech_users";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
 }
-function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
 interface Session { id: string; name: string; role: string; isSuperAdmin: boolean; companyId: string; }
@@ -74,13 +71,19 @@ export default function SalesPage() {
   const [form, setForm]                 = useState(emptyForm());
   const [formError, setFormError]       = useState("");
 
-  const reload = () => {
+  const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const cid  = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
     setActiveCompanyId(cid);
     cidRef.current = cid;
-    setLeads(lsGet<Lead[]>(LEADS_KEY, []));
-    setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
+    try {
+      const [lr, ur] = await Promise.all([
+        fetch("/api/sales", { cache: "no-store" }),
+        fetch("/api/users", { cache: "no-store" }),
+      ]);
+      if (lr.ok) setLeads(await lr.json());
+      if (ur.ok) setStaff(await ur.json());
+    } catch {}
   };
 
   useEffect(() => { reload(); }, []);
@@ -107,8 +110,6 @@ export default function SalesPage() {
     value: companyLeads.filter(l => l.stage === stage).reduce((s,l) => s + l.value, 0),
   }));
 
-  const save = (list: Lead[]) => { lsSet(LEADS_KEY, list); setLeads(list); };
-
   const openAdd = () => {
     setEditItem(null);
     setForm(emptyForm());
@@ -127,20 +128,20 @@ export default function SalesPage() {
     setShowDialog(true);
   };
 
-  const saveForm = () => {
+  const saveForm = async () => {
     if (!form.name.trim()) { setFormError("Enter a contact name."); return; }
     const prob = stageProbMap[form.stage] ?? 10;
 
     if (editItem) {
-      const updated = leads.map(l => l.id === editItem.id ? {
-        ...l, name: form.name.trim(), company: form.company, email: form.email,
+      const body = {
+        ...editItem, name: form.name.trim(), company: form.company, email: form.email,
         phone: form.phone, source: form.source, value: Number(form.value)||0,
         assignedTo: form.assignedTo, expectedClose: form.expectedClose,
         stage: form.stage, probability: prob,
-      } : l);
-      save(updated);
+      };
+      await fetch("/api/sales", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     } else {
-      const newLead: Lead = {
+      const body: Lead = {
         id: `lead-${Date.now()}`,
         companyId: cidRef.current || activeCompanyId,
         name: form.name.trim(), company: form.company, email: form.email,
@@ -149,20 +150,26 @@ export default function SalesPage() {
         stage: form.stage, probability: prob,
         createdAt: new Date().toISOString(),
       };
-      save([...leads, newLead]);
+      await fetch("/api/sales", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     }
+    await reload();
     setShowDialog(false);
   };
 
-  const moveStage = (lead: Lead, direction: 1 | -1) => {
-    const idx     = stageOrder.indexOf(lead.stage);
+  const moveStage = async (lead: Lead, direction: 1 | -1) => {
+    const idx      = stageOrder.indexOf(lead.stage);
     const newStage = stageOrder[Math.max(0, Math.min(stageOrder.length - 1, idx + direction))];
-    const updated  = leads.map(l => l.id === lead.id ? { ...l, stage: newStage, probability: stageProbMap[newStage] } : l);
-    save(updated);
+    const body     = { ...lead, stage: newStage, probability: stageProbMap[newStage] };
+    await fetch("/api/sales", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    await reload();
     setSelectedLead(prev => prev?.id === lead.id ? { ...prev, stage: newStage, probability: stageProbMap[newStage] } : prev);
   };
 
-  const deleteLead = (id: string) => { save(leads.filter(l => l.id !== id)); setDeleteId(null); };
+  const deleteLead = async (id: string) => {
+    await fetch(`/api/sales?id=${id}`, { method: "DELETE" });
+    await reload();
+    setDeleteId(null);
+  };
 
   const sf = (f: Partial<typeof form>) => setForm(p => ({ ...p, ...f }));
 

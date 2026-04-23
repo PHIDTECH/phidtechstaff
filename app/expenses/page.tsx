@@ -141,7 +141,13 @@ export default function ExpensesPage() {
     };
   }, []);
 
-  const cid = cidRef.current || activeCompanyId;
+  // Derive cid synchronously from session to avoid empty-string flash on first render
+  const cid = (() => {
+    const s = session;
+    if (!s) return cidRef.current || activeCompanyId;
+    if (s.isSuperAdmin) return cidRef.current || activeCompanyId;
+    return s.companyId || cidRef.current || activeCompanyId;
+  })();
   const isGroupUser  = !!groupCompanyId && session?.companyId === groupCompanyId;
   const isGroupMgr   = isGroupUser && (session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager");
   const companyExpenses = cid ? expenses.filter(e => e.companyId === cid) : expenses;

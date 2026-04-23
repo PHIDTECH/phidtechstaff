@@ -17,18 +17,9 @@ import { formatCurrency } from "@/lib/utils";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 
 const SESSION_KEY = "phidtech_session";
-const ACTIVE_KEY  = "phidtech_active_company";
-const KPIS_KEY    = "phidtech_kpis";
-const USERS_KEY   = "phidtech_users";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
-}
-function lsSet(key: string, val: unknown) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
-}
-function lsStr(key: string, fallback = "") {
-  try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
 }
 
 interface Session { id: string; name: string; role: string; isSuperAdmin: boolean; companyId: string; }
@@ -67,13 +58,19 @@ export default function KPIsPage() {
   const [formError, setFormError]         = useState("");
   const [deleteId, setDeleteId]           = useState<string | null>(null);
 
-  const reload = () => {
+  const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
     cidRef.current = cid;
-    setKpis(lsGet<KPI[]>(KPIS_KEY, []));
-    setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
+    try {
+      const [kr, ur] = await Promise.all([
+        fetch("/api/kpis", { cache: "no-store" }),
+        fetch("/api/users", { cache: "no-store" }),
+      ]);
+      if (kr.ok) setKpis(await kr.json());
+      if (ur.ok) setStaff(await ur.json());
+    } catch {}
   };
 
   useEffect(() => { reload(); }, []);
@@ -122,7 +119,7 @@ export default function KPIsPage() {
     setShowDialog(true);
   };
 
-  const saveForm = () => {
+  const saveForm = async () => {
     if (!form.name.trim())   { setFormError("Enter a KPI name."); return; }
     if (!form.target)        { setFormError("Enter a target value."); return; }
     if (!form.period.trim()) { setFormError("Enter a period."); return; }
@@ -133,15 +130,14 @@ export default function KPIsPage() {
     const autoStatus: KPI["status"] = pct >= 90 ? "on-track" : pct >= 50 ? "at-risk" : "off-track";
 
     if (editItem) {
-      const updated = kpis.map(k => k.id === editItem.id ? {
-        ...k, name: form.name.trim(), category: form.category,
+      const body = {
+        ...editItem, name: form.name.trim(), category: form.category,
         userId: form.userId, target, actual, unit: form.unit,
         period: form.period.trim(), status: form.status || autoStatus,
-      } : k);
-      lsSet(KPIS_KEY, updated);
-      setKpis(updated);
+      };
+      await fetch("/api/kpis", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     } else {
-      const newKPI: KPI = {
+      const body: KPI = {
         id: `kpi-${Date.now()}`,
         companyId: cidRef.current || activeCompanyId,
         name: form.name.trim(), category: form.category,
@@ -149,17 +145,15 @@ export default function KPIsPage() {
         period: form.period.trim(), status: form.status || autoStatus,
         createdAt: new Date().toISOString(),
       };
-      const updated = [...kpis, newKPI];
-      lsSet(KPIS_KEY, updated);
-      setKpis(updated);
+      await fetch("/api/kpis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     }
+    await reload();
     setShowDialog(false);
   };
 
-  const deleteKPI = (id: string) => {
-    const updated = kpis.filter(k => k.id !== id);
-    lsSet(KPIS_KEY, updated);
-    setKpis(updated);
+  const deleteKPI = async (id: string) => {
+    await fetch(`/api/kpis?id=${id}`, { method: "DELETE" });
+    await reload();
     setDeleteId(null);
   };
 

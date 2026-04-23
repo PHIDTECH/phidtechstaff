@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -9,26 +10,135 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Plus, Search, Eye, CheckCircle, Clock, Package, DollarSign } from "lucide-react";
-import { purchaseOrders, vendors, products } from "@/lib/data";
+import { ShoppingCart, Plus, Search, Eye, CheckCircle, Clock, Package, DollarSign, Trash2, AlertCircle } from "lucide-react";
 import { formatDate, formatCurrency, getStatusColor } from "@/lib/utils";
 
-export default function PurchaseOrdersPage() {
-  const [search, setSearch] = useState("");
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [viewPO, setViewPO] = useState<typeof purchaseOrders[0] | null>(null);
+const SESSION_KEY = "phidtech_session";
 
-  const companyPOs = purchaseOrders.filter(p => p.companyId === "c1");
+function lsGet<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
+}
+
+interface Session { id: string; name: string; isSuperAdmin: boolean; companyId: string; }
+interface POItem { productId: string; productName: string; quantity: number; unitCost: number; total: number; }
+interface PurchaseOrder {
+  id: string; companyId: string; vendorId: string; poNumber: string;
+  items: POItem[]; total: number;
+  status: "draft"|"sent"|"received"|"cancelled";
+  orderDate: string; expectedDate: string; receivedDate?: string;
+}
+interface Vendor { id: string; companyId: string; name: string; email: string; category: string; }
+interface Product { id: string; companyId: string; name: string; costPrice: number; }
+
+const emptyForm = () => ({
+  vendorId: "", orderDate: new Date().toISOString().slice(0, 10),
+  expectedDate: "",
+  items: [{ productId: "", productName: "", quantity: "1", unitCost: "" }] as
+    { productId: string; productName: string; quantity: string; unitCost: string }[],
+});
+
+export default function PurchaseOrdersPage() {
+  const [orders, setOrders]               = useState<PurchaseOrder[]>([]);
+  const [vendors, setVendors]             = useState<Vendor[]>([]);
+  const [products, setProducts]           = useState<Product[]>([]);
+  const [activeCompanyId, setActiveCompanyId] = useState("");
+  const cidRef                            = useRef("");
+  const [search, setSearch]               = useState("");
+  const [showDialog, setShowDialog]       = useState(false);
+  const [viewPO, setViewPO]               = useState<PurchaseOrder | null>(null);
+  const [deleteId, setDeleteId]           = useState<string | null>(null);
+  const [form, setForm]                   = useState(emptyForm());
+  const [formError, setFormError]         = useState("");
+
+  const reload = async () => {
+    const sess = lsGet<Session>(SESSION_KEY, null as never);
+    const cid  = getActiveCid(sess);
+    setActiveCompanyId(cid);
+    cidRef.current = cid;
+    try {
+      const [or, vr, pr] = await Promise.all([
+        fetch("/api/inventory/orders",   { cache: "no-store" }),
+        fetch("/api/vendors",            { cache: "no-store" }),
+        fetch("/api/inventory/products", { cache: "no-store" }),
+      ]);
+      if (or.ok) setOrders(await or.json());
+      if (vr.ok) setVendors(await vr.json());
+      if (pr.ok) setProducts(await pr.json());
+    } catch {}
+  };
+
+  useEffect(() => { reload(); }, []);
+
+  const cid = cidRef.current || activeCompanyId;
+  const companyPOs      = cid ? orders.filter(p => p.companyId === cid) : orders;
+  const companyVendors  = cid ? vendors.filter(v => v.companyId === cid) : vendors;
+  const companyProducts = cid ? products.filter(p => p.companyId === cid) : products;
+
   const filtered = companyPOs.filter(p => {
-    const vendor = vendors.find(v => v.id === p.vendorId);
+    const vendor = companyVendors.find(v => v.id === p.vendorId);
     return p.poNumber.toLowerCase().includes(search.toLowerCase()) ||
-      vendor?.name.toLowerCase().includes(search.toLowerCase());
+      (vendor?.name ?? "").toLowerCase().includes(search.toLowerCase());
   });
 
   const totalOrdered = companyPOs.reduce((s, p) => s + p.total, 0);
-  const received = companyPOs.filter(p => p.status === "received").length;
-  const pending = companyPOs.filter(p => p.status === "sent").length;
-  const draft = companyPOs.filter(p => p.status === "draft").length;
+  const received     = companyPOs.filter(p => p.status === "received").length;
+  const pending      = companyPOs.filter(p => p.status === "sent").length;
+  const draft        = companyPOs.filter(p => p.status === "draft").length;
+
+  const updatePoItem = (idx: number, field: string, value: string) => {
+    const items = [...form.items];
+    items[idx] = { ...items[idx], [field]: value };
+    if (field === "productId") {
+      const prod = companyProducts.find(p => p.id === value);
+      items[idx].productName = prod?.name ?? "";
+      items[idx].unitCost    = String(prod?.costPrice ?? "");
+    }
+    setForm(f => ({ ...f, items }));
+  };
+
+  const addPoItem = () => setForm(f => ({ ...f, items: [...f.items, { productId: "", productName: "", quantity: "1", unitCost: "" }] }));
+  const removePoItem = (idx: number) => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }));
+
+  const savePO = async (asDraft: boolean) => {
+    if (!form.vendorId) { setFormError("Select a vendor."); return; }
+    if (!form.expectedDate) { setFormError("Set an expected date."); return; }
+    if (form.items.some(it => !it.productId || !it.quantity || !it.unitCost)) {
+      setFormError("Complete all line items."); return;
+    }
+    const poItems: POItem[] = form.items.map(it => ({
+      productId: it.productId, productName: it.productName,
+      quantity: Number(it.quantity), unitCost: Number(it.unitCost),
+      total: Number(it.quantity) * Number(it.unitCost),
+    }));
+    const total = poItems.reduce((s, i) => s + i.total, 0);
+    const body: PurchaseOrder = {
+      id: `po-${Date.now()}`, companyId: cid,
+      vendorId: form.vendorId,
+      poNumber: `PO-${Date.now()}`,
+      items: poItems, total,
+      status: asDraft ? "draft" : "sent",
+      orderDate: form.orderDate, expectedDate: form.expectedDate,
+    };
+    await fetch("/api/inventory/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    await reload(); setShowDialog(false);
+  };
+
+  const markReceived = async (po: PurchaseOrder) => {
+    const body = { ...po, status: "received" as const, receivedDate: new Date().toISOString() };
+    await fetch("/api/inventory/orders", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    await reload(); setViewPO(null);
+  };
+
+  const sendPO = async (po: PurchaseOrder) => {
+    const body = { ...po, status: "sent" as const };
+    await fetch("/api/inventory/orders", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    await reload(); setViewPO(null);
+  };
+
+  const deletePO = async (id: string) => {
+    await fetch(`/api/inventory/orders?id=${id}`, { method: "DELETE" });
+    await reload(); setDeleteId(null);
+  };
 
   return (
     <MainLayout>
@@ -37,7 +147,7 @@ export default function PurchaseOrdersPage() {
         subtitle="Manage purchase orders and goods received notes"
         icon={ShoppingCart}
         actions={
-          <Button size="sm" onClick={() => setShowAddDialog(true)}>
+          <Button size="sm" onClick={() => { setForm(emptyForm()); setFormError(""); setShowDialog(true); }}>
             <Plus className="w-4 h-4 mr-2" /> New PO
           </Button>
         }
@@ -73,13 +183,17 @@ export default function PurchaseOrdersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map(po => {
-              const vendor = vendors.find(v => v.id === po.vendorId);
+            {filtered.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center py-16 text-gray-400">No purchase orders yet</TableCell>
+              </TableRow>
+            ) : filtered.map(po => {
+              const vendor = companyVendors.find(v => v.id === po.vendorId);
               return (
                 <TableRow key={po.id}>
                   <TableCell className="font-mono font-medium text-blue-700">{po.poNumber}</TableCell>
                   <TableCell>
-                    <p className="font-medium text-gray-900">{vendor?.name}</p>
+                    <p className="font-medium text-gray-900">{vendor?.name ?? po.vendorId}</p>
                     <p className="text-xs text-gray-400">{vendor?.category}</p>
                   </TableCell>
                   <TableCell className="text-sm text-gray-600">{po.items.length} items</TableCell>
@@ -100,10 +214,13 @@ export default function PurchaseOrdersPage() {
                         <Eye className="w-4 h-4 text-gray-400" />
                       </Button>
                       {po.status === "sent" && (
-                        <Button variant="ghost" size="sm" className="text-green-600 text-xs">
+                        <Button variant="ghost" size="sm" className="text-green-600 text-xs" onClick={() => markReceived(po)}>
                           <CheckCircle className="w-3.5 h-3.5 mr-1" /> Receive
                         </Button>
                       )}
+                      <Button variant="ghost" size="icon" onClick={() => setDeleteId(po.id)}>
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -118,13 +235,13 @@ export default function PurchaseOrdersPage() {
         <DialogContent className="max-w-xl">
           <DialogHeader><DialogTitle>Purchase Order – {viewPO?.poNumber}</DialogTitle></DialogHeader>
           {viewPO && (() => {
-            const vendor = vendors.find(v => v.id === viewPO.vendorId);
+            const vendor = companyVendors.find(v => v.id === viewPO.vendorId);
             return (
               <div className="space-y-4">
                 <div className="flex justify-between">
                   <div>
                     <p className="text-xs text-gray-400">Vendor</p>
-                    <p className="font-bold text-gray-900">{vendor?.name}</p>
+                    <p className="font-bold text-gray-900">{vendor?.name ?? viewPO.vendorId}</p>
                     <p className="text-sm text-gray-500">{vendor?.email}</p>
                   </div>
                   <div className="text-right">
@@ -166,9 +283,9 @@ export default function PurchaseOrdersPage() {
           })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewPO(null)}>Close</Button>
-            {viewPO?.status === "draft" && <Button>Send PO</Button>}
+            {viewPO?.status === "draft" && <Button onClick={() => sendPO(viewPO)}>Send PO</Button>}
             {viewPO?.status === "sent" && (
-              <Button className="bg-green-600 hover:bg-green-700">
+              <Button className="bg-green-600 hover:bg-green-700" onClick={() => markReceived(viewPO)}>
                 <CheckCircle className="w-4 h-4 mr-2" /> Mark Received
               </Button>
             )}
@@ -176,30 +293,34 @@ export default function PurchaseOrdersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Add PO Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+      {/* Create PO Dialog */}
+      <Dialog open={showDialog} onOpenChange={v => { if (!v) setShowDialog(false); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Create Purchase Order</DialogTitle></DialogHeader>
           <div className="space-y-3">
+            {formError && (
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                <p className="text-sm text-red-600">{formError}</p>
+              </div>
+            )}
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Vendor</label>
-              <Select>
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Vendor *</label>
+              <Select value={form.vendorId} onValueChange={v => setForm(f => ({ ...f, vendorId: v }))}>
                 <SelectTrigger><SelectValue placeholder="Select vendor" /></SelectTrigger>
                 <SelectContent>
-                  {vendors.filter(v => v.companyId === "c1").map(v => (
-                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                  ))}
+                  {companyVendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Order Date</label>
-                <Input type="date" />
+                <Input type="date" value={form.orderDate} onChange={e => setForm(f => ({ ...f, orderDate: e.target.value }))} />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Expected Date</label>
-                <Input type="date" />
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Expected Date *</label>
+                <Input type="date" value={form.expectedDate} onChange={e => setForm(f => ({ ...f, expectedDate: e.target.value }))} />
               </div>
             </div>
             <div className="border border-gray-100 rounded-lg p-3 space-y-2">
@@ -207,25 +328,48 @@ export default function PurchaseOrdersPage() {
               <div className="grid grid-cols-3 gap-2 text-xs text-gray-500 font-medium">
                 <span>Product</span><span>Qty</span><span>Unit Cost</span>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <Select>
-                  <SelectTrigger className="text-sm"><SelectValue placeholder="Product" /></SelectTrigger>
-                  <SelectContent>
-                    {products.filter(p => p.companyId === "c1").map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input type="number" placeholder="0" className="text-sm" />
-                <Input type="number" placeholder="0" className="text-sm" />
-              </div>
-              <Button variant="ghost" size="sm" className="text-blue-600 text-xs">+ Add Item</Button>
+              {form.items.map((item, idx) => (
+                <div key={idx} className="grid grid-cols-3 gap-2 items-center">
+                  <Select value={item.productId} onValueChange={v => updatePoItem(idx, "productId", v)}>
+                    <SelectTrigger className="text-sm"><SelectValue placeholder="Product" /></SelectTrigger>
+                    <SelectContent>
+                      {companyProducts.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Input type="number" placeholder="1" className="text-sm" value={item.quantity}
+                    onChange={e => updatePoItem(idx, "quantity", e.target.value)} />
+                  <div className="flex gap-1">
+                    <Input type="number" placeholder="0" className="text-sm" value={item.unitCost}
+                      onChange={e => updatePoItem(idx, "unitCost", e.target.value)} />
+                    {form.items.length > 1 && (
+                      <Button variant="ghost" size="icon" className="shrink-0" onClick={() => removePoItem(idx)}>
+                        <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <Button variant="ghost" size="sm" className="text-blue-600 text-xs" onClick={addPoItem}>+ Add Item</Button>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>Cancel</Button>
-            <Button variant="outline">Save Draft</Button>
-            <Button onClick={() => setShowAddDialog(false)}>Create & Send</Button>
+            <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => savePO(true)}>Save Draft</Button>
+            <Button onClick={() => savePO(false)}>Create &amp; Send</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirm */}
+      <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete Purchase Order</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-600 py-2">Are you sure you want to delete this PO? This cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteId && deletePO(deleteId)}>
+              <Trash2 className="w-4 h-4 mr-2" /> Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
