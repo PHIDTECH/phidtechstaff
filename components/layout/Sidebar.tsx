@@ -231,7 +231,11 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
     }),
   })).filter(group => group.items.length > 0);
 
-  const [expandedGroups, setExpandedGroups] = useState<string[]>(ALL_NAV.map(n => n.title));
+  const getInitialGroups = () => {
+    const active = ALL_NAV.find(g => g.items.some(i => pathname === i.href || pathname.startsWith(i.href + "/")));
+    return active ? [active.title] : [];
+  };
+  const [expandedGroups, setExpandedGroups] = useState<string[]>(getInitialGroups);
   // Track which parent items with children are expanded; auto-open accounting if on accounting route
   const [expandedItems, setExpandedItems] = useState<string[]>(
     pathname.startsWith("/accounting") ? ["/accounting"] : []
