@@ -221,7 +221,9 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
       // Staff Meeting: visible to admins and managers only
       if (item.href === "/staff-meetings") {
         if (!session) return false;
-        return isSuperAdmin || ["admin", "manager"].includes(session.role ?? "") || ["admin", "manager"].includes(session.position ?? "");
+        const r = (session.role ?? "").toLowerCase();
+        const p = (session.position ?? "").toLowerCase();
+        return isSuperAdmin || ["admin", "manager", "hr"].includes(r) || ["admin", "manager", "hr"].includes(p);
       }
       // Marketing Report: visible to all logged-in users
       if (item.href === "/marketing-reports") return !!session;

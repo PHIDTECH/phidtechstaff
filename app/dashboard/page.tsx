@@ -67,53 +67,31 @@ export default function DashboardPage() {
     let cid = "";
     try { const raw = localStorage.getItem(ACTIVE_KEY); cid = raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : ""; } catch {}
     setActiveCompanyId(cid);
-    // Load companies from server so all devices see same data
-    try {
-      const r = await fetch("/api/companies", { cache: "no-store" });
-      if (r.ok) {
-        const list = await r.json();
-        setCompanies(list);
-        try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(list)); } catch {}
-      } else { setCompanies(lsGet<Company[]>(COMPANIES_KEY, [])); }
-    } catch { setCompanies(lsGet<Company[]>(COMPANIES_KEY, [])); }
-    // Load users from server
-    try {
-      const r = await fetch("/api/users", { cache: "no-store" });
-      if (r.ok) {
-        const list = await r.json();
-        setStaffUsers(list);
-        try { localStorage.setItem(USERS_KEY, JSON.stringify(list)); } catch {}
-      } else { setStaffUsers(lsGet<StaffUser[]>(USERS_KEY, [])); }
-    } catch { setStaffUsers(lsGet<StaffUser[]>(USERS_KEY, [])); }
-    // Load branches from server
-    try {
-      const r = await fetch("/api/branches", { cache: "no-store" });
-      if (r.ok) setBranches(await r.json());
-    } catch {}
-    // Load tasks from server
-    try {
-      const r = await fetch("/api/tasks", { cache: "no-store" });
-      if (r.ok) setTasks(await r.json());
-      else setTasks(lsGet<Task[]>(TASKS_KEY, []));
-    } catch { setTasks(lsGet<Task[]>(TASKS_KEY, [])); }
-    // Load leave requests from server
-    try {
-      const r = await fetch("/api/leave", { cache: "no-store" });
-      if (r.ok) setLeaves(await r.json());
-      else setLeaves(lsGet<LeaveReq[]>(LEAVE_KEY, []));
-    } catch { setLeaves(lsGet<LeaveReq[]>(LEAVE_KEY, [])); }
-    // Load sales from server
-    try {
-      const r = await fetch("/api/accounting/sales", { cache: "no-store" });
-      if (r.ok) setSales(await r.json());
-      else setSales(lsGet<Sale[]>(SALES_KEY, []));
-    } catch { setSales(lsGet<Sale[]>(SALES_KEY, [])); }
-    // Load expenses from server
-    try {
-      const r = await fetch("/api/expenses", { cache: "no-store" });
-      if (r.ok) setExpenses(await r.json());
-      else setExpenses(lsGet<Expense[]>(EXPENSES_KEY, []));
-    } catch { setExpenses(lsGet<Expense[]>(EXPENSES_KEY, [])); }
+    // Load all data in parallel for faster dashboard
+    const safe = async <T,>(url: string, fallback: T): Promise<T> => {
+      try {
+        const r = await fetch(url, { cache: "no-store" });
+        return r.ok ? await r.json() : fallback;
+      } catch { return fallback; }
+    };
+    const [companies, users, branches, taskList, leaveList, salesList, expList] = await Promise.all([
+      safe<Company[]>("/api/companies", lsGet<Company[]>(COMPANIES_KEY, [])),
+      safe<StaffUser[]>("/api/users", lsGet<StaffUser[]>(USERS_KEY, [])),
+      safe<Branch[]>("/api/branches", []),
+      safe<Task[]>("/api/tasks", lsGet<Task[]>(TASKS_KEY, [])),
+      safe<LeaveReq[]>("/api/leave", lsGet<LeaveReq[]>(LEAVE_KEY, [])),
+      safe<Sale[]>("/api/accounting/sales", lsGet<Sale[]>(SALES_KEY, [])),
+      safe<Expense[]>("/api/expenses", lsGet<Expense[]>(EXPENSES_KEY, [])),
+    ]);
+    setCompanies(companies);
+    try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(companies)); } catch {}
+    setStaffUsers(users);
+    try { localStorage.setItem(USERS_KEY, JSON.stringify(users)); } catch {}
+    setBranches(branches);
+    setTasks(taskList);
+    setLeaves(leaveList);
+    setSales(salesList);
+    setExpenses(expList);
   };
 
   useEffect(() => {
