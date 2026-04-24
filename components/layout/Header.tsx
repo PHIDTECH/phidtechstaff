@@ -27,6 +27,7 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
   const [companiesList, setCompaniesList] = useState<{id:string;name:string;industry?:string}[]>([]);
   const [activeCompanyId, setActiveCompanyIdState] = useState("");
   const [isSuperAdmin, setIsSuperAdmin] = useState(true);
+  const [isGroupStaff, setIsGroupStaff] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [profileRole, setProfileRole] = useState("Admin");
   const [profilePhoto, setProfilePhoto] = useState("");
@@ -63,6 +64,10 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
         setProfileRole(sess.position ?? sess.role ?? "Admin");
         setIsSuperAdmin(sess.isSuperAdmin === true);
         setMyCompanyId(sess.companyId ?? "");
+        const grpRoles = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it"];
+        const r = (sess.role ?? "").toLowerCase();
+        const p = (sess.position ?? "").toLowerCase();
+        setIsGroupStaff(!sess.isSuperAdmin && (sess.companyId === "group" || grpRoles.includes(r) || grpRoles.includes(p)));
         // Load this user's notifications
         const uid = sess.id ?? "";
         const allNotifs = lsGet<{id:string;userId:string;message:string;read:boolean;createdAt:string}[]>(NOTIF_KEY, []);
@@ -98,10 +103,11 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
     };
   }, []);
 
-  // Superadmin sees the currently switched company; staff always see their own company
-  const activeCompany = isSuperAdmin
+  // Superadmin/group staff see the currently switched company; regular staff see their own company
+  const canSwitchCompany = isSuperAdmin || isGroupStaff;
+  const activeCompany = canSwitchCompany
     ? companiesList.find(c => c.id === activeCompanyId)
-    : (companiesList.find(c => c.id === myCompanyId) ?? companiesList[0]);
+    : companiesList.find(c => c.id === myCompanyId);
 
   const setActiveCompanyId = (id: string) => {
     setActiveCompanyIdState(id);
@@ -128,9 +134,9 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
           <Menu className="w-5 h-5 text-gray-600" />
         </button>
 
-        {/* Company Switcher — superadmin only */}
+        {/* Company Switcher — superadmin and group staff */}
         <div className="relative">
-          {isSuperAdmin ? (
+          {canSwitchCompany ? (
             <>
               <button
                 onClick={() => { setShowCompanySwitcher(!showCompanySwitcher); setShowNotifications(false); setShowProfile(false); }}
