@@ -24,7 +24,10 @@ cp -r .next/static .next/standalone/.next/static
 cp -r public .next/standalone/public
 
 echo "▶ Restarting PM2..."
-pm2 restart boms --update-env
+pm2 describe boms > /dev/null 2>&1 \
+  && pm2 restart boms --update-env \
+  || pm2 start /var/www/boms/.next/standalone/server.js --name boms
+pm2 save
 
 echo "✅ Deploy complete! Commit: $(git log --oneline -1)"
 echo "   Server time: $(date)"
