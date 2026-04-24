@@ -76,16 +76,21 @@ export default function LeavePage() {
   const [form, setForm]                   = useState(emptyForm());
   const [formError, setFormError]         = useState("");
 
-  const loadSession = () => {
+  const loadSession = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
     const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
     cidRef.current = cid;
-    setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
     const cos = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
     setGroupCompanyId(gc);
+    // Load staff from server for fresh data
+    try {
+      const r = await fetch("/api/users", { cache: "no-store" });
+      if (r.ok) { const data = await r.json(); setStaff(data); lsSet(USERS_KEY, data); }
+      else setStaff(lsGet<StaffUser[]>(USERS_KEY, []));
+    } catch { setStaff(lsGet<StaffUser[]>(USERS_KEY, [])); }
   };
 
   const fetchLeaves = async () => {
@@ -123,17 +128,14 @@ export default function LeavePage() {
   }, []);
 
   const cid = cidRef.current || activeCompanyId;
-  const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
-  const isGroupMgr  = isGroupUser && (
-    session?.isSuperAdmin ||
-    (session?.role ?? "").toLowerCase() === "admin" ||
-    (session?.role ?? "").toLowerCase() === "manager" ||
-    (session?.position ?? "").toLowerCase().includes("manager")
-  );
+  const GROUP_ROLES = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it"];
+  const role = (session?.role ?? "").toLowerCase();
+  const pos  = (session?.position ?? "").toLowerCase();
+  const isGroupUser = session?.companyId === "group" || GROUP_ROLES.includes(role) || GROUP_ROLES.includes(pos);
+  const isGroupMgr  = isGroupUser;
   const isSubsidMgr = !isGroupUser && (
-    (session?.role ?? "").toLowerCase() === "admin" ||
-    (session?.role ?? "").toLowerCase() === "manager" ||
-    (session?.position ?? "").toLowerCase().includes("manager")
+    role === "admin" || role === "manager" || role === "hr" ||
+    pos === "admin"  || pos === "manager"  || pos === "hr"
   );
   const canManage = session?.isSuperAdmin || isGroupMgr || isSubsidMgr;
 
