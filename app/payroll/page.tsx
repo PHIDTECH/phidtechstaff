@@ -147,8 +147,10 @@ export default function PayrollPage() {
       } else { allStaff = lsGet<StaffUser[]>(USERS_KEY, []); }
     } catch { allStaff = lsGet<StaffUser[]>(USERS_KEY, []); }
     setAllStaffList(allStaff);
+    const effectiveCid = cid || "group";
+    setActiveCompanyId(effectiveCid);
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_PAYROLL.includes(sess.position ?? sess.role ?? "");
-    setStaffList(allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
+    setStaffList(allStaff.filter(u => u.companyId === effectiveCid && (!isBM || u.branchId === sess?.branchId)));
   };
 
   const fetchPayroll = async () => {
@@ -187,8 +189,9 @@ export default function PayrollPage() {
   }, []);
 
   const monthKey = `${selectedMonth}-${selectedYear}`;
+  const effectiveCompanyId = activeCompanyId || "group";
   const companyEntries = payrollEntries.filter(
-    p => p.companyId === activeCompanyId && p.month === selectedMonth && p.year === selectedYear
+    p => p.companyId === effectiveCompanyId && p.month === selectedMonth && p.year === selectedYear
   );
   const filtered = companyEntries.filter(p => {
     const emp = staffList.find(u => u.id === p.staffId);
@@ -203,7 +206,7 @@ export default function PayrollPage() {
   const alreadyRun = companyEntries.length > 0;
 
   const runPayroll = async () => {
-    const activeStaff = staffList.filter(u => u.status === "active" && u.salary > 0);
+    const activeStaff = staffList.filter(u => (u.status === "active") && u.salary > 0);
     if (activeStaff.length === 0) { setRunConfirm(false); return; }
     let allCommissions: StoredCommission[] = [];
     try {
@@ -813,9 +816,9 @@ export default function PayrollPage() {
               </Button>
               {staffList.filter(u=>u.status==="active").length === 0 && (
                 <p className="text-xs text-red-500">
-                  {!activeCompanyId
-                    ? "You are in Group HQ mode. Switch to a subsidiary company to run payroll."
-                    : "No active staff found for this company. Add staff first."}
+                  {staffList.length === 0
+                    ? "No staff found for this company. Add staff first."
+                    : "No active staff with salary set. Set a salary for staff members first."}
                 </p>
               )}
             </div>
