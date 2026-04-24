@@ -218,22 +218,18 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
     ...group,
     items: group.items.filter(item => {
       if (item.href === "/admin" || item.href === "/admin#branches") return isSuperAdmin;
-      // Staff Meeting: visible to admins and managers only
-      if (item.href === "/staff-meetings") {
-        if (!session) return false;
-        const r = (session.role ?? "").toLowerCase();
-        const p = (session.position ?? "").toLowerCase();
-        return isSuperAdmin || ["admin", "manager", "hr"].includes(r) || ["admin", "manager", "hr"].includes(p);
-      }
-      // Marketing Report: visible to all logged-in users
-      if (item.href === "/marketing-reports") return !!session;
+      // Staff Meeting & Marketing Report: visible to all logged-in users
+      if (item.href === "/staff-meetings" || item.href === "/marketing-reports") return true;
       return canAccess(item.href, session ? perms : []);
     }),
   })).filter(group => group.items.length > 0);
 
   const getInitialGroups = () => {
     const active = ALL_NAV.find(g => g.items.some(i => pathname === i.href || pathname.startsWith(i.href + "/")));
-    return active ? [active.title] : [];
+    const always = ["Human Resources", "Marketing"];
+    const result = new Set(always);
+    if (active) result.add(active.title);
+    return Array.from(result);
   };
   const [expandedGroups, setExpandedGroups] = useState<string[]>(getInitialGroups);
   // Track which parent items with children are expanded; auto-open accounting if on accounting route
