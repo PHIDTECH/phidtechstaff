@@ -128,7 +128,7 @@ export default function PayrollPage() {
       .catch(() => {});
   };
 
-  const loadSession = () => {
+  const loadSession = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     setSession(sess);
     const cid = getActiveCid(sess);
@@ -137,7 +137,15 @@ export default function PayrollPage() {
     setActiveCompanyName(companies.find(c => c.id === cid)?.name ?? "");
     const gc = lsStr(GROUP_KEY) || (companies[0]?.id ?? "");
     setGroupCompanyId(gc);
-    const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
+    // Load staff from server API for fresh data
+    let allStaff: StaffUser[] = [];
+    try {
+      const r = await fetch("/api/users", { cache: "no-store" });
+      if (r.ok) {
+        allStaff = await r.json();
+        try { localStorage.setItem(USERS_KEY, JSON.stringify(allStaff)); } catch {}
+      } else { allStaff = lsGet<StaffUser[]>(USERS_KEY, []); }
+    } catch { allStaff = lsGet<StaffUser[]>(USERS_KEY, []); }
     setAllStaffList(allStaff);
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_PAYROLL.includes(sess.position ?? sess.role ?? "");
     setStaffList(allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
@@ -804,7 +812,11 @@ export default function PayrollPage() {
                 <FileText className="w-4 h-4 mr-2" /> Run Payroll
               </Button>
               {staffList.filter(u=>u.status==="active").length === 0 && (
-                <p className="text-xs text-red-500">No active staff found for this company. Add staff first.</p>
+                <p className="text-xs text-red-500">
+                  {!activeCompanyId
+                    ? "You are in Group HQ mode. Switch to a subsidiary company to run payroll."
+                    : "No active staff found for this company. Add staff first."}
+                </p>
               )}
             </div>
           ) : (
