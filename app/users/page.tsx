@@ -273,8 +273,11 @@ export default function UsersPage() {
   const isBranchManagerSession = !!sessionData && !sessionData.isSuperAdmin && !!sessionData.branchId &&
     !GENERAL_ROLES_USERS.includes(sessionData.position ?? sessionData.role ?? "");
 
+  const isGroupHQMode = !activeCompanyId || activeCompanyId === GROUP_ID;
   const companyUsers = (() => {
-    const base = activeCompanyId ? usersList.filter(u => u.companyId === activeCompanyId) : [];
+    const base = activeCompanyId
+      ? usersList.filter(u => u.companyId === activeCompanyId)
+      : usersList.filter(u => u.companyId !== GROUP_ID); // Group HQ: show all company staff
     if (isBranchManagerSession && sessionData?.branchId)
       return base.filter(u => u.branchId === sessionData.branchId);
     return base;
@@ -444,6 +447,7 @@ export default function UsersPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Employee</TableHead>
+                    {isGroupHQMode && <TableHead>Company</TableHead>}
                     <TableHead>Branch</TableHead>
                     <TableHead>Department</TableHead>
                     <TableHead>Position</TableHead>
@@ -468,6 +472,11 @@ export default function UsersPage() {
                           </div>
                         </div>
                       </TableCell>
+                      {isGroupHQMode && (
+                        <TableCell className="text-xs text-gray-600 font-medium">
+                          {companiesList.find(c => c.id === user.companyId)?.name ?? user.companyId}
+                        </TableCell>
+                      )}
                       <TableCell className="text-sm">
                         {user.branchId ? (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-medium">
