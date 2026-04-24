@@ -11,14 +11,20 @@ git pull origin main
 echo "▶ Installing dependencies..."
 npm install --legacy-peer-deps
 
-echo "▶ Building..."
+echo "▶ Clearing Next.js build cache..."
+rm -rf .next/cache
+
+echo "▶ Building (fresh)..."
 npm run build
 
 echo "▶ Copying static assets..."
-cp -r .next/static .next/standalone/.next/static 2>/dev/null || true
-cp -r public .next/standalone/public 2>/dev/null || true
+rm -rf .next/standalone/.next/static
+rm -rf .next/standalone/public
+cp -r .next/static .next/standalone/.next/static
+cp -r public .next/standalone/public
 
 echo "▶ Restarting PM2..."
-pm2 restart boms
+pm2 restart boms --update-env
 
 echo "✅ Deploy complete! Commit: $(git log --oneline -1)"
+echo "   Server time: $(date)"
