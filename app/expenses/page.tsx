@@ -405,7 +405,7 @@ export default function ExpensesPage() {
           <DialogHeader><DialogTitle>Expense Claim Details</DialogTitle></DialogHeader>
           {viewItem && (() => {
             const emp      = companyStaff.find(u => u.id === viewItem.userId);
-            const approver = companyStaff.find(u => u.id === viewItem.approvedBy);
+            const approver = companyStaff.find(u => u.name === (viewItem.ceoApprovedBy ?? viewItem.managerApprovedBy ?? ""));
             return (
               <div className="space-y-4">
                 <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
