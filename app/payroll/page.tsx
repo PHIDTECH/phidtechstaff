@@ -695,10 +695,23 @@ export default function PayrollPage() {
                         <TableCell className="text-sm text-gray-600">{adv.requestDate}</TableCell>
                         <TableCell className="text-sm text-gray-600">{adv.repaymentDate || "—"}</TableCell>
                         <TableCell>
-                          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                            adv.status === "approved" ? "bg-green-100 text-green-700" :
-                            adv.status === "rejected" ? "bg-red-100 text-red-600" : "bg-yellow-100 text-yellow-700"
-                          }`}>{adv.status}</span>
+                          {(() => {
+                            const s = adv.status;
+                            const badge =
+                              s === "pending"          ? "bg-yellow-100 text-yellow-700" :
+                              s === "manager_approved" ? "bg-blue-100 text-blue-700"    :
+                              s === "ceo_approved"     ? "bg-indigo-100 text-indigo-700":
+                              s === "disbursed"        ? "bg-green-100 text-green-700"  :
+                              s === "rejected"         ? "bg-red-100 text-red-600"      :
+                                                         "bg-gray-100 text-gray-600";
+                            const label =
+                              s === "pending"          ? "⏳ Pending Manager" :
+                              s === "manager_approved" ? "🔵 Pending CEO"     :
+                              s === "ceo_approved"     ? "✅ CEO Approved"    :
+                              s === "disbursed"        ? "💵 Disbursed"       :
+                              s === "rejected"         ? "❌ Rejected"        : s;
+                            return <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${badge}`}>{label}</span>;
+                          })()}
                         </TableCell>
                       </TableRow>
                     ))}
