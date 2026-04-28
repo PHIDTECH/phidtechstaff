@@ -723,11 +723,12 @@ export default function PayrollPage() {
                         <TableCell className="text-sm text-gray-600">{adv.repaymentDate || "—"}</TableCell>
                         <TableCell>
                           {(() => {
-                            const s = adv.status;
+                            const s = adv.status as string;
                             const badge =
                               s === "pending"          ? "bg-yellow-100 text-yellow-700" :
                               s === "manager_approved" ? "bg-blue-100 text-blue-700"    :
                               s === "ceo_approved"     ? "bg-indigo-100 text-indigo-700":
+                              s === "approved"         ? "bg-indigo-100 text-indigo-700":
                               s === "disbursed"        ? "bg-green-100 text-green-700"  :
                               s === "rejected"         ? "bg-red-100 text-red-600"      :
                                                          "bg-gray-100 text-gray-600";
@@ -1007,11 +1008,12 @@ export default function PayrollPage() {
                         <TableCell className="text-sm text-gray-600">{adv.repaymentDate || "—"}</TableCell>
                         <TableCell>
                           {(() => {
-                            const s = adv.status;
+                            const s = adv.status as string;
                             const badge =
                               s === "pending"          ? "bg-yellow-100 text-yellow-700" :
                               s === "manager_approved" ? "bg-blue-100 text-blue-700"   :
                               s === "ceo_approved"     ? "bg-indigo-100 text-indigo-700":
+                              s === "approved"         ? "bg-indigo-100 text-indigo-700":
                               s === "disbursed"        ? "bg-green-100 text-green-700"  :
                               s === "rejected"         ? "bg-red-100 text-red-600"      :
                                                          "bg-gray-100 text-gray-600";
@@ -1043,7 +1045,7 @@ export default function PayrollPage() {
                               </>
                             )}
                             {/* Stage 3: Accountant or CEO disburses CEO-approved (also handles legacy 'approved') */}
-                            {(adv.status === "ceo_approved" || adv.status === "approved") && (isAccountant || isCEO) && (
+                            {((adv.status as string) === "ceo_approved" || (adv.status as string) === "approved") && (isAccountant || isCEO) && (
                               <Button variant="ghost" size="sm" className="text-green-700 text-xs" onClick={() => updateAdvStatus(adv.id, "disbursed")}>💵 Disburse</Button>
                             )}
                             {(session?.isSuperAdmin || isGroupManager) && (
