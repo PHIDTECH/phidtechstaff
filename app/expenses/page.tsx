@@ -311,7 +311,7 @@ export default function ExpensesPage() {
             <TableBody>
               {filtered.map(claim => {
                 const emp      = companyStaff.find(u => u.id === claim.userId);
-                const approver = companyStaff.find(u => u.id === claim.approvedBy);
+                const approver = companyStaff.find(u => u.name === (claim.ceoApprovedBy ?? claim.managerApprovedBy ?? ""));
                 return (
                   <TableRow key={claim.id}>
                     <TableCell>
