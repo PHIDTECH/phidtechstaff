@@ -63,7 +63,12 @@ interface PayrollEntry {
 interface SalaryAdvance {
   id: string; staffId: string; companyId: string;
   amount: number; reason: string; requestDate: string;
-  repaymentDate: string; status: "pending" | "approved" | "rejected";
+  repaymentDate: string;
+  status: "pending" | "manager_approved" | "ceo_approved" | "disbursed" | "rejected";
+  managerApprovedBy?: string; managerApprovedAt?: string;
+  ceoApprovedBy?: string; ceoApprovedAt?: string;
+  disbursedBy?: string; disbursedAt?: string;
+  rejectedBy?: string; rejectedAt?: string;
 }
 
 const MONTHS = ["January","February","March","April","May","June",
@@ -459,14 +464,19 @@ export default function PayrollPage() {
     if (w) { w.document.write(html); w.document.close(); }
   };
 
-  const updateAdvStatus = (id: string, status: "approved" | "rejected") => {
+  const updateAdvStatus = (id: string, newStatus: SalaryAdvance["status"]) => {
+    const now = new Date().toISOString();
+    const by  = session?.name ?? "";
+    const extra: Record<string,string> = {};
+    if (newStatus === "manager_approved") { extra.managerApprovedBy = by; extra.managerApprovedAt = now; }
+    if (newStatus === "ceo_approved")     { extra.ceoApprovedBy = by;     extra.ceoApprovedAt = now; }
+    if (newStatus === "disbursed")        { extra.disbursedBy = by;        extra.disbursedAt = now; }
+    if (newStatus === "rejected")         { extra.rejectedBy = by;         extra.rejectedAt = now; }
     fetch("/api/advances", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
-    })
-      .then(() => fetchAdvances())
-      .catch(() => {});
+      body: JSON.stringify({ id, status: newStatus, ...extra }),
+    }).then(() => fetchAdvances()).catch(() => {});
   };
 
   const deleteAdvance = (id: string) => {
@@ -477,22 +487,21 @@ export default function PayrollPage() {
 
   const years = [now.getFullYear(), now.getFullYear() - 1];
 
+  const _role = (session?.role ?? "").toLowerCase();
+  const _pos  = (session?.position ?? "").toLowerCase();
+
+  // Approval workflow roles
+  const isManager    = _role === "manager" || _pos === "manager" || _role === "group_manager" || _pos === "group_manager";
+  const isCEO        = session?.isSuperAdmin || _role === "admin" || _pos === "admin" || _role === "group_ceo" || _pos === "group_ceo";
+  const isAccountant = _role === "accountant" || _pos === "accountant" || _role === "group_cfo" || _pos === "group_cfo";
+
   // Group company context
-  const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
-  const isGroupManager = isGroupUser && (
-    session?.role?.toLowerCase() === "admin" ||
-    session?.role?.toLowerCase() === "manager" ||
-    session?.isSuperAdmin
-  );
+  const GROUP_ROLES_P = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it"];
+  const isGroupUser    = session?.companyId === "group" || GROUP_ROLES_P.includes(_role) || GROUP_ROLES_P.includes(_pos);
+  const isGroupManager = isGroupUser;
 
   // Role check: superadmin, admin, accountant, or manager can manage payroll
-  const canManage = session?.isSuperAdmin === true ||
-    isGroupManager ||
-    session?.role?.toLowerCase() === "admin" ||
-    session?.role?.toLowerCase().includes("accountant") ||
-    session?.position?.toLowerCase().includes("accountant") ||
-    session?.role?.toLowerCase() === "manager" ||
-    session?.position?.toLowerCase().includes("manager");
+  const canManage = session?.isSuperAdmin === true || isGroupManager || isCEO || isManager || isAccountant;
 
   // Staff personal data
   const myEntry = companyEntries.find(p => p.staffId === session?.id);
@@ -956,18 +965,44 @@ export default function PayrollPage() {
                         <TableCell className="text-sm text-gray-600">{adv.requestDate}</TableCell>
                         <TableCell className="text-sm text-gray-600">{adv.repaymentDate || "—"}</TableCell>
                         <TableCell>
-                          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                            adv.status === "approved" ? "bg-green-100 text-green-700" :
-                            adv.status === "rejected" ? "bg-red-100 text-red-600" : "bg-yellow-100 text-yellow-700"
-                          }`}>{adv.status}</span>
+                          {(() => {
+                            const s = adv.status;
+                            const badge =
+                              s === "pending"          ? "bg-yellow-100 text-yellow-700" :
+                              s === "manager_approved" ? "bg-blue-100 text-blue-700"   :
+                              s === "ceo_approved"     ? "bg-indigo-100 text-indigo-700":
+                              s === "disbursed"        ? "bg-green-100 text-green-700"  :
+                              s === "rejected"         ? "bg-red-100 text-red-600"      :
+                                                         "bg-gray-100 text-gray-600";
+                            const label =
+                              s === "pending"          ? "⏳ Pending Manager" :
+                              s === "manager_approved" ? "🔵 Pending CEO"     :
+                              s === "ceo_approved"     ? "✅ CEO Approved"    :
+                              s === "disbursed"        ? "💵 Disbursed"       :
+                              s === "rejected"         ? "❌ Rejected"        : s;
+                            return <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${badge}`}>{label}</span>;
+                          })()}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center justify-end gap-1">
-                            {adv.status === "pending" && (
+                          <div className="flex items-center justify-end gap-1 flex-wrap">
+                            {/* Stage 1: Manager approves pending */}
+                            {adv.status === "pending" && isManager && (
                               <>
-                                <Button variant="ghost" size="sm" className="text-green-600 text-xs" onClick={() => updateAdvStatus(adv.id, "approved")}>Approve</Button>
-                                <Button variant="ghost" size="sm" className="text-red-500 text-xs" onClick={() => updateAdvStatus(adv.id, "rejected")}>Reject</Button>
+                                <Button variant="ghost" size="sm" className="text-green-600 text-xs" onClick={() => updateAdvStatus(adv.id, "manager_approved")}>✓ Approve</Button>
+                                <Button variant="ghost" size="sm" className="text-red-500 text-xs"   onClick={() => updateAdvStatus(adv.id, "rejected")}>✗ Reject</Button>
                               </>
+                            )}
+                            {/* Stage 2: CEO approves manager-approved; CEO can also disburse directly */}
+                            {adv.status === "manager_approved" && isCEO && (
+                              <>
+                                <Button variant="ghost" size="sm" className="text-indigo-600 text-xs" onClick={() => updateAdvStatus(adv.id, "ceo_approved")}>✓ Approve</Button>
+                                <Button variant="ghost" size="sm" className="text-green-700 text-xs"  onClick={() => updateAdvStatus(adv.id, "disbursed")}>💵 Disburse</Button>
+                                <Button variant="ghost" size="sm" className="text-red-500 text-xs"    onClick={() => updateAdvStatus(adv.id, "rejected")}>✗ Reject</Button>
+                              </>
+                            )}
+                            {/* Stage 3: Accountant or CEO disburses CEO-approved */}
+                            {adv.status === "ceo_approved" && (isAccountant || isCEO) && (
+                              <Button variant="ghost" size="sm" className="text-green-700 text-xs" onClick={() => updateAdvStatus(adv.id, "disbursed")}>💵 Disburse</Button>
                             )}
                             {(session?.isSuperAdmin || isGroupManager) && (
                               <Button variant="ghost" size="sm" className="text-gray-400 hover:text-red-600 text-xs px-1" onClick={() => deleteAdvance(adv.id)}>

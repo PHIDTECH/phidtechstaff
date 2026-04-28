@@ -36,8 +36,12 @@ interface OfficeExpense {
   id: string; companyId: string; recordedBy: string;
   title: string; category: string; amount: number;
   description: string; referenceNo: string;
-  status: "pending" | "approved" | "rejected" | "paid";
-  date: string; createdAt: string; approvedBy?: string;
+  status: "pending" | "manager_approved" | "ceo_approved" | "disbursed" | "rejected" | string;
+  date: string; createdAt: string;
+  managerApprovedBy?: string; managerApprovedAt?: string;
+  ceoApprovedBy?: string; ceoApprovedAt?: string;
+  disbursedBy?: string; disbursedAt?: string;
+  rejectedBy?: string; rejectedAt?: string;
 }
 
 const OFFICE_EXPENSE_CATEGORIES = [
@@ -149,10 +153,15 @@ export default function OfficeExpensesPage() {
     };
   }, []);
 
-  const cid         = cidRef.current || activeCompanyId;
-  const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
-  const isGroupMgr  = isGroupUser && (session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager");
-  const canManage   = session?.isSuperAdmin || isGroupMgr || session?.role === "admin" || session?.role === "manager" || session?.role === "accountant";
+  const cid = cidRef.current || activeCompanyId;
+  const _or = (session?.role ?? "").toLowerCase();
+  const _op = (session?.position ?? "").toLowerCase();
+  const GROUP_ROLES_OE = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it"];
+  const isGroupUser  = session?.companyId === "group" || GROUP_ROLES_OE.includes(_or) || GROUP_ROLES_OE.includes(_op);
+  const isOEManager    = _or === "manager"    || _op === "manager"    || _or === "group_manager" || _op === "group_manager";
+  const isOECEO        = session?.isSuperAdmin || _or === "admin" || _op === "admin" || _or === "group_ceo" || _op === "group_ceo";
+  const isOEAccountant = _or === "accountant" || _op === "accountant" || _or === "group_cfo"     || _op === "group_cfo";
+  const canManage = session?.isSuperAdmin || isGroupUser || isOEManager || isOECEO || isOEAccountant;
 
   // SuperAdmin sees ALL subsidiaries unless they have explicitly switched to a specific company
   const companyExpenses = (session?.isSuperAdmin && !cid)
@@ -221,9 +230,16 @@ export default function OfficeExpensesPage() {
     await fetchExpenses();
   };
 
-  const updateStatus = async (id: string, status: OfficeExpense["status"]) => {
+  const updateStatus = async (id: string, newStatus: OfficeExpense["status"]) => {
+    const now = new Date().toISOString();
+    const by  = session?.name ?? "";
+    const extra: Record<string,string> = {};
+    if (newStatus === "manager_approved") { extra.managerApprovedBy = by; extra.managerApprovedAt = now; }
+    if (newStatus === "ceo_approved")     { extra.ceoApprovedBy = by;     extra.ceoApprovedAt = now; }
+    if (newStatus === "disbursed")        { extra.disbursedBy = by;        extra.disbursedAt = now; }
+    if (newStatus === "rejected")         { extra.rejectedBy = by;         extra.rejectedAt = now; }
     await fetch("/api/office-expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status, approvedBy: (status === "approved" || status === "paid") ? (session?.id ?? "") : undefined }) });
+      body: JSON.stringify({ id, status: newStatus, ...extra }) });
     await fetchExpenses();
   };
 
@@ -338,17 +354,31 @@ export default function OfficeExpensesPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(exp.status)}`}>
-                        {exp.status}
-                      </span>
+                      {(() => {
+                        const s = exp.status;
+                        const badge =
+                          s === "pending"          ? "bg-yellow-100 text-yellow-700" :
+                          s === "manager_approved" ? "bg-blue-100 text-blue-700"   :
+                          s === "ceo_approved"     ? "bg-indigo-100 text-indigo-700" :
+                          s === "disbursed"        ? "bg-green-100 text-green-700"  :
+                          s === "rejected"         ? "bg-red-100 text-red-600"      : "bg-gray-100 text-gray-600";
+                        const label =
+                          s === "pending"          ? "⏳ Pending Manager" :
+                          s === "manager_approved" ? "🔵 Pending CEO"     :
+                          s === "ceo_approved"     ? "✅ CEO Approved"    :
+                          s === "disbursed"        ? "💵 Disbursed"       :
+                          s === "rejected"         ? "❌ Rejected"        : s;
+                        return <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${badge}`}>{label}</span>;
+                      })()}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1 flex-wrap">
                         <Button variant="ghost" size="icon" onClick={() => setViewItem(exp)}><Eye className="w-4 h-4 text-gray-400" /></Button>
                         {canManage && <Button variant="ghost" size="icon" onClick={() => openEdit(exp)}><Edit className="w-4 h-4 text-blue-400" /></Button>}
-                        {canManage && exp.status === "pending" && (
+                        {/* Stage 1: Manager */}
+                        {exp.status === "pending" && isOEManager && (
                           <>
-                            <Button variant="ghost" size="sm" className="text-green-600 text-xs px-2" onClick={() => updateStatus(exp.id, "approved")}>
+                            <Button variant="ghost" size="sm" className="text-green-600 text-xs px-2" onClick={() => updateStatus(exp.id, "manager_approved")}>
                               <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
                             </Button>
                             <Button variant="ghost" size="sm" className="text-red-500 text-xs px-2" onClick={() => updateStatus(exp.id, "rejected")}>
@@ -356,9 +386,24 @@ export default function OfficeExpensesPage() {
                             </Button>
                           </>
                         )}
-                        {canManage && exp.status === "approved" && (
-                          <Button variant="ghost" size="sm" className="text-blue-600 text-xs px-2" onClick={() => updateStatus(exp.id, "paid")}>
-                            Mark Paid
+                        {/* Stage 2: CEO — approve or disburse directly */}
+                        {exp.status === "manager_approved" && isOECEO && (
+                          <>
+                            <Button variant="ghost" size="sm" className="text-indigo-600 text-xs px-2" onClick={() => updateStatus(exp.id, "ceo_approved")}>
+                              <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-green-700 text-xs px-2" onClick={() => updateStatus(exp.id, "disbursed")}>
+                              💵 Disburse
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-500 text-xs px-2" onClick={() => updateStatus(exp.id, "rejected")}>
+                              <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
+                            </Button>
+                          </>
+                        )}
+                        {/* Stage 3: Accountant or CEO disburses */}
+                        {exp.status === "ceo_approved" && (isOEAccountant || isOECEO) && (
+                          <Button variant="ghost" size="sm" className="text-green-700 text-xs px-2" onClick={() => updateStatus(exp.id, "disbursed")}>
+                            💵 Disburse
                           </Button>
                         )}
                         {canManage && <Button variant="ghost" size="icon" onClick={() => setDeleteId(exp.id)}><Trash2 className="w-4 h-4 text-red-400" /></Button>}
@@ -414,14 +459,21 @@ export default function OfficeExpensesPage() {
           })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewItem(null)}>Close</Button>
-            {viewItem && canManage && viewItem.status === "pending" && (
+            {viewItem && viewItem.status === "pending" && isOEManager && (
               <>
-                <Button className="bg-green-600 hover:bg-green-700" onClick={() => { updateStatus(viewItem.id, "approved"); setViewItem(null); }}>Approve</Button>
+                <Button className="bg-green-600 hover:bg-green-700" onClick={() => { updateStatus(viewItem.id, "manager_approved"); setViewItem(null); }}>Approve</Button>
                 <Button variant="destructive" onClick={() => { updateStatus(viewItem.id, "rejected"); setViewItem(null); }}>Reject</Button>
               </>
             )}
-            {viewItem && canManage && viewItem.status === "approved" && (
-              <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => { updateStatus(viewItem.id, "paid"); setViewItem(null); }}>Mark Paid</Button>
+            {viewItem && viewItem.status === "manager_approved" && isOECEO && (
+              <>
+                <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => { updateStatus(viewItem.id, "ceo_approved"); setViewItem(null); }}>Approve</Button>
+                <Button className="bg-green-600 hover:bg-green-700" onClick={() => { updateStatus(viewItem.id, "disbursed"); setViewItem(null); }}>💵 Disburse</Button>
+                <Button variant="destructive" onClick={() => { updateStatus(viewItem.id, "rejected"); setViewItem(null); }}>Reject</Button>
+              </>
+            )}
+            {viewItem && viewItem.status === "ceo_approved" && (isOEAccountant || isOECEO) && (
+              <Button className="bg-green-600 hover:bg-green-700" onClick={() => { updateStatus(viewItem.id, "disbursed"); setViewItem(null); }}>💵 Disburse</Button>
             )}
           </DialogFooter>
         </DialogContent>

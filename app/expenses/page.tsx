@@ -34,8 +34,12 @@ interface StaffUser { id: string; name: string; companyId: string; branchId?: st
 interface Expense {
   id: string; companyId: string; userId: string; title: string;
   category: string; amount: number; description: string;
-  status: "pending" | "approved" | "rejected" | "paid";
-  submittedAt: string; approvedBy?: string;
+  status: "pending" | "manager_approved" | "ceo_approved" | "disbursed" | "rejected" | string;
+  submittedAt: string;
+  managerApprovedBy?: string; managerApprovedAt?: string;
+  ceoApprovedBy?: string; ceoApprovedAt?: string;
+  disbursedBy?: string; disbursedAt?: string;
+  rejectedBy?: string; rejectedAt?: string;
 }
 
 const EXPENSE_CATEGORIES = ["Travel","Technology","Marketing","Software","Food","Office","Training","Accommodation","Communication","Other"];
@@ -148,12 +152,16 @@ export default function ExpensesPage() {
     if (s.isSuperAdmin) return cidRef.current || activeCompanyId;
     return s.companyId || cidRef.current || activeCompanyId;
   })();
-  const isGroupUser  = !!groupCompanyId && session?.companyId === groupCompanyId;
-  const isGroupMgr   = isGroupUser && (session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager");
+  const _r = (session?.role ?? "").toLowerCase();
+  const _p = (session?.position ?? "").toLowerCase();
+  const GROUP_ROLES_E = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it"];
+  const isGroupUser   = session?.companyId === "group" || GROUP_ROLES_E.includes(_r) || GROUP_ROLES_E.includes(_p);
+  const isEManager    = _r === "manager"    || _p === "manager"    || _r === "group_manager" || _p === "group_manager";
+  const isECEO        = session?.isSuperAdmin || _r === "admin" || _p === "admin" || _r === "group_ceo" || _p === "group_ceo";
+  const isEAccountant = _r === "accountant" || _p === "accountant" || _r === "group_cfo"     || _p === "group_cfo";
   const companyExpenses = cid ? expenses.filter(e => e.companyId === cid) : expenses;
-  // Show ALL active staff for the company regardless of branch
   const companyStaff    = cid ? allStaff.filter(u => u.companyId === cid) : allStaff;
-  const canManage = session?.isSuperAdmin || isGroupMgr || session?.role === "manager" || session?.role === "accountant" || session?.role === "admin";
+  const canManage = session?.isSuperAdmin || isGroupUser || isEManager || isECEO || isEAccountant;
 
   const filtered = companyExpenses.filter(e => {
     const emp         = companyStaff.find(u => u.id === e.userId);
@@ -215,9 +223,16 @@ export default function ExpensesPage() {
     await fetchExpenses();
   };
 
-  const updateStatus = async (id: string, status: Expense["status"]) => {
+  const updateStatus = async (id: string, newStatus: Expense["status"]) => {
+    const now = new Date().toISOString();
+    const by  = session?.name ?? "";
+    const extra: Record<string,string> = {};
+    if (newStatus === "manager_approved") { extra.managerApprovedBy = by; extra.managerApprovedAt = now; }
+    if (newStatus === "ceo_approved")     { extra.ceoApprovedBy = by;     extra.ceoApprovedAt = now; }
+    if (newStatus === "disbursed")        { extra.disbursedBy = by;        extra.disbursedAt = now; }
+    if (newStatus === "rejected")         { extra.rejectedBy = by;         extra.rejectedAt = now; }
     await fetch("/api/expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status, approvedBy: status === "approved" || status === "paid" ? (session?.id ?? "") : undefined }) });
+      body: JSON.stringify({ id, status: newStatus, ...extra }) });
     await fetchExpenses();
   };
 
@@ -321,17 +336,31 @@ export default function ExpensesPage() {
                     <TableCell className="text-sm text-gray-500">{formatDate(claim.submittedAt)}</TableCell>
                     <TableCell className="text-sm text-gray-500">{approver?.name ?? "—"}</TableCell>
                     <TableCell>
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(claim.status)}`}>
-                        {claim.status}
-                      </span>
+                      {(() => {
+                        const s = claim.status;
+                        const badge =
+                          s === "pending"          ? "bg-yellow-100 text-yellow-700" :
+                          s === "manager_approved" ? "bg-blue-100 text-blue-700"   :
+                          s === "ceo_approved"     ? "bg-indigo-100 text-indigo-700" :
+                          s === "disbursed"        ? "bg-green-100 text-green-700"  :
+                          s === "rejected"         ? "bg-red-100 text-red-600"      : "bg-gray-100 text-gray-600";
+                        const label =
+                          s === "pending"          ? "⏳ Pending Manager" :
+                          s === "manager_approved" ? "🔵 Pending CEO"     :
+                          s === "ceo_approved"     ? "✅ CEO Approved"    :
+                          s === "disbursed"        ? "💵 Disbursed"       :
+                          s === "rejected"         ? "❌ Rejected"        : s;
+                        return <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${badge}`}>{label}</span>;
+                      })()}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1 flex-wrap">
                         <Button variant="ghost" size="icon" onClick={() => setViewItem(claim)}><Eye className="w-4 h-4 text-gray-400" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => openEdit(claim)}><Edit className="w-4 h-4 text-blue-400" /></Button>
-                        {canManage && claim.status === "pending" && (
+                        {/* Stage 1: Manager */}
+                        {claim.status === "pending" && isEManager && (
                           <>
-                            <Button variant="ghost" size="sm" className="text-green-600 text-xs px-2" onClick={() => updateStatus(claim.id, "approved")}>
+                            <Button variant="ghost" size="sm" className="text-green-600 text-xs px-2" onClick={() => updateStatus(claim.id, "manager_approved")}>
                               <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
                             </Button>
                             <Button variant="ghost" size="sm" className="text-red-500 text-xs px-2" onClick={() => updateStatus(claim.id, "rejected")}>
@@ -339,9 +368,24 @@ export default function ExpensesPage() {
                             </Button>
                           </>
                         )}
-                        {canManage && claim.status === "approved" && (
-                          <Button variant="ghost" size="sm" className="text-blue-600 text-xs px-2" onClick={() => updateStatus(claim.id, "paid")}>
-                            Mark Paid
+                        {/* Stage 2: CEO — approve or disburse directly */}
+                        {claim.status === "manager_approved" && isECEO && (
+                          <>
+                            <Button variant="ghost" size="sm" className="text-indigo-600 text-xs px-2" onClick={() => updateStatus(claim.id, "ceo_approved")}>
+                              <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-green-700 text-xs px-2" onClick={() => updateStatus(claim.id, "disbursed")}>
+                              💵 Disburse
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-500 text-xs px-2" onClick={() => updateStatus(claim.id, "rejected")}>
+                              <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
+                            </Button>
+                          </>
+                        )}
+                        {/* Stage 3: Accountant or CEO disburses */}
+                        {claim.status === "ceo_approved" && (isEAccountant || isECEO) && (
+                          <Button variant="ghost" size="sm" className="text-green-700 text-xs px-2" onClick={() => updateStatus(claim.id, "disbursed")}>
+                            💵 Disburse
                           </Button>
                         )}
                         <Button variant="ghost" size="icon" onClick={() => setDeleteId(claim.id)}><Trash2 className="w-4 h-4 text-red-400" /></Button>

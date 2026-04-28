@@ -4,7 +4,12 @@ import { readDb, writeDb } from "@/lib/serverDb";
 interface Expense {
   id: string; companyId: string; userId: string; title: string;
   category: string; amount: number; description: string;
-  status: string; submittedAt: string; approvedBy?: string;
+  status: "pending" | "manager_approved" | "ceo_approved" | "disbursed" | "rejected" | string;
+  submittedAt: string;
+  managerApprovedBy?: string; managerApprovedAt?: string;
+  ceoApprovedBy?: string; ceoApprovedAt?: string;
+  disbursedBy?: string; disbursedAt?: string;
+  rejectedBy?: string; rejectedAt?: string;
   [key: string]: unknown;
 }
 

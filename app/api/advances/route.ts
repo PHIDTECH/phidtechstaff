@@ -9,7 +9,11 @@ interface SalaryAdvance {
   reason: string;
   requestDate: string;
   repaymentDate: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "manager_approved" | "ceo_approved" | "disbursed" | "rejected";
+  managerApprovedBy?: string; managerApprovedAt?: string;
+  ceoApprovedBy?: string; ceoApprovedAt?: string;
+  disbursedBy?: string; disbursedAt?: string;
+  rejectedBy?: string; rejectedAt?: string;
   [key: string]: unknown;
 }
 
