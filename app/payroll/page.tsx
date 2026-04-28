@@ -152,10 +152,14 @@ export default function PayrollPage() {
       } else { allStaff = lsGet<StaffUser[]>(USERS_KEY, []); }
     } catch { allStaff = lsGet<StaffUser[]>(USERS_KEY, []); }
     setAllStaffList(allStaff);
-    const effectiveCid = cid || "group";
-    setActiveCompanyId(effectiveCid);
+    // cid === "" means Group HQ / all-companies view — do NOT default to "group"
+    setActiveCompanyId(cid);
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_PAYROLL.includes(sess.position ?? sess.role ?? "");
-    setStaffList(allStaff.filter(u => u.companyId === effectiveCid && (!isBM || u.branchId === sess?.branchId)));
+    setStaffList(
+      cid
+        ? allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId))
+        : allStaff   // Group HQ: see all staff (read-only; Run Payroll requires a specific company)
+    );
   };
 
   const fetchPayroll = async () => {
@@ -194,9 +198,9 @@ export default function PayrollPage() {
   }, []);
 
   const monthKey = `${selectedMonth}-${selectedYear}`;
-  const effectiveCompanyId = activeCompanyId || "group";
+  // Group HQ (activeCompanyId === "") → show ALL companies' payroll in read-only mode
   const companyEntries = payrollEntries.filter(
-    p => p.companyId === effectiveCompanyId && p.month === selectedMonth && p.year === selectedYear
+    p => (!activeCompanyId || p.companyId === activeCompanyId) && p.month === selectedMonth && p.year === selectedYear
   );
   const filtered = companyEntries.filter(p => {
     const emp = staffList.find(u => u.id === p.staffId);
@@ -862,15 +866,23 @@ export default function PayrollPage() {
                 <p className="font-semibold text-gray-800">No payroll for {selectedMonth} {selectedYear}</p>
                 <p className="text-sm text-gray-400 mt-1">Click <strong>Run Payroll</strong> to generate payslips for all active staff.</p>
               </div>
-              <Button onClick={() => setRunConfirm(true)} disabled={staffList.filter(u=>u.status==="active").length === 0}>
-                <FileText className="w-4 h-4 mr-2" /> Run Payroll
-              </Button>
-              {staffList.filter(u=>u.status==="active").length === 0 && (
-                <p className="text-xs text-red-500">
-                  {staffList.length === 0
-                    ? "No staff found for this company. Add staff first."
-                    : "No active staff with salary set. Set a salary for staff members first."}
+              {!activeCompanyId ? (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
+                  You are in <strong>Group HQ</strong> view. Switch to a specific company using the header switcher to run payroll for that company.
                 </p>
+              ) : (
+                <>
+                  <Button onClick={() => setRunConfirm(true)} disabled={staffList.filter(u=>u.status==="active").length === 0}>
+                    <FileText className="w-4 h-4 mr-2" /> Run Payroll
+                  </Button>
+                  {staffList.filter(u=>u.status==="active").length === 0 && (
+                    <p className="text-xs text-red-500">
+                      {staffList.length === 0
+                        ? "No staff found for this company. Add staff first."
+                        : "No active staff with salary set. Set a salary for staff members first."}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           ) : (
@@ -968,7 +980,7 @@ export default function PayrollPage() {
 
         <TabsContent value="advances">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            {advances.filter(a => a.companyId === activeCompanyId).length === 0 ? (
+            {(activeCompanyId ? advances.filter(a => a.companyId === activeCompanyId) : advances).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <AlertCircle className="w-10 h-10 text-gray-300 mb-3" />
                 <p className="text-sm text-gray-500">No salary advances yet</p>
@@ -990,7 +1002,7 @@ export default function PayrollPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {advances.filter(a => a.companyId === activeCompanyId).map((adv) => {
+                  {(activeCompanyId ? advances.filter(a => a.companyId === activeCompanyId) : advances).map((adv) => {
                     const emp = allStaffList.find(u => u.id === adv.staffId);
                     return (
                       <TableRow key={adv.id}>
