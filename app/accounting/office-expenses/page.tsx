@@ -58,6 +58,7 @@ const OFFICE_EXPENSE_CATEGORIES = [
   "Legal & Professional Fees",
   "Government Levies",
   "Miscellaneous",
+  "Salary Advance",
 ];
 
 const categoryColors: Record<string, string> = {
@@ -74,6 +75,7 @@ const categoryColors: Record<string, string> = {
   "Legal & Professional Fees": "bg-purple-100 text-purple-800",
   "Government Levies":         "bg-rose-100 text-rose-800",
   "Miscellaneous":             "bg-slate-100 text-slate-800",
+  "Salary Advance":            "bg-emerald-100 text-emerald-800",
 };
 
 const emptyForm = () => ({

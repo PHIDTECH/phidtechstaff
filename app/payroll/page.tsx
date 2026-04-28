@@ -464,7 +464,7 @@ export default function PayrollPage() {
     if (w) { w.document.write(html); w.document.close(); }
   };
 
-  const updateAdvStatus = (id: string, newStatus: SalaryAdvance["status"]) => {
+  const updateAdvStatus = async (id: string, newStatus: SalaryAdvance["status"]) => {
     const now = new Date().toISOString();
     const by  = session?.name ?? "";
     const extra: Record<string,string> = {};
@@ -472,11 +472,38 @@ export default function PayrollPage() {
     if (newStatus === "ceo_approved")     { extra.ceoApprovedBy = by;     extra.ceoApprovedAt = now; }
     if (newStatus === "disbursed")        { extra.disbursedBy = by;        extra.disbursedAt = now; }
     if (newStatus === "rejected")         { extra.rejectedBy = by;         extra.rejectedAt = now; }
-    fetch("/api/advances", {
+    await fetch("/api/advances", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, status: newStatus, ...extra }),
-    }).then(() => fetchAdvances()).catch(() => {});
+    });
+    // When disbursed, post an accounting entry to office-expenses books
+    if (newStatus === "disbursed") {
+      const adv = advances.find(a => a.id === id);
+      const emp = allStaffList.find(u => u.id === adv?.staffId);
+      if (adv) {
+        await fetch("/api/office-expenses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: `oexp-adv-${id}`,
+            companyId: adv.companyId,
+            recordedBy: session?.id ?? "",
+            title: `Salary Advance — ${emp?.name ?? adv.staffId}`,
+            category: "Salary Advance",
+            amount: adv.amount,
+            description: `Salary advance disbursed. Reason: ${adv.reason}. Repayment date: ${adv.repaymentDate || "N/A"}.`,
+            referenceNo: adv.id,
+            status: "disbursed",
+            date: now.slice(0, 10),
+            createdAt: now,
+            disbursedBy: by,
+            disbursedAt: now,
+          }),
+        }).catch(() => {});
+      }
+    }
+    fetchAdvances();
   };
 
   const deleteAdvance = (id: string) => {
@@ -708,6 +735,7 @@ export default function PayrollPage() {
                               s === "pending"          ? "⏳ Pending Manager" :
                               s === "manager_approved" ? "🔵 Pending CEO"     :
                               s === "ceo_approved"     ? "✅ CEO Approved"    :
+                              s === "approved"         ? "✅ CEO Approved"    :
                               s === "disbursed"        ? "💵 Disbursed"       :
                               s === "rejected"         ? "❌ Rejected"        : s;
                             return <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${badge}`}>{label}</span>;
@@ -991,6 +1019,7 @@ export default function PayrollPage() {
                               s === "pending"          ? "⏳ Pending Manager" :
                               s === "manager_approved" ? "🔵 Pending CEO"     :
                               s === "ceo_approved"     ? "✅ CEO Approved"    :
+                              s === "approved"         ? "✅ CEO Approved"    :
                               s === "disbursed"        ? "💵 Disbursed"       :
                               s === "rejected"         ? "❌ Rejected"        : s;
                             return <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${badge}`}>{label}</span>;
@@ -1013,8 +1042,8 @@ export default function PayrollPage() {
                                 <Button variant="ghost" size="sm" className="text-red-500 text-xs"    onClick={() => updateAdvStatus(adv.id, "rejected")}>✗ Reject</Button>
                               </>
                             )}
-                            {/* Stage 3: Accountant or CEO disburses CEO-approved */}
-                            {adv.status === "ceo_approved" && (isAccountant || isCEO) && (
+                            {/* Stage 3: Accountant or CEO disburses CEO-approved (also handles legacy 'approved') */}
+                            {(adv.status === "ceo_approved" || adv.status === "approved") && (isAccountant || isCEO) && (
                               <Button variant="ghost" size="sm" className="text-green-700 text-xs" onClick={() => updateAdvStatus(adv.id, "disbursed")}>💵 Disburse</Button>
                             )}
                             {(session?.isSuperAdmin || isGroupManager) && (
