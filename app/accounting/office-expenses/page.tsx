@@ -29,7 +29,7 @@ function lsGet<T>(key: string, fallback: T): T {
 function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
-interface Session { id: string; name: string; role: string; isSuperAdmin: boolean; companyId: string; }
+interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; }
 interface StaffUser { id: string; name: string; companyId: string; position?: string; department?: string; }
 interface Company { id: string; name: string; }
 interface OfficeExpense {
@@ -327,7 +327,7 @@ export default function OfficeExpensesPage() {
             <TableBody>
               {filtered.map(exp => {
                 const recorder = allStaff.find(u => u.id === exp.recordedBy);
-                const approver = allStaff.find(u => u.id === exp.approvedBy);
+                const approver = allStaff.find(u => u.name === (exp.ceoApprovedBy ?? exp.managerApprovedBy ?? ""));
                 return (
                   <TableRow key={exp.id}>
                     <TableCell className="font-medium text-gray-900">{exp.title}</TableCell>
@@ -423,7 +423,7 @@ export default function OfficeExpensesPage() {
           <DialogHeader><DialogTitle>Office Expense Details</DialogTitle></DialogHeader>
           {viewItem && (() => {
             const recorder = allStaff.find(u => u.id === viewItem.recordedBy);
-            const approver = allStaff.find(u => u.id === viewItem.approvedBy);
+            const approver = allStaff.find(u => u.name === (viewItem.ceoApprovedBy ?? viewItem.managerApprovedBy ?? ""));
             return (
               <div className="space-y-4">
                 <div className="p-3 bg-gray-50 rounded-lg">
