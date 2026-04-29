@@ -159,7 +159,7 @@ export default function AccountingSalesPage() {
 
   const openEdit = (s: Sale) => {
     setEditItem(s);
-    const c = coCusts.find(cu => cu.id === s.customerId) ?? null;
+    const c = customers.find(cu => cu.id === s.customerId) ?? null;
     setSelCustomer(c);
     setForm({ customerId: s.customerId, date: s.date, items: s.items.length ? s.items : [emptyItem()], paid: String(s.paid), notes: s.notes });
     setFormError(""); setShowDialog(true);
@@ -169,7 +169,7 @@ export default function AccountingSalesPage() {
     if (!form.customerId) { setFormError("Select a customer."); return; }
     const filled = form.items.filter(it => it.description.trim());
     if (filled.length === 0) { setFormError("Add at least one item."); return; }
-    const cust   = coCusts.find(c => c.id === form.customerId);
+    const cust   = customers.find(c => c.id === form.customerId);
     const { subtotal, tax, amount, paid, balance, status } = recalc(filled, form.paid);
     if (editItem) {
       const updated = { ...editItem, date: form.date, customerId: form.customerId,
@@ -357,15 +357,15 @@ export default function AccountingSalesPage() {
               <div className="col-span-2">
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Customer *</label>
                 <Select value={form.customerId} onValueChange={v => {
-                  const c = coCusts.find(cu => cu.id === v) ?? null;
+                  const c = customers.find(cu => cu.id === v) ?? null;
                   setSelCustomer(c); sf({ customerId: v });
                 }}>
                   <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
                   <SelectContent>
-                    {coCusts.length === 0 && (
+                    {customers.length === 0 && (
                       <div className="px-3 py-4 text-center text-sm text-gray-400">No customers found</div>
                     )}
-                    {coCusts.map(c => {
+                    {customers.map(c => {
                       const custSales = coSales.filter(s => s.customerId === c.id);
                       const custPaid  = custSales.reduce((s, x) => s + x.paid, 0);
                       const custBal   = custSales.reduce((s, x) => s + x.balance, 0);
