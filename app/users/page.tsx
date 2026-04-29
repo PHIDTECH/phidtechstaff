@@ -278,7 +278,7 @@ export default function UsersPage() {
   const isGroupHQMode = !activeCompanyId || activeCompanyId === GROUP_ID;
   const companyUsers = (() => {
     const base = isGroupHQMode
-      ? usersList.filter(u => u.companyId !== GROUP_ID) // Group HQ: show all company staff
+      ? usersList // Group HQ: show ALL staff across all companies
       : usersList.filter(u => u.companyId === activeCompanyId);
     if (isBranchManagerSession && sessionData?.branchId)
       return base.filter(u => u.branchId === sessionData.branchId);
