@@ -19,8 +19,8 @@ export function getActiveCid(
   const p = (sess.position ?? "").toLowerCase();
   const isGroupUser = sess.companyId === "group" || GROUP_ROLES.includes(r) || GROUP_ROLES.includes(p);
 
-  // SuperAdmin and Group HQ staff use ACTIVE_KEY so they can switch between companies
-  if (sess.isSuperAdmin || isGroupUser) {
+  // SuperAdmin: reads localStorage so they can switch between companies
+  if (sess.isSuperAdmin) {
     try {
       const raw = localStorage.getItem("phidtech_active_company") ?? "";
       const val = raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : "";
@@ -30,6 +30,9 @@ export function getActiveCid(
       return "";
     }
   }
+
+  // Group HQ staff (non-SA): ALWAYS in Group HQ mode — never filter by a single company
+  if (isGroupUser) return "";
 
   // Regular staff: strictly their own companyId
   return sess.companyId ?? "";

@@ -51,7 +51,20 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
     // Active company from raw localStorage
     try {
       const raw = localStorage.getItem(ACTIVE_KEY) ?? "";
-      setActiveCompanyIdState(raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : "");
+      let val = raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : "";
+      // Group non-SA staff are always in Group HQ mode — clear any stale subsidiary selection
+      try {
+        const sessStr = localStorage.getItem(SESSION_KEY);
+        if (sessStr) {
+          const sess = JSON.parse(sessStr);
+          const grpRoles = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
+          const _r = (sess.role ?? "").toLowerCase();
+          const _p = (sess.position ?? "").toLowerCase();
+          const isGroupNonSA = !sess.isSuperAdmin && (sess.companyId === "group" || grpRoles.includes(_r) || grpRoles.includes(_p));
+          if (isGroupNonSA) { val = ""; localStorage.removeItem(ACTIVE_KEY); }
+        }
+      } catch {}
+      setActiveCompanyIdState(val);
     } catch { setActiveCompanyIdState(""); }
   };
 
