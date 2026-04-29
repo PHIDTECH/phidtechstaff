@@ -190,7 +190,7 @@ export default function AttendancePage() {
 
   // Branch-scope: only true branch managers (role === "branch_manager" or position includes "branch manager")
   // see a restricted view in the daily table. Everyone else — including regular branch staff — sees all company staff.
-  const GENERAL_ROLES = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal","branch_manager"];
+  const GENERAL_ROLES = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal","group_accountant","branch_manager"];
   const isBranchManager = !!session && !session.isSuperAdmin && !!session.branchId &&
     (session.role === "branch_manager" || (session.position ?? "").toLowerCase().includes("branch manager"));
 

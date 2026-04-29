@@ -111,7 +111,7 @@ export default function DashboardPage() {
   const isGroupMode  = (isSuperAdmin && !activeCompanyId) || isGroupRole;
 
   // Branch scope detection
-  const GENERAL_ROLES_DASH = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
+  const GENERAL_ROLES_DASH = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal","group_accountant"];
   const isBranchManagerDash = !!session && !session.isSuperAdmin && !!session.branchId &&
     !GENERAL_ROLES_DASH.includes(session.position ?? session.role ?? "");
   // General Manager = has no branchId, not superadmin, not group role — sees all branches of the company

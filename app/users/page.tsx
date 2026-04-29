@@ -71,6 +71,7 @@ const STAFF_POSITIONS = [
   { value: "group_hr",          label: "Group HR Director",          color: "teal",   group: true },
   { value: "group_legal",       label: "Group Legal Counsel",        color: "indigo", group: true },
   { value: "group_it",          label: "Group IT Director",          color: "cyan",   group: true },
+  { value: "group_accountant",  label: "Group Accountant",           color: "green",  group: true },
   // ── Company-level roles ────────────────────────────────────────────────
   { value: "admin",             label: "System Admin",               color: "red" },
   { value: "manager",           label: "Manager / HOD",              color: "purple" },
@@ -123,6 +124,7 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
   group_hr:         ["dashboard","users","attendance","leave","payroll","reports","kpis","notifications"],
   group_legal:      ["dashboard","documents","reports","notifications"],
   group_it:         ["dashboard","users","tasks","assets","documents","reports","notifications"],
+  group_accountant: ["dashboard","accounting","invoices","expenses","office_expenses","payroll","reports","kpis","documents","notifications","petty_cash"],
   // Company-level
   admin:            GROUP_ALL,
   manager:          ["dashboard","attendance","leave","payroll","tasks","kpis","expenses","office_expenses","reports","services","commissions","notifications","petty_cash"],
@@ -196,7 +198,7 @@ async function apiDelete(url: string) {
 }
 
 // Branch manager detection helper (same list used across pages)
-const GENERAL_ROLES_USERS = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
+const GENERAL_ROLES_USERS = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal","group_accountant"];
 
 // ── Component ───────────────────────────────────────────────────────────────
 export default function UsersPage() {

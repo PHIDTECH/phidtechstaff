@@ -154,11 +154,11 @@ export default function ExpensesPage() {
   })();
   const _r = (session?.role ?? "").toLowerCase();
   const _p = (session?.position ?? "").toLowerCase();
-  const GROUP_ROLES_E = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it"];
+  const GROUP_ROLES_E = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
   const isGroupUser   = session?.companyId === "group" || GROUP_ROLES_E.includes(_r) || GROUP_ROLES_E.includes(_p);
   const isEManager    = _r === "manager"    || _p === "manager"    || _r === "group_manager" || _p === "group_manager";
   const isECEO        = session?.isSuperAdmin || _r === "admin" || _p === "admin" || _r === "group_ceo" || _p === "group_ceo";
-  const isEAccountant = _r === "accountant" || _p === "accountant" || _r === "group_cfo"     || _p === "group_cfo";
+  const isEAccountant = _r === "accountant" || _p === "accountant" || _r === "group_cfo" || _p === "group_cfo" || _r === "group_accountant" || _p === "group_accountant";
   const companyExpenses = cid ? expenses.filter(e => e.companyId === cid) : expenses;
   const companyStaff    = cid ? allStaff.filter(u => u.companyId === cid) : allStaff;
   const canManage = session?.isSuperAdmin || isGroupUser || isEManager || isECEO || isEAccountant;

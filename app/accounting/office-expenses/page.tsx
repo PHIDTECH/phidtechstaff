@@ -158,11 +158,11 @@ export default function OfficeExpensesPage() {
   const cid = cidRef.current || activeCompanyId;
   const _or = (session?.role ?? "").toLowerCase();
   const _op = (session?.position ?? "").toLowerCase();
-  const GROUP_ROLES_OE = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it"];
+  const GROUP_ROLES_OE = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
   const isGroupUser  = session?.companyId === "group" || GROUP_ROLES_OE.includes(_or) || GROUP_ROLES_OE.includes(_op);
   const isOEManager    = _or === "manager"    || _op === "manager"    || _or === "group_manager" || _op === "group_manager";
   const isOECEO        = session?.isSuperAdmin || _or === "admin" || _op === "admin" || _or === "group_ceo" || _op === "group_ceo";
-  const isOEAccountant = _or === "accountant" || _op === "accountant" || _or === "group_cfo"     || _op === "group_cfo";
+  const isOEAccountant = _or === "accountant" || _op === "accountant" || _or === "group_cfo" || _op === "group_cfo" || _or === "group_accountant" || _op === "group_accountant";
   const canManage = session?.isSuperAdmin || isGroupUser || isOEManager || isOECEO || isOEAccountant;
 
   // SuperAdmin sees ALL subsidiaries unless they have explicitly switched to a specific company

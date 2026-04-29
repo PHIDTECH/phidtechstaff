@@ -128,7 +128,7 @@ export default function LeavePage() {
   }, []);
 
   const cid = cidRef.current || activeCompanyId;
-  const GROUP_ROLES = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it"];
+  const GROUP_ROLES = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
   const role = (session?.role ?? "").toLowerCase();
   const pos  = (session?.position ?? "").toLowerCase();
   const isGroupUser = session?.companyId === "group" || GROUP_ROLES.includes(role) || GROUP_ROLES.includes(pos);

@@ -48,7 +48,7 @@ function lsGet<T>(key: string, fallback: T): T {
 const GENERAL_MANAGER_POSITIONS = [
   "admin", "general_manager", "group_ceo", "group_cfo",
   "group_manager", "group_controller", "group_auditor",
-  "group_hr", "group_legal", "group_it",
+  "group_hr", "group_legal", "group_it", "group_accountant",
   "accountant", "hr",
 ];
 

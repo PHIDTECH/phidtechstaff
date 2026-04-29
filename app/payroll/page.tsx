@@ -125,7 +125,7 @@ export default function PayrollPage() {
   const [groupCompanyId, setGroupCompanyId] = useState("");
   const [dataLoading, setDataLoading] = useState(true);
 
-  const GENERAL_ROLES_PAYROLL = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
+  const GENERAL_ROLES_PAYROLL = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal","group_accountant"];
 
   const fetchAdvances = () => {
     fetch("/api/advances")
@@ -525,10 +525,10 @@ export default function PayrollPage() {
   // Approval workflow roles
   const isManager    = _role === "manager" || _pos === "manager" || _role === "group_manager" || _pos === "group_manager";
   const isCEO        = session?.isSuperAdmin || _role === "admin" || _pos === "admin" || _role === "group_ceo" || _pos === "group_ceo";
-  const isAccountant = _role === "accountant" || _pos === "accountant" || _role === "group_cfo" || _pos === "group_cfo";
+  const isAccountant = _role === "accountant" || _pos === "accountant" || _role === "group_cfo" || _pos === "group_cfo" || _role === "group_accountant" || _pos === "group_accountant";
 
   // Group company context
-  const GROUP_ROLES_P = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it"];
+  const GROUP_ROLES_P = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
   const isGroupUser    = session?.companyId === "group" || GROUP_ROLES_P.includes(_role) || GROUP_ROLES_P.includes(_pos);
   const isGroupManager = isGroupUser;
 

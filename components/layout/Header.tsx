@@ -64,7 +64,7 @@ export default function Header({ onMobileMenuOpen }: HeaderProps) {
         setProfileRole(sess.position ?? sess.role ?? "Admin");
         setIsSuperAdmin(sess.isSuperAdmin === true);
         setMyCompanyId(sess.companyId ?? "");
-        const grpRoles = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it"];
+        const grpRoles = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
         const r = (sess.role ?? "").toLowerCase();
         const p = (sess.position ?? "").toLowerCase();
         setIsGroupStaff(!sess.isSuperAdmin && (sess.companyId === "group" || grpRoles.includes(r) || grpRoles.includes(p)));

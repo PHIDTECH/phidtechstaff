@@ -100,7 +100,7 @@ export default function TasksPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const GENERAL_ROLES_TASKS = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
+  const GENERAL_ROLES_TASKS = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal","group_accountant"];
 
   const loadSession = async () => {
     const sess = lsGet<{id:string;name:string;position?:string;role?:string;isSuperAdmin:boolean;branchId?:string|null;companyId?:string}>(SESSION_KEY, null as never);
@@ -192,7 +192,7 @@ export default function TasksPage() {
     }
   }, [tasksList]);
 
-  const GENERAL_ROLES_TASKS_FILTER = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
+  const GENERAL_ROLES_TASKS_FILTER = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal","group_accountant"];
   const isBranchManagerTasks = !!session && !session.isSuperAdmin && !!session.branchId && !GENERAL_ROLES_TASKS_FILTER.includes(session.position ?? session.role ?? "");
   // Branch managers see only tasks assigned to/from staff in their branch
   const branchStaffIds = isBranchManagerTasks && session?.branchId

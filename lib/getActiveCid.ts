@@ -8,7 +8,7 @@
  *
  * Usage: const cid = getActiveCid(sess);
  */
-const GROUP_ROLES = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it"];
+const GROUP_ROLES = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
 
 export function getActiveCid(
   sess: { isSuperAdmin?: boolean; companyId?: string | null; role?: string; position?: string } | null | undefined
