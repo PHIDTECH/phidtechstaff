@@ -198,9 +198,12 @@ export default function TasksPage() {
   const branchStaffIds = isBranchManagerTasks && session?.branchId
     ? staffList.filter(u => u.branchId === session.branchId).map(u => u.id)
     : null;
-  const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
-  const isGroupMgr  = isGroupUser && (session?.isSuperAdmin || (session?.role ?? "").toLowerCase() === "admin" || (session?.role ?? "").toLowerCase() === "manager");
-  const companyTasks = (session?.isSuperAdmin || isGroupMgr)
+  const ALL_GRP_ROLES_T = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
+  const _tr = (session?.role ?? "").toLowerCase();
+  const _tp = (session?.position ?? "").toLowerCase();
+  const isGroupUser = session?.isSuperAdmin || session?.companyId === "group" || ALL_GRP_ROLES_T.includes(_tr) || ALL_GRP_ROLES_T.includes(_tp);
+  const isGroupMgr  = isGroupUser;
+  const companyTasks = isGroupUser
     ? (activeCompanyId ? tasksList.filter(t => t.companyId === activeCompanyId) : tasksList)
     : tasksList.filter(t =>
         t.companyId === activeCompanyId &&

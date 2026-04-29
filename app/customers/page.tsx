@@ -176,8 +176,11 @@ export default function CustomersPage() {
   }, []);
 
   // Visibility: always filter by the currently active/switched company
-  const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
-  const isGroupAdmin = isGroupUser && (session?.role === "admin" || session?.role === "manager");
+  const ALL_GRP_ROLES_C = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
+  const _cr = (session?.role ?? "").toLowerCase();
+  const _cp = (session?.position ?? "").toLowerCase();
+  const isGroupUser = session?.isSuperAdmin || session?.companyId === "group" || ALL_GRP_ROLES_C.includes(_cr) || ALL_GRP_ROLES_C.includes(_cp);
+  const isGroupAdmin = isGroupUser;
   const visibleCustomers = activeCompanyId
     ? customers.filter(c => c.companyId === activeCompanyId)
     : customers;

@@ -26,7 +26,7 @@ function lsGet<T>(key: string, fallback: T): T {
 function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
-interface Session { id: string; name: string; role: string; isSuperAdmin: boolean; companyId: string; }
+interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; }
 interface Customer { id: string; name: string; companyId: string; email?: string; address?: string; phone?: string; }
 interface LineItem { description: string; quantity: number; unitPrice: number; total: number; }
 interface Invoice {
@@ -77,9 +77,12 @@ export default function InvoicesPage() {
   useEffect(() => { reload(); }, []);
 
   const cid = cidRef.current || activeCompanyId;
-  const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
-  const isGroupMgr  = isGroupUser && (session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager");
-  const companyInvoices = (session?.isSuperAdmin || isGroupMgr) ? invoices : (cid ? invoices.filter(i => i.companyId === cid) : invoices);
+  const ALL_GRP_ROLES_I = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
+  const _ir = (session?.role ?? "").toLowerCase();
+  const _ip = (session?.position ?? "").toLowerCase();
+  const isGroupUser = session?.isSuperAdmin || session?.companyId === "group" || ALL_GRP_ROLES_I.includes(_ir) || ALL_GRP_ROLES_I.includes(_ip);
+  const isGroupMgr  = isGroupUser;
+  const companyInvoices = isGroupUser ? (cid ? invoices.filter(i => i.companyId === cid) : invoices) : (cid ? invoices.filter(i => i.companyId === cid) : invoices);
 
   const filtered = companyInvoices.filter(i => {
     const name        = (i.customerName ?? i.customerId ?? "").toLowerCase();

@@ -114,8 +114,9 @@ export default function LoginPage() {
       const session = data.session;
       localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 
-      // For staff: set their active company; for superadmin: clear (Group HQ mode)
-      if (!session.isSuperAdmin && session.companyId) {
+      // SuperAdmin and Group HQ staff → clear (Group HQ mode); regular staff → set their company
+      const isGroupMember = session.isSuperAdmin || session.companyId === "group";
+      if (!isGroupMember && session.companyId) {
         localStorage.setItem("phidtech_active_company", session.companyId);
       } else {
         localStorage.removeItem("phidtech_active_company");

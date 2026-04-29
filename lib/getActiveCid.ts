@@ -23,7 +23,9 @@ export function getActiveCid(
   if (sess.isSuperAdmin || isGroupUser) {
     try {
       const raw = localStorage.getItem("phidtech_active_company") ?? "";
-      return raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : "";
+      const val = raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : "";
+      // "group" means Group HQ mode — normalize to "" so `cid ? filter : showAll` works everywhere
+      return val === "group" ? "" : val;
     } catch {
       return "";
     }

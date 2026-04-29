@@ -102,8 +102,11 @@ export default function AccountingExpensesPage() {
   }, []);
 
   const cid = cidRef.current || activeCompanyId;
-  const isGroupUser = !!groupCompanyId && session?.companyId === groupCompanyId;
-  const isGroupMgr  = isGroupUser && (session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager");
+  const ALL_GRP_ROLES_AE = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
+  const _aer = (session?.role ?? "").toLowerCase();
+  const _aep = (session?.position ?? "").toLowerCase();
+  const isGroupUser = session?.isSuperAdmin || session?.companyId === "group" || ALL_GRP_ROLES_AE.includes(_aer) || ALL_GRP_ROLES_AE.includes(_aep);
+  const isGroupMgr  = isGroupUser;
   const canManage   = session?.isSuperAdmin || isGroupMgr || session?.role === "admin" || session?.role === "manager" || session?.role === "accountant";
 
   // Always filter by active/switched company — show all companies' expenses only if no company is selected

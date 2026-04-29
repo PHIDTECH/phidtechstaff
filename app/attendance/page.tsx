@@ -184,7 +184,11 @@ export default function AttendancePage() {
   // Derive cid synchronously from session to avoid empty-string flash before async state settles
   const cid = (() => {
     if (!session) return cidRef.current || activeCompanyId;
-    if (session.isSuperAdmin) return cidRef.current || activeCompanyId;
+    const _r = (session.role ?? "").toLowerCase();
+    const _p = (session.position ?? "").toLowerCase();
+    const ATT_GRP = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
+    const isGroupMember = session.isSuperAdmin || session.companyId === "group" || ATT_GRP.includes(_r) || ATT_GRP.includes(_p);
+    if (isGroupMember) return cidRef.current || activeCompanyId; // "" in Group HQ mode
     return session.companyId || cidRef.current || activeCompanyId;
   })();
 
