@@ -5,7 +5,7 @@ import StatCard from "@/components/shared/StatCard";
 import {
   Users, DollarSign, CheckSquare, AlertCircle,
   Calendar, ArrowRight, Building2, TrendingUp,
-  Globe, BarChart3, ShoppingCart, Briefcase,
+  BarChart3, ShoppingCart, Briefcase,
   ArrowLeftRight, Crown, UserCheck
 } from "lucide-react";
 import Link from "next/link";
@@ -529,22 +529,6 @@ export default function DashboardPage() {
         })}
       </div>
 
-      {/* Switch company (superadmin only) */}
-      {isSuperAdmin && companies.length > 1 && (
-        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <Globe className="w-4 h-4 text-indigo-600" />
-            <p className="text-sm font-semibold text-indigo-900">Switch to another subsidiary</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {companies.filter(c => c.id !== activeCompanyId).map(c => (
-              <Button key={c.id} size="sm" variant="outline" className="text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-100" onClick={() => switchToCompany(c.id)}>
-                <ArrowLeftRight className="w-3 h-3 mr-1.5" />{c.name}
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
     </MainLayout>
   );
 }
