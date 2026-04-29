@@ -11,6 +11,20 @@ const nextConfig: NextConfig = {
       bodySizeLimit: 52428800,
     },
   },
+  // Prevent browsers from caching HTML so every deploy is immediately visible
+  async headers() {
+    return [
+      {
+        // Apply to all routes except immutable hashed static assets
+        source: "/((?!_next/static|_next/image|favicon\\.ico).*)",
+        headers: [
+          { key: "Cache-Control", value: "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" },
+          { key: "Pragma",        value: "no-cache" },
+          { key: "Expires",       value: "0" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
