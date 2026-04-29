@@ -123,14 +123,15 @@ export default function PayrollPage() {
   const [editForm, setEditForm] = useState<{ basicSalary: string; allowances: Allowance[] } | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [groupCompanyId, setGroupCompanyId] = useState("");
+  const [dataLoading, setDataLoading] = useState(true);
 
   const GENERAL_ROLES_PAYROLL = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal"];
 
   const fetchAdvances = () => {
     fetch("/api/advances")
       .then(r => r.json())
-      .then((data: SalaryAdvance[]) => setAdvances(Array.isArray(data) ? data : []))
-      .catch(() => {});
+      .then((data: SalaryAdvance[]) => { setAdvances(Array.isArray(data) ? data : []); setDataLoading(false); })
+      .catch(() => { setDataLoading(false); });
   };
 
   const loadSession = async () => {
@@ -183,7 +184,7 @@ export default function PayrollPage() {
     } catch { setPayrollEntries(lsGet<PayrollEntry[]>(PAYROLL_KEY, [])); }
   };
 
-  const reload = () => { loadSession(); fetchPayroll(); fetchAdvances(); };
+  const reload = () => { setDataLoading(true); loadSession(); fetchPayroll(); fetchAdvances(); };
 
   useEffect(() => {
     loadSession();
@@ -827,12 +828,17 @@ export default function PayrollPage() {
         <span>You are viewing as <strong>{session?.isSuperAdmin ? "Super Admin" : "Accountant"}</strong> — full payroll access for <strong>{activeCompanyName}</strong></span>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      {dataLoading && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {[...Array(4)].map((_,i) => <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm h-28 animate-pulse bg-gray-50" />)}
+        </div>
+      )}
+      {!dataLoading && <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard title="Total Gross" value={formatCurrency(totalGross)} icon={DollarSign} iconBg="bg-blue-50" iconColor="text-blue-600" subtitle={`${selectedMonth} ${selectedYear}`} />
         <StatCard title="Total Net Pay" value={formatCurrency(totalNet)} icon={CheckCircle} iconBg="bg-green-50" iconColor="text-green-600" subtitle="After deductions" />
         <StatCard title="Total Deductions" value={formatCurrency(totalDeductions)} icon={DollarSign} iconBg="bg-red-50" iconColor="text-red-500" subtitle="PAYE + NSSF (employee)" />
         <StatCard title="Paid Staff" value={`${paidCount}/${companyEntries.length}`} icon={CheckCircle} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="This month" />
-      </div>
+      </div>}
 
       <Tabs defaultValue="payroll">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
