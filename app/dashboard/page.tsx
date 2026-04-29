@@ -106,9 +106,12 @@ export default function DashboardPage() {
   }, []);
 
   const isSuperAdmin = session?.isSuperAdmin === true;
-  // Group mode = superadmin with no active company, OR group-role user
-  const isGroupRole  = session?.role === "group_manager" || session?.role === "group_controller";
-  const isGroupMode  = (isSuperAdmin && !activeCompanyId) || isGroupRole;
+  // Group mode = superadmin with no/group active company, OR ANY group-role user
+  const ALL_GROUP_ROLES = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
+  const _dr = (session?.role ?? "").toLowerCase();
+  const _dp = (session?.position ?? "").toLowerCase();
+  const isGroupRole  = session?.companyId === GROUP_ID || ALL_GROUP_ROLES.includes(_dr) || ALL_GROUP_ROLES.includes(_dp);
+  const isGroupMode  = (isSuperAdmin && (!activeCompanyId || activeCompanyId === GROUP_ID)) || isGroupRole;
 
   // Branch scope detection
   const GENERAL_ROLES_DASH = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal","group_accountant"];

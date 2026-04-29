@@ -19,6 +19,7 @@ const SESSION_KEY   = "phidtech_session";
 const ACTIVE_KEY    = "phidtech_active_company";
 const SALES_KEY     = "phidtech_accounting_sales";
 const CUSTOMERS_KEY = "phidtech_customers";
+const COMPANIES_KEY = "phidtech_companies";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -46,7 +47,7 @@ interface Sale {
 const emptyItem = (): SaleItem => ({ description: "", quantity: 1, unitPrice: 0, total: 0 });
 const emptyForm = () => ({
   customerId: "", date: new Date().toISOString().slice(0, 10),
-  items: [emptyItem()], paid: "", notes: "",
+  items: [emptyItem()], paid: "", notes: "", saleCompanyId: "",
 });
 
 const statusColors: Record<string, string> = {
@@ -58,6 +59,7 @@ const statusColors: Record<string, string> = {
 export default function AccountingSalesPage() {
   const [sales, setSales]           = useState<Sale[]>([]);
   const [customers, setCustomers]   = useState<Customer[]>([]);
+  const [companies, setCompanies]   = useState<{id:string;name:string}[]>([]);
   const [cid, setCid]               = useState("");
   const cidRef                      = useRef("");
   const [search, setSearch]         = useState("");
@@ -76,6 +78,7 @@ export default function AccountingSalesPage() {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const c = getActiveCid(sess);
     setCid(c); cidRef.current = c;
+    setCompanies(lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []));
     // Load customers from server API
     try {
       const cr = await fetch("/api/customers", { cache: "no-store" });
@@ -161,12 +164,15 @@ export default function AccountingSalesPage() {
     setEditItem(s);
     const c = customers.find(cu => cu.id === s.customerId) ?? null;
     setSelCustomer(c);
-    setForm({ customerId: s.customerId, date: s.date, items: s.items.length ? s.items : [emptyItem()], paid: String(s.paid), notes: s.notes });
+    setForm({ customerId: s.customerId, date: s.date, items: s.items.length ? s.items : [emptyItem()], paid: String(s.paid), notes: s.notes, saleCompanyId: s.companyId });
     setFormError(""); setShowDialog(true);
   };
 
+  const isGroupHQ = !cidRef.current && !cid;
+
   const saveForm = async () => {
     if (!form.customerId) { setFormError("Select a customer."); return; }
+    if (isGroupHQ && !form.saleCompanyId) { setFormError("Select which company this sale belongs to."); return; }
     const filled = form.items.filter(it => it.description.trim());
     if (filled.length === 0) { setFormError("Add at least one item."); return; }
     const cust   = customers.find(c => c.id === form.customerId);
@@ -181,7 +187,7 @@ export default function AccountingSalesPage() {
     } else {
       const saleNum = `SAL-${Date.now().toString().slice(-6)}`;
       const newSale: Sale = {
-        id: saleNum, companyId: cidRef.current || cid,
+        id: saleNum, companyId: form.saleCompanyId || cidRef.current || cid,
         date: form.date, customerId: form.customerId,
         customerName: cust?.name ?? "", customerPhone: cust?.phone ?? "",
         customerAddress: cust?.address ?? "",
@@ -354,6 +360,17 @@ export default function AccountingSalesPage() {
             )}
 
             <div className="grid grid-cols-2 gap-3">
+              {isGroupHQ && !editItem && (
+                <div className="col-span-2">
+                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">Company *</label>
+                  <Select value={form.saleCompanyId} onValueChange={v => sf({ saleCompanyId: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select company for this sale" /></SelectTrigger>
+                    <SelectContent>
+                      {companies.map(co => <SelectItem key={co.id} value={co.id}>{co.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="col-span-2">
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Customer *</label>
                 <Select value={form.customerId} onValueChange={v => {
