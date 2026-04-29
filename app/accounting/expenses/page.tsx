@@ -29,7 +29,7 @@ function lsGet<T>(key: string, fallback: T): T {
 function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
-interface Session { id: string; name: string; role: string; isSuperAdmin: boolean; companyId: string; }
+interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; }
 interface StaffUser { id: string; name: string; companyId: string; position?: string; department?: string; }
 interface Company  { id: string; name: string; }
 interface Expense {
