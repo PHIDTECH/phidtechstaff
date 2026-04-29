@@ -111,7 +111,8 @@ export default function DashboardPage() {
   const _dr = (session?.role ?? "").toLowerCase();
   const _dp = (session?.position ?? "").toLowerCase();
   const isGroupRole  = session?.companyId === GROUP_ID || ALL_GROUP_ROLES.includes(_dr) || ALL_GROUP_ROLES.includes(_dp);
-  const isGroupMode  = (isSuperAdmin && (!activeCompanyId || activeCompanyId === GROUP_ID)) || isGroupRole;
+  // Group HQ mode only when no specific company is selected — respects the company switcher for both SA and group staff
+  const isGroupMode  = (isSuperAdmin || isGroupRole) && (!activeCompanyId || activeCompanyId === GROUP_ID);
 
   // Branch scope detection
   const GENERAL_ROLES_DASH = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal","group_accountant"];
