@@ -277,9 +277,9 @@ export default function UsersPage() {
 
   const isGroupHQMode = !activeCompanyId || activeCompanyId === GROUP_ID;
   const companyUsers = (() => {
-    const base = activeCompanyId
-      ? usersList.filter(u => u.companyId === activeCompanyId)
-      : usersList.filter(u => u.companyId !== GROUP_ID); // Group HQ: show all company staff
+    const base = isGroupHQMode
+      ? usersList.filter(u => u.companyId !== GROUP_ID) // Group HQ: show all company staff
+      : usersList.filter(u => u.companyId === activeCompanyId);
     if (isBranchManagerSession && sessionData?.branchId)
       return base.filter(u => u.branchId === sessionData.branchId);
     return base;
@@ -389,7 +389,7 @@ export default function UsersPage() {
     <MainLayout>
       <PageHeader
         title="Users & Role Management"
-        subtitle={`Managing staff for: ${activeCompany?.name ?? "Select a company"}`}
+        subtitle={isGroupHQMode ? "Managing staff for: All Companies" : `Managing staff for: ${activeCompany?.name ?? "Select a company"}`}
         icon={Users}
         actions={
           <Button size="sm" onClick={openAdd}>
@@ -399,7 +399,7 @@ export default function UsersPage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Total Staff"    value={companyUsers.length}  icon={Users}     iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle={activeCompany?.name} />
+        <StatCard title="Total Staff"    value={companyUsers.length}  icon={Users}     iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle={isGroupHQMode ? "All Companies" : activeCompany?.name} />
         <StatCard title="Active"          value={activeCount}          icon={UserCheck} iconBg="bg-green-50"  iconColor="text-green-600"  subtitle="Currently active" />
         <StatCard title="Group HQ Staff" value={groupUsers.length}    icon={Shield}    iconBg="bg-indigo-50" iconColor="text-indigo-600" subtitle="Cross-company roles" />
         <StatCard title="Departments"     value={deptCount}            icon={Building2} iconBg="bg-orange-50" iconColor="text-orange-600" subtitle="Active depts" />
