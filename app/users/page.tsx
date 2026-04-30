@@ -276,9 +276,11 @@ export default function UsersPage() {
     !GENERAL_ROLES_USERS.includes(sessionData.position ?? sessionData.role ?? "");
 
   const isGroupHQMode = !activeCompanyId || activeCompanyId === GROUP_ID;
+  // SuperAdmin always sees all staff (ignore company switcher on this page)
+  const canSeeAllStaff = sessionData?.isSuperAdmin || isGroupHQMode;
   const companyUsers = (() => {
-    const base = isGroupHQMode
-      ? usersList // Group HQ: show ALL staff across all companies
+    const base = canSeeAllStaff
+      ? usersList // SA or Group HQ: ALL staff across all companies + group staff
       : usersList.filter(u => u.companyId === activeCompanyId);
     if (isBranchManagerSession && sessionData?.branchId)
       return base.filter(u => u.branchId === sessionData.branchId);
@@ -389,7 +391,7 @@ export default function UsersPage() {
     <MainLayout>
       <PageHeader
         title="Users & Role Management"
-        subtitle={isGroupHQMode ? "Managing staff for: All Companies" : `Managing staff for: ${activeCompany?.name ?? "Select a company"}`}
+        subtitle={canSeeAllStaff ? "Managing staff for: All Companies" : `Managing staff for: ${activeCompany?.name ?? "Select a company"}`}
         icon={Users}
         actions={
           <Button size="sm" onClick={openAdd}>
@@ -399,7 +401,7 @@ export default function UsersPage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Total Staff"    value={companyUsers.length}  icon={Users}     iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle={isGroupHQMode ? "All Companies" : activeCompany?.name} />
+        <StatCard title="Total Staff"    value={companyUsers.length}  icon={Users}     iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle={canSeeAllStaff ? "All Companies" : activeCompany?.name} />
         <StatCard title="Active"          value={activeCount}          icon={UserCheck} iconBg="bg-green-50"  iconColor="text-green-600"  subtitle="Currently active" />
         <StatCard title="Group HQ Staff" value={groupUsers.length}    icon={Shield}    iconBg="bg-indigo-50" iconColor="text-indigo-600" subtitle="Cross-company roles" />
         <StatCard title="Departments"     value={deptCount}            icon={Building2} iconBg="bg-orange-50" iconColor="text-orange-600" subtitle="Active depts" />
@@ -449,7 +451,7 @@ export default function UsersPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Employee</TableHead>
-                    {isGroupHQMode && <TableHead>Company</TableHead>}
+                    {canSeeAllStaff && <TableHead>Subsidiary</TableHead>}
                     <TableHead>Branch</TableHead>
                     <TableHead>Department</TableHead>
                     <TableHead>Position</TableHead>
@@ -474,9 +476,11 @@ export default function UsersPage() {
                           </div>
                         </div>
                       </TableCell>
-                      {isGroupHQMode && (
-                        <TableCell className="text-xs text-gray-600 font-medium">
-                          {companiesList.find(c => c.id === user.companyId)?.name ?? user.companyId}
+                      {canSeeAllStaff && (
+                        <TableCell className="text-xs font-medium">
+                          {user.companyId === GROUP_ID
+                            ? <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">GROUP HQ</span>
+                            : <span className="text-gray-700">{companiesList.find(c => c.id === user.companyId)?.name ?? user.companyId}</span>}
                         </TableCell>
                       )}
                       <TableCell className="text-sm">
