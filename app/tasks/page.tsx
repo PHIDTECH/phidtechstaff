@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckSquare, Plus, Search, Clock, AlertCircle, CheckCircle, XCircle, Edit, Eye, Paperclip, Send, MessageSquare, X, FileText } from "lucide-react";
+import { CheckSquare, Plus, Search, Clock, AlertCircle, CheckCircle, XCircle, Edit, Eye, Paperclip, Send, MessageSquare, X, FileText, Trash2, Building2 } from "lucide-react";
 import { getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -97,6 +97,7 @@ export default function TasksPage() {
   const [allStaffList, setAllStaffList] = useState<StaffUser[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [companiesList, setCompaniesList] = useState<{id:string;name:string}[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -108,6 +109,7 @@ export default function TasksPage() {
     const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
     const cos = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+    setCompaniesList(cos);
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
     setGroupCompanyId(gc);
     const rawDepts = lsGet<(Department|string)[]>(DEPTS_KEY, []);
@@ -290,6 +292,13 @@ export default function TasksPage() {
     await fetchTasks();
   };
 
+  const deleteTask = async (id: string) => {
+    if (!confirm("Delete this task permanently?")) return;
+    await fetch(`/api/tasks?id=${id}`, { method: "DELETE" });
+    if (selectedTask?.id === id) setSelectedTask(null);
+    await fetchTasks();
+  };
+
   const sendComment = async () => {
     if (!commentText.trim() || !selectedTask) return;
     const comment: Comment = {
@@ -366,6 +375,7 @@ export default function TasksPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Task</TableHead>
+                    {isGroupUser && <TableHead>Subsidiary</TableHead>}
                     <TableHead>Assigned To</TableHead>
                     <TableHead>Department</TableHead>
                     <TableHead>Priority</TableHead>
@@ -390,6 +400,14 @@ export default function TasksPage() {
                             )}
                           </div>
                         </TableCell>
+                        {isGroupUser && (
+                          <TableCell className="text-xs font-medium">
+                            <span className="flex items-center gap-1">
+                              <Building2 className="w-3 h-3 text-gray-400" />
+                              {companiesList.find(c => c.id === task.companyId)?.name ?? task.companyId}
+                            </span>
+                          </TableCell>
+                        )}
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Avatar className="w-7 h-7">
@@ -417,6 +435,11 @@ export default function TasksPage() {
                             </Button>
                             {task.comments.length > 0 && (
                               <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5 font-medium">{task.comments.length}</span>
+                            )}
+                            {isGroupMgr && (
+                              <Button variant="ghost" size="icon" onClick={() => deleteTask(task.id)} title="Delete task">
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </Button>
                             )}
                           </div>
                         </TableCell>
