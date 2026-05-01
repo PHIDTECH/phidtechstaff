@@ -226,8 +226,7 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
 
   const getInitialGroups = () => {
     const active = ALL_NAV.find(g => g.items.some(i => pathname === i.href || pathname.startsWith(i.href + "/")));
-    const always = ["Human Resources", "Marketing"];
-    const result = new Set(always);
+    const result = new Set<string>();
     if (active) result.add(active.title);
     return Array.from(result);
   };
@@ -306,17 +305,19 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
             {(!collapsed || mobile) && (
               <button
                 onClick={() => toggleGroup(group.title)}
-                className="flex items-center justify-between w-full px-3 py-1.5 mt-1 transition-colors group"
+                className={cn(
+                  "flex items-center justify-between w-full px-3 py-2.5 rounded-lg transition-all duration-150 border-l-4 mt-1",
+                  expandedGroups.includes(group.title)
+                    ? "bg-[#1a2d6d] border-blue-500 text-blue-200"
+                    : "bg-[#0f1a4a] border-transparent text-slate-400 hover:bg-[#162050] hover:border-blue-600/50 hover:text-slate-200"
+                )}
               >
-                <div className="flex items-center gap-1.5">
-                  <span className="w-1 h-1 rounded-full bg-blue-500/60 group-hover:bg-blue-400 transition-colors" />
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-blue-300/60 group-hover:text-blue-300 transition-colors">
-                    {group.title}
-                  </span>
-                </div>
+                <span className="text-[11px] font-bold uppercase tracking-widest">
+                  {group.title}
+                </span>
                 {expandedGroups.includes(group.title)
-                  ? <ChevronDown className="w-3 h-3 text-slate-600 group-hover:text-slate-400" />
-                  : <ChevronRight className="w-3 h-3 text-slate-600 group-hover:text-slate-400" />
+                  ? <ChevronDown className="w-3.5 h-3.5 opacity-70 shrink-0" />
+                  : <ChevronRight className="w-3.5 h-3.5 opacity-50 shrink-0" />
                 }
               </button>
             )}
