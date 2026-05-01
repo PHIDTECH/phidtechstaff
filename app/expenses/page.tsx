@@ -2,6 +2,7 @@
 export const dynamic = "force-dynamic";
 import { useState, useEffect, useRef } from "react";
 import { usePermissionGuard } from "@/lib/usePermissionGuard";
+import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -76,18 +77,16 @@ export default function ExpensesPage() {
   const [groupCompanyId, setGroupCompanyId] = useState("");
   const [allStaff, setAllStaff] = useState<StaffUser[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [companiesList, setCompaniesList] = useState<{id:string;name:string}[]>([]);
 
   const loadSession = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
-    // Non-superadmin staff must ALWAYS use their own companyId — never ACTIVE_KEY
-    // (ACTIVE_KEY reflects the company an admin last switched to, not the staff's company)
-    const cid  = sess?.isSuperAdmin
-      ? lsStr(ACTIVE_KEY)
-      : (sess?.companyId ?? "");
+    const cid = getActiveCid(sess);
     setSession(sess);
     setActiveCompanyId(cid);
     cidRef.current = cid;
     const cos = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+    setCompaniesList(cos);
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
     setGroupCompanyId(gc);
     // Load staff from server API, fall back to localStorage
@@ -97,12 +96,12 @@ export default function ExpensesPage() {
         const data: StaffUser[] = await res.json();
         const active = Array.isArray(data) ? data.filter(u => u.status !== "inactive") : [];
         setAllStaff(active);
-        setStaff(active.filter(u => u.companyId === cid));
+        setStaff(cid ? active.filter(u => u.companyId === cid) : active);
       } else throw new Error();
     } catch {
       const allS = lsGet<StaffUser[]>(USERS_KEY, []);
       setAllStaff(allS);
-      setStaff(allS.filter(u => u.companyId === cid));
+      setStaff(cid ? allS.filter(u => u.companyId === cid) : allS);
     }
     // Load branches
     try {
@@ -146,12 +145,7 @@ export default function ExpensesPage() {
   }, []);
 
   // Derive cid synchronously from session to avoid empty-string flash on first render
-  const cid = (() => {
-    const s = session;
-    if (!s) return cidRef.current || activeCompanyId;
-    if (s.isSuperAdmin) return cidRef.current || activeCompanyId;
-    return s.companyId || cidRef.current || activeCompanyId;
-  })();
+  const cid = cidRef.current || activeCompanyId;
   const _r = (session?.role ?? "").toLowerCase();
   const _p = (session?.position ?? "").toLowerCase();
   const GROUP_ROLES_E = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
@@ -298,12 +292,11 @@ export default function ExpensesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Employee</TableHead>
+                {!cid && <TableHead>Subsidiary</TableHead>}
                 <TableHead>Title</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Amount</TableHead>
-                <TableHead>Description</TableHead>
                 <TableHead>Submitted</TableHead>
-                <TableHead>Approved By</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -325,6 +318,11 @@ export default function ExpensesPage() {
                         </div>
                       </div>
                     </TableCell>
+                    {!cid && (
+                      <TableCell className="text-xs text-gray-500 font-medium">
+                        {companiesList.find(c => c.id === claim.companyId)?.name ?? claim.companyId}
+                      </TableCell>
+                    )}
                     <TableCell className="font-medium text-gray-800">{claim.title}</TableCell>
                     <TableCell>
                       <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${categoryColors[claim.category] ?? "bg-gray-100 text-gray-700"}`}>

@@ -14,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DollarSign, Plus, TrendingUp, TrendingDown, Wallet, Trash2, AlertCircle } from "lucide-react";
 import { formatDate, formatCurrency } from "@/lib/utils";
 
-const SESSION_KEY = "phidtech_session";
+const SESSION_KEY   = "phidtech_session";
+const COMPANIES_KEY = "phidtech_companies";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -38,6 +39,7 @@ export default function PettyCashPage() {
   const [entries, setEntries]             = useState<PettyCash[]>([]);
   const [staff, setStaff]                 = useState<StaffUser[]>([]);
   const [activeCompanyId, setActiveCompanyId] = useState("");
+  const [companiesList, setCompaniesList]     = useState<{id:string;name:string}[]>([]);
   const cidRef                            = useRef("");
   const [showDialog, setShowDialog]       = useState(false);
   const [deleteId, setDeleteId]           = useState<string | null>(null);
@@ -49,6 +51,7 @@ export default function PettyCashPage() {
     const cid  = getActiveCid(sess);
     setActiveCompanyId(cid);
     cidRef.current = cid;
+    setCompaniesList(lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []));
     try {
       const [pr, ur] = await Promise.all([
         fetch("/api/petty-cash", { cache: "no-store" }),
@@ -152,6 +155,7 @@ export default function PettyCashPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
+                {!cid && <TableHead>Subsidiary</TableHead>}
                 <TableHead>Description</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Type</TableHead>
@@ -166,6 +170,11 @@ export default function PettyCashPage() {
                 return (
                   <TableRow key={entry.id}>
                     <TableCell className="text-sm text-gray-600">{formatDate(entry.date)}</TableCell>
+                    {!cid && (
+                      <TableCell className="text-xs text-gray-500 font-medium">
+                        {companiesList.find(c => c.id === entry.companyId)?.name ?? entry.companyId}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <p className="font-medium text-gray-800 text-sm">{entry.description}</p>
                       <p className="text-xs text-gray-400">{creator?.name}</p>

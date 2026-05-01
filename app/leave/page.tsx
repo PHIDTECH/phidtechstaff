@@ -69,6 +69,7 @@ export default function LeavePage() {
   const [session, setSession]             = useState<Session | null>(null);
   const [activeCompanyId, setActiveCompanyId] = useState("");
   const [groupCompanyId, setGroupCompanyId]   = useState("");
+  const [companiesList, setCompaniesList]      = useState<{id:string;name:string}[]>([]);
   const cidRef                            = useRef("");
   const [search, setSearch]               = useState("");
   const [statusFilter, setStatusFilter]   = useState("all");
@@ -83,6 +84,7 @@ export default function LeavePage() {
     setActiveCompanyId(cid);
     cidRef.current = cid;
     const cos = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+    setCompaniesList(cos);
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
     setGroupCompanyId(gc);
     // Load staff from server for fresh data
@@ -263,6 +265,7 @@ export default function LeavePage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Employee</TableHead>
+                    {!cid && <TableHead>Subsidiary</TableHead>}
                     <TableHead>Leave Type</TableHead>
                     <TableHead>Duration</TableHead>
                     <TableHead>Days</TableHead>
@@ -286,6 +289,11 @@ export default function LeavePage() {
                           </div>
                         </div>
                       </TableCell>
+                      {!cid && (
+                        <TableCell className="text-xs text-gray-500 font-medium">
+                          {companiesList.find(c => c.id === leave.companyId)?.name ?? leave.companyId}
+                        </TableCell>
+                      )}
                       <TableCell>
                         <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${leaveTypeColor(leave.type)}`}>
                           {leave.type}

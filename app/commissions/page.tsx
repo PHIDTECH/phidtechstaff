@@ -77,6 +77,7 @@ export default function CommissionsPage() {
   const [activeCompanyId, setActiveCompanyId] = useState("");
   const activeCompanyIdRef = useRef("");
   const [activeCompanyName, setActiveCompanyName] = useState("");
+  const [companiesList, setCompaniesList] = useState<{id:string;name:string}[]>([]);
   const [staffList, setStaffList]     = useState<StaffUser[]>([]);
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [search, setSearch]           = useState("");
@@ -96,6 +97,7 @@ export default function CommissionsPage() {
     setActiveCompanyId(cid);
     activeCompanyIdRef.current = cid;
     const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+    setCompaniesList(companies);
     setActiveCompanyName(companies.find(c => c.id === cid)?.name ?? "");
     const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
     setStaffList(cid ? allStaff.filter(u => u.companyId === cid) : allStaff);
@@ -315,6 +317,7 @@ export default function CommissionsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Staff Member</TableHead>
+                  {!cid && <TableHead>Subsidiary</TableHead>}
                   <TableHead>Customer Name</TableHead>
                   <TableHead>Month</TableHead>
                   <TableHead>Sale Amount</TableHead>
@@ -341,6 +344,11 @@ export default function CommissionsPage() {
                           </div>
                         </div>
                       </TableCell>
+                      {!cid && (
+                        <TableCell className="text-xs text-gray-500 font-medium">
+                          {companiesList.find(co => co.id === c.companyId)?.name ?? c.companyId}
+                        </TableCell>
+                      )}
                       <TableCell className="font-medium text-gray-800">{c.customerName}</TableCell>
                       <TableCell className="text-sm text-gray-600">{c.month} {c.year}</TableCell>
                       <TableCell className="font-medium text-gray-800">{formatCurrency(c.saleAmount)}</TableCell>

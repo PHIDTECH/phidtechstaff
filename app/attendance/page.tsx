@@ -22,6 +22,7 @@ const ACTIVE_KEY     = "phidtech_active_company";
 const ATTENDANCE_KEY = "phidtech_attendance";
 const USERS_KEY      = "phidtech_users";
 const BRANCHES_KEY   = "phidtech_branches_cache";
+const COMPANIES_KEY  = "phidtech_companies";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -90,6 +91,7 @@ export default function AttendancePage() {
   const [staff, setStaff]                 = useState<StaffUser[]>([]);
   const [staffLoading, setStaffLoading]   = useState(true);
   const [branches, setBranches]           = useState<Branch[]>([]);
+  const [companiesList, setCompaniesList]  = useState<{id:string;name:string}[]>([]);
   const [activeCompanyId, setActiveCompanyId] = useState("");
   const cidRef                            = useRef("");
   const [dateFilter, setDateFilter]       = useState(today);
@@ -107,6 +109,7 @@ export default function AttendancePage() {
     const resolvedCid = getActiveCid(sess);
     setActiveCompanyId(resolvedCid);
     cidRef.current = resolvedCid;
+    setCompaniesList(lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []));
     // Load ALL staff from API — filter by companyId client-side
     try {
       const res = await fetch("/api/users", { cache: "no-store" });
@@ -351,6 +354,7 @@ export default function AttendancePage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Employee</TableHead>
+                    {!cid && <TableHead>Subsidiary</TableHead>}
                     <TableHead>Department</TableHead>
                     <TableHead>Clock In</TableHead>
                     <TableHead>Clock Out</TableHead>
@@ -374,6 +378,11 @@ export default function AttendancePage() {
                             <p className="font-medium text-gray-900 text-sm">{user.name}</p>
                           </div>
                         </TableCell>
+                        {!cid && (
+                          <TableCell className="text-xs text-gray-500 font-medium">
+                            {companiesList.find(c => c.id === user.companyId)?.name ?? user.companyId}
+                          </TableCell>
+                        )}
                         <TableCell className="text-sm text-gray-600">{user.department ?? "—"}</TableCell>
                         <TableCell className="font-mono text-sm text-gray-700">
                           {record?.clockIn ?? <span className="text-gray-300">—</span>}

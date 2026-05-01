@@ -896,7 +896,9 @@ export default function PayrollPage() {
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-semibold text-gray-700">{activeCompanyName} — {selectedMonth} {selectedYear}</span>
+                  <span className="text-sm font-semibold text-gray-700">
+                    {activeCompanyId ? activeCompanyName : "All Companies (Group HQ)"} — {selectedMonth} {selectedYear}
+                  </span>
                 </div>
                 {paidCount < companyEntries.length && (
                   <Button size="sm" variant="outline" onClick={markAllPaid} className="text-green-700 border-green-200 hover:bg-green-50">
@@ -908,6 +910,7 @@ export default function PayrollPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Employee</TableHead>
+                    {!activeCompanyId && <TableHead>Subsidiary</TableHead>}
                     <TableHead>Basic Salary</TableHead>
                     <TableHead>Allowances</TableHead>
                     <TableHead>Gross Salary</TableHead>
@@ -919,12 +922,12 @@ export default function PayrollPage() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((payroll) => {
-                    const emp = staffList.find(u => u.id === payroll.staffId);
+                    const emp = allStaffList.find(u => u.id === payroll.staffId);
                     const totalAllowances = payroll.allowances.reduce((s, a) => s + a.amount, 0);
                     const totalDeducAmt = payroll.deductions.reduce((s, d) => s + d.amount, 0);
                     return (
                       <TableRow key={payroll.id}>
-                        <TableCell>
+                        <TableCell className="">
                           <div className="flex items-center gap-2">
                             <Avatar className="w-8 h-8">
                               <AvatarFallback className="text-xs">{getInitials(emp?.name ?? "?")}</AvatarFallback>
@@ -935,6 +938,11 @@ export default function PayrollPage() {
                             </div>
                           </div>
                         </TableCell>
+                        {!activeCompanyId && (
+                          <TableCell className="text-xs text-gray-500 font-medium">
+                            {staffList.find(c => c.companyId === payroll.companyId) ? (lsGet<{id:string;name:string}[]>("phidtech_companies",[]).find(c => c.id === payroll.companyId)?.name ?? payroll.companyId) : payroll.companyId}
+                          </TableCell>
+                        )}
                         <TableCell className="font-medium text-gray-800">{formatCurrency(payroll.basicSalary)}</TableCell>
                         <TableCell className="text-green-700 font-medium">+{formatCurrency(totalAllowances)}</TableCell>
                         <TableCell className="font-semibold text-gray-900">{formatCurrency(payroll.grossSalary)}</TableCell>
