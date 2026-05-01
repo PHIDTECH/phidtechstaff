@@ -31,12 +31,11 @@ echo "▶ Copying static assets..."
 cp -r .next/static  .next/standalone/.next/static
 cp -r public        .next/standalone/public
 
-echo "▶ Restarting PM2 (zero-downtime reload)..."
-export PORT=3002
+echo "▶ Restarting PM2 using ecosystem config (PORT=3002 always set)..."
 if pm2 describe boms > /dev/null 2>&1; then
-  pm2 reload boms --update-env
+  pm2 reload ecosystem.config.js --update-env
 else
-  PORT=3002 pm2 start /var/www/boms/.next/standalone/server.js --name boms --env production
+  pm2 start ecosystem.config.js
 fi
 pm2 save
 
