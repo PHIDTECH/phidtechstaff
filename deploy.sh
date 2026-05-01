@@ -32,10 +32,11 @@ cp -r .next/static  .next/standalone/.next/static
 cp -r public        .next/standalone/public
 
 echo "▶ Restarting PM2 (zero-downtime reload)..."
+export PORT=3002
 if pm2 describe boms > /dev/null 2>&1; then
   pm2 reload boms --update-env
 else
-  pm2 start /var/www/boms/.next/standalone/server.js --name boms
+  PORT=3002 pm2 start /var/www/boms/.next/standalone/server.js --name boms --env production
 fi
 pm2 save
 
