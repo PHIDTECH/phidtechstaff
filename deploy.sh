@@ -3,21 +3,29 @@
 # Usage: bash /var/www/boms/deploy.sh
 
 set -e
+# Print every command as it runs so you can see exactly where a failure happens
+set -x
+
+# Trap any error and print a helpful message
+trap 'echo ""; echo "❌ DEPLOY FAILED at line $LINENO — check the error above"; exit 1' ERR
+
 cd /var/www/boms
 
-echo "▶ Pulling latest code..."
-git pull origin main
+echo "▶ Force-syncing code from GitHub (discards any server-side local changes)..."
+git fetch origin
+git reset --hard origin/main
+git clean -fd
 
 echo "▶ Installing dependencies..."
 npm install --legacy-peer-deps
 
 echo "▶ Clearing Next.js build cache + old compiled output..."
 rm -rf .next/cache
-# Remove old standalone to ensure stale JS bundles are fully replaced
 rm -rf .next/standalone
 
 echo "▶ Building (fresh)..."
-npm run build
+# Increase Node.js heap to 1.5 GB to prevent out-of-memory build failures
+NODE_OPTIONS="--max-old-space-size=1536" npm run build
 
 echo "▶ Copying static assets..."
 cp -r .next/static  .next/standalone/.next/static
