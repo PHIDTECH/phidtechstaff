@@ -34,7 +34,7 @@ interface Session { id: string; name: string; role: string; position: string; is
 interface StaffUser { id: string; name: string; email?: string; companyId: string; branchId?: string | null; department?: string; position?: string; status?: string; }
 interface Branch { id: string; companyId: string; name: string; allowedIPs?: string; }
 interface AttendanceRecord {
-  id: string; companyId: string; userId: string; date: string;
+  id: string; companyId: string; userId: string; userName?: string; date: string;
   clockIn?: string; clockOut?: string;
   hoursWorked?: number; overtime?: number; lateMinutes?: number;
   status: "present" | "absent" | "late" | "half-day";
@@ -78,7 +78,7 @@ function calcOvertime(hours: number): number {
 const today = new Date().toISOString().slice(0, 10);
 
 const emptyForm = () => ({
-  userId: "",
+  employeeName: "",
   date: today,
   action: "in" as "in" | "out",
   time: new Date().toTimeString().slice(0, 5),
@@ -230,29 +230,30 @@ export default function AttendancePage() {
   };
 
   const saveRecord = async () => {
-    if (!form.userId) { setFormError("Select an employee."); return; }
+    if (!form.employeeName.trim()) { setFormError("Enter employee name."); return; }
     if (!form.date)   { setFormError("Select a date."); return; }
     if (!form.time)   { setFormError("Enter the time."); return; }
 
-    // Derive companyId from the selected employee — works across all branches/companies
-    const selectedEmp = staff.find(u => u.id === form.userId);
-    const companyId = selectedEmp?.companyId || cidRef.current || activeCompanyId;
-    const existing = records.find(r => r.userId === form.userId && r.date === form.date && r.companyId === companyId)
-      ?? records.find(r => r.userId === form.userId && r.date === form.date);
+    // Try to match typed name to a staff record; fall back to using name as ID
+    const matchedEmp = staff.find(u => u.name.toLowerCase() === form.employeeName.trim().toLowerCase());
+    const userId = matchedEmp?.id ?? `manual-${form.employeeName.trim().toLowerCase().replace(/\s+/g, "-")}`;
+    const companyId = matchedEmp?.companyId || cidRef.current || activeCompanyId;
+    const existing = records.find(r => r.userId === userId && r.date === form.date && r.companyId === companyId)
+      ?? records.find(r => r.userId === userId && r.date === form.date);
 
     if (form.action === "in") {
       const status      = form.status !== "present" && form.status !== "late" ? calcStatus(form.time) : form.status;
       const lateMinutes = calcLateMinutes(form.time);
       if (existing) {
         await fetch("/api/attendance", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-          id: existing.id, clockIn: form.time, status,
+          id: existing.id, clockIn: form.time, userName: form.employeeName.trim(), status,
           lateMinutes: lateMinutes > 0 ? lateMinutes : existing.lateMinutes,
           hoursWorked: calcHours(form.time, existing.clockOut),
           overtime: calcOvertime(calcHours(form.time, existing.clockOut)),
         }) });
       } else {
         await fetch("/api/attendance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-          id: `att-${Date.now()}`, companyId, userId: form.userId, date: form.date,
+          id: `att-${Date.now()}`, companyId, userId, userName: form.employeeName.trim(), date: form.date,
           clockIn: form.time, status,
           lateMinutes: lateMinutes > 0 ? lateMinutes : undefined,
         }) });
@@ -269,7 +270,7 @@ export default function AttendancePage() {
         }) });
       } else {
         await fetch("/api/attendance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-          id: `att-${Date.now()}`, companyId, userId: form.userId, date: form.date,
+          id: `att-${Date.now()}`, companyId, userId, userName: form.employeeName.trim(), date: form.date,
           clockOut: form.time, status: "present",
         }) });
       }
@@ -523,9 +524,9 @@ export default function AttendancePage() {
 
       {/* Clock In/Out Dialog */}
       <Dialog open={showDialog} onOpenChange={v => { if (!v) setShowDialog(false); }}>
-        <DialogContent className="max-w-md p-0 overflow-hidden">
+        <DialogContent className="max-w-md p-0 overflow-hidden flex flex-col max-h-[92vh]">
           {/* Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white shrink-0">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-bold">Clock In / Clock Out</h2>
@@ -536,7 +537,7 @@ export default function AttendancePage() {
             </div>
           </div>
 
-          <div className="p-5 space-y-4">
+          <div className="p-5 space-y-4 overflow-y-auto flex-1">
             {formError && (
               <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
@@ -544,85 +545,57 @@ export default function AttendancePage() {
               </div>
             )}
 
-            {/* Employee selector */}
+            {/* Employee name — free text with autocomplete suggestions */}
             <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Employee</label>
-              <Select value={form.userId} onValueChange={v => sf({ userId: v })}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Select employee…" />
-                </SelectTrigger>
-                <SelectContent className="max-h-60">
-                  {staffLoading ? (
-                    <div className="px-3 py-4 text-center text-sm text-gray-400">Loading staff…</div>
-                  ) : allCompanyStaff.length === 0 ? (
-                    <div className="px-3 py-4 text-center text-sm text-gray-400">No staff found. Please add employees first.</div>
-                  ) : allCompanyStaff.map(u => {
-                    const branch = branches.find(b => b.id === u.branchId);
-                    return (
-                      <SelectItem key={u.id} value={u.id}>
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold shrink-0">
-                            {getInitials(u.name)}
-                          </div>
-                          <span>{u.name}</span>
-                          {u.department && <span className="text-gray-400 text-xs">· {u.department}</span>}
-                          {branch && <span className="text-blue-500 text-xs font-medium">· {branch.name}</span>}
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Employee today's status preview */}
-            {form.userId && (() => {
-              const emp = allCompanyStaff.find(u => u.id === form.userId);
-              const existingRec = records.find(r => r.userId === form.userId && r.date === form.date && r.companyId === (cidRef.current || activeCompanyId));
-              const suggestedAction = existingRec?.clockIn && !existingRec?.clockOut ? "out" : "in";
-              return (
-                <div className="bg-gray-50 rounded-xl border border-gray-100 p-3.5 space-y-2.5">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-10 h-10">
-                      <AvatarFallback className="bg-blue-100 text-blue-700 text-sm font-bold">{getInitials(emp?.name ?? "?")}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-semibold text-gray-900 text-sm">{emp?.name}</p>
-                      <p className="text-xs text-gray-400">{emp?.position ?? emp?.department ?? "Staff"}</p>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Employee Name</label>
+              <div className="relative">
+                <Input
+                  list="staff-suggestions"
+                  placeholder="Type employee name…"
+                  value={form.employeeName}
+                  onChange={e => sf({ employeeName: e.target.value })}
+                  className="h-11"
+                  autoComplete="off"
+                />
+                <datalist id="staff-suggestions">
+                  {allCompanyStaff.map(u => (
+                    <option key={u.id} value={u.name} />
+                  ))}
+                </datalist>
+              </div>
+              {form.employeeName.trim() && (() => {
+                const matchedEmp = allCompanyStaff.find(u => u.name.toLowerCase() === form.employeeName.trim().toLowerCase());
+                const matchId = matchedEmp?.id ?? `manual-${form.employeeName.trim().toLowerCase().replace(/\s+/g, "-")}`;
+                const existingRec = records.find(r => r.userId === matchId && r.date === form.date);
+                if (!existingRec) return null;
+                const suggestedAction = existingRec.clockIn && !existingRec.clockOut ? "out" : "in";
+                return (
+                  <div className="mt-2 bg-gray-50 rounded-xl border border-gray-100 p-3 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="w-8 h-8">
+                        <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-bold">{getInitials(form.employeeName)}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900 text-sm">{form.employeeName}</p>
+                        {matchedEmp && <p className="text-xs text-gray-400">{matchedEmp.position ?? matchedEmp.department}</p>}
+                      </div>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[existingRec.status]}`}>{existingRec.status}</span>
                     </div>
-                    {existingRec && (
-                      <span className={`ml-auto text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[existingRec.status]}`}>
-                        {existingRec.status}
-                      </span>
+                    <div className="grid grid-cols-3 gap-2 pt-1 border-t border-gray-100 text-center">
+                      <div><p className="text-[10px] text-gray-400 uppercase font-medium">Clock In</p><p className="text-sm font-semibold font-mono">{existingRec.clockIn ?? "—"}</p></div>
+                      <div className="border-x border-gray-100"><p className="text-[10px] text-gray-400 uppercase font-medium">Clock Out</p><p className="text-sm font-semibold font-mono">{existingRec.clockOut ?? "—"}</p></div>
+                      <div><p className="text-[10px] text-gray-400 uppercase font-medium">Hours</p><p className="text-sm font-semibold">{existingRec.hoursWorked ? `${existingRec.hoursWorked.toFixed(1)}h` : "—"}</p></div>
+                    </div>
+                    {form.action !== suggestedAction && (
+                      <button type="button" onClick={() => sf({ action: suggestedAction })}
+                        className="w-full text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg py-1.5 font-medium hover:bg-blue-100 transition">
+                        Suggested: Switch to Clock {suggestedAction === "in" ? "In" : "Out"}
+                      </button>
                     )}
                   </div>
-                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-gray-100">
-                    <div className="text-center">
-                      <p className="text-[10px] text-gray-400 uppercase font-medium">Clock In</p>
-                      <p className="text-sm font-semibold text-gray-800 font-mono">{existingRec?.clockIn ?? "—"}</p>
-                    </div>
-                    <div className="text-center border-x border-gray-100">
-                      <p className="text-[10px] text-gray-400 uppercase font-medium">Clock Out</p>
-                      <p className="text-sm font-semibold text-gray-800 font-mono">{existingRec?.clockOut ?? "—"}</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-[10px] text-gray-400 uppercase font-medium">Hours</p>
-                      <p className="text-sm font-semibold text-gray-800">{existingRec?.hoursWorked ? `${existingRec.hoursWorked.toFixed(1)}h` : "—"}</p>
-                    </div>
-                  </div>
-                  {/* Auto-suggest action */}
-                  {form.action !== suggestedAction && (
-                    <button
-                      type="button"
-                      onClick={() => sf({ action: suggestedAction })}
-                      className="w-full text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg py-1.5 font-medium hover:bg-blue-100 transition"
-                    >
-                      Suggested: Switch to Clock {suggestedAction === "in" ? "In" : "Out"}
-                    </button>
-                  )}
-                </div>
-              );
-            })()}
+                );
+              })()}            
+            </div>
 
             {/* Date, Action, Time row */}
             <div className="grid grid-cols-3 gap-3">
@@ -671,7 +644,7 @@ export default function AttendancePage() {
 
           </div>
 
-          <DialogFooter className="px-5 pb-5 pt-0 gap-2">
+          <DialogFooter className="px-5 pb-5 pt-2 gap-2 shrink-0 border-t border-gray-100">
             <Button variant="outline" className="flex-1" onClick={() => setShowDialog(false)}>Cancel</Button>
             <Button
               className={`flex-1 ${form.action === "in" ? "bg-green-600 hover:bg-green-700" : "bg-orange-500 hover:bg-orange-600"}`}

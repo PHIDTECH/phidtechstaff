@@ -126,7 +126,7 @@ function fmtBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const emptyForm = () => ({ docName: "", category: "", permissions: "all", assignedTo: "", assignedToName: "", sharedWithRoles: [] as string[] });
+const emptyForm = () => ({ docName: "", category: "", permissions: "all", assignedTo: "", assignedToName: "", sharedWithRoles: [] as string[], _companyId: "" });
 
 export default function DocumentsPage() {
   usePermissionGuard("documents");
@@ -269,10 +269,9 @@ export default function DocumentsPage() {
       const assignedStaff = form.permissions === "specific_staff" && form.assignedTo
         ? allActiveStaff.find(u => u.id === form.assignedTo)
         : undefined;
-      // Resolve companyId: for regular staff use their own companyId; for superadmin use active company
-      const docCompanyId = session?.isSuperAdmin
-        ? (cidRef.current || cid)
-        : (session?.companyId ?? cidRef.current ?? cid);
+      // Resolve companyId: prefer active company, then form selection, then session company
+      const docCompanyId = (cidRef.current || cid) || form._companyId || session?.companyId || "";
+      if (!docCompanyId) { setFormError("Please select a company first."); setUploading(false); return; }
       const newDoc: Doc = {
         id:             `doc-${Date.now()}`,
         companyId:      docCompanyId,
@@ -531,6 +530,21 @@ export default function DocumentsPage() {
               <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
                 <p className="text-sm text-red-600">{formError}</p>
+              </div>
+            )}
+
+            {/* Company selector — shown when no company active */}
+            {!co && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Company <span className="text-red-500">*</span></label>
+                <Select value={form._companyId} onValueChange={v => sf({ _companyId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+                  <SelectContent>
+                    {companies.filter(c => !c.isGroup).map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
 

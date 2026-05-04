@@ -6,7 +6,7 @@ import {
   Users, DollarSign, CheckSquare, AlertCircle,
   Calendar, ArrowRight, Building2, TrendingUp,
   BarChart3, ShoppingCart, Briefcase,
-  ArrowLeftRight, Crown, UserCheck
+  ArrowLeftRight, Crown, UserCheck, Receipt, Clock, Banknote
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
@@ -44,8 +44,8 @@ function getGreeting() {
 interface Company { id: string; name: string; industry?: string; }
 interface StaffUser { id: string; companyId: string; branchId?: string | null; status: string; name: string; role?: string; }
 interface Branch { id: string; companyId: string; name: string; location: string; managerId: string; }
-interface Task { id: string; companyId: string; status: string; }
-interface LeaveReq { id: string; companyId: string; status: string; }
+interface Task { id: string; companyId: string; status: string; title?: string; priority?: string; }
+interface LeaveReq { id: string; companyId: string; status: string; userName?: string; employeeName?: string; staffName?: string; type?: string; days?: number; duration?: string; }
 interface Sale { id: string; companyId: string; paid: number; amount: number; }
 interface Expense { id: string; companyId: string; amount: number; status: string; }
 
@@ -188,190 +188,217 @@ export default function DashboardPage() {
   };
 
   // ── GROUP HQ DASHBOARD ────────────────────────────────────────────────────
+  const totalGroupTasks = companyStats.reduce((s, c) => s + c.tasks, 0);
+  const totalGroupLeaveP = companyStats.reduce((s, c) => s + c.pendingLeave, 0);
+
   if (isGroupMode) {
+    const industryColors: Record<string, string> = {
+      Technology: "from-blue-500 to-indigo-600",
+      Finance: "from-emerald-500 to-teal-600",
+      "Media and Broadcasting": "from-purple-500 to-pink-600",
+      Healthcare: "from-red-500 to-rose-600",
+      "ICT and Business Solutions": "from-cyan-500 to-blue-600",
+      Manufacturing: "from-orange-500 to-amber-600",
+      default: "from-gray-500 to-slate-600",
+    };
     return (
       <MainLayout>
-        {/* Group Header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-700 to-indigo-800 flex items-center justify-center shadow-md">
-                <Crown className="w-6 h-6 text-white" />
+        {/* ── Hero Banner ── */}
+        <div className="mb-6 rounded-2xl overflow-hidden relative bg-gradient-to-br from-[#0c1b5e] via-[#163087] to-[#0f2060] shadow-xl">
+          <div className="absolute inset-0 opacity-10" style={{backgroundImage:"radial-gradient(circle at 20% 50%, #fff 0%, transparent 50%), radial-gradient(circle at 80% 20%, #6ee7f7 0%, transparent 40%)"}} />
+          <div className="relative px-6 py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center shadow-lg shrink-0">
+                <Crown className="w-7 h-7 text-yellow-300" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-bold text-gray-900">{GROUP_NAME}</h1>
-                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-semibold">Group HQ</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-lg sm:text-xl font-bold text-white leading-tight">{GROUP_NAME}</h1>
+                  <span className="text-[10px] px-2.5 py-0.5 bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 rounded-full font-semibold tracking-wide">GROUP HQ</span>
                 </div>
-                <p className="text-sm text-gray-500">
-                  {getGreeting()}{firstName ? `, ${firstName}` : ""} · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-                </p>
+                <p className="text-blue-200 text-sm mt-0.5">{getGreeting()}{firstName ? `, ${firstName}` : ""} &mdash; {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
               </div>
             </div>
-            {isSuperAdmin && (
-              <div className="text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                👑 Super Admin · Switch to a company to manage it
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Group KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
-          <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-4">
-            <p className="text-xs text-gray-500">Companies</p>
-            <p className="text-2xl font-bold text-blue-700">{companies.length}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Subsidiaries</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-            <p className="text-xs text-gray-500">Total Staff</p>
-            <p className="text-2xl font-bold text-gray-900">{groupStaff}</p>
-            <p className="text-xs text-gray-400 mt-0.5">All companies</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-            <p className="text-xs text-gray-500">Group HQ Staff</p>
-            <p className="text-2xl font-bold text-indigo-700">{groupStaff_HQ}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Group controllers</p>
-          </div>
-          <div className="bg-white rounded-xl border border-green-100 shadow-sm p-4">
-            <p className="text-xs text-gray-500">Group Revenue</p>
-            <p className="text-lg font-bold text-green-700">{formatCurrency(groupRevenue)}</p>
-            <p className="text-xs text-gray-400 mt-0.5">All collected</p>
-          </div>
-          <div className={`bg-white rounded-xl border shadow-sm p-4 ${groupProfit >= 0 ? "border-emerald-100" : "border-red-100"}`}>
-            <p className="text-xs text-gray-500">Group Profit</p>
-            <p className={`text-lg font-bold ${groupProfit >= 0 ? "text-emerald-700" : "text-red-600"}`}>{formatCurrency(groupProfit)}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Net P&amp;L</p>
-          </div>
-          <div className="bg-white rounded-xl border border-orange-100 shadow-sm p-4">
-            <p className="text-xs text-gray-500">Pending Leave</p>
-            <p className="text-2xl font-bold text-orange-600">{groupLeave}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Needs approval</p>
-          </div>
-        </div>
-
-        {/* Company Cards */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-bold text-gray-900 text-base">Subsidiary Companies</h2>
-            {isSuperAdmin && (
-              <Link href="/admin">
-                <Button size="sm" variant="outline"><Building2 className="w-4 h-4 mr-2" />Manage Companies</Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {isSuperAdmin && (
+                <div className="text-xs bg-white/10 border border-white/20 text-blue-100 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+                  <Crown className="w-3.5 h-3.5 text-yellow-300" /> Super Admin &mdash; switch to manage a subsidiary
+                </div>
+              )}
+              <Link href="/accounting/sales">
+                <button className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-semibold transition-colors flex items-center gap-1.5">
+                  <ShoppingCart className="w-3.5 h-3.5" /> New Sale
+                </button>
               </Link>
-            )}
+            </div>
           </div>
-          {companies.length === 0 ? (
-            <div className="bg-white rounded-xl border border-dashed border-gray-200 p-10 text-center">
-              <Building2 className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-              <p className="text-sm text-gray-500 font-medium">No subsidiary companies yet</p>
-              {isSuperAdmin && <Link href="/admin"><Button size="sm" className="mt-3">Add Company</Button></Link>}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {companyStats.map(co => (
-                <div key={co.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-                  {/* Company header */}
-                  <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm">
-                        {co.name.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900 text-sm leading-tight">{co.name}</p>
-                        <p className="text-xs text-gray-400">{co.industry}</p>
-                      </div>
-                    </div>
-                    {isSuperAdmin && (
-                      <Button size="sm" variant="outline" className="text-xs h-7 px-2.5" onClick={() => switchToCompany(co.id)}>
-                        <ArrowLeftRight className="w-3 h-3 mr-1.5" />Switch
-                      </Button>
-                    )}
-                  </div>
-                  {/* Metrics */}
-                  <div className="px-5 py-3 grid grid-cols-3 gap-3">
-                    <div className="text-center">
-                      <p className="text-lg font-bold text-gray-900">{co.staff}</p>
-                      <p className="text-xs text-gray-400">Staff</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-lg font-bold text-green-700">{formatCurrency(co.revenue)}</p>
-                      <p className="text-xs text-gray-400">Revenue</p>
-                    </div>
-                    <div className={`text-center`}>
-                      <p className={`text-lg font-bold ${co.profit >= 0 ? "text-emerald-700" : "text-red-500"}`}>{formatCurrency(co.profit)}</p>
-                      <p className="text-xs text-gray-400">Profit</p>
-                    </div>
-                  </div>
-                  <div className="px-5 py-2 bg-gray-50 flex justify-between text-xs text-gray-500">
-                    <span>📋 {co.tasks} tasks</span>
-                    <span>📅 {co.pendingLeave} pending leave</span>
-                    <span className="text-green-600 font-medium">✓ {co.activeStaff} active</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Mini KPI strip */}
+          <div className="relative grid grid-cols-3 sm:grid-cols-6 border-t border-white/10">
+            {[
+              { label: "Subsidiaries",   value: companies.length,              color: "text-blue-200" },
+              { label: "Total Staff",    value: groupStaff,                    color: "text-white" },
+              { label: "HQ Staff",       value: groupStaff_HQ,                 color: "text-indigo-200" },
+              { label: "Group Revenue",  value: formatCurrency(groupRevenue),  color: "text-emerald-300" },
+              { label: "Net P&L",        value: formatCurrency(groupProfit),   color: groupProfit >= 0 ? "text-green-300" : "text-red-300" },
+              { label: "Pending Leave",  value: totalGroupLeaveP,              color: "text-orange-300" },
+            ].map((k, i) => (
+              <div key={i} className="px-5 py-3 border-r border-white/10 last:border-r-0 text-center">
+                <p className={`text-base sm:text-lg font-bold ${k.color}`}>{k.value}</p>
+                <p className="text-[10px] text-blue-300/70 uppercase tracking-wider mt-0.5">{k.label}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Group HQ Staff + Quick Links */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Group HQ Staff */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        {/* ── Main Grid: Companies (left) + Sidebar (right) ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+          {/* Subsidiary Cards - 2 cols */}
+          <div className="lg:col-span-2">
+            <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="font-semibold text-gray-900">Group HQ Staff</h3>
-                <p className="text-xs text-gray-400">Managers &amp; controllers across all subsidiaries</p>
+                <h2 className="font-bold text-gray-900">Subsidiary Companies</h2>
+                <p className="text-xs text-gray-400">{companies.length} companies · Click Switch to manage</p>
               </div>
-              <Link href="/users"><Button size="sm" variant="ghost" className="text-xs">View All</Button></Link>
+              {isSuperAdmin && (
+                <Link href="/admin">
+                  <Button size="sm" variant="outline" className="text-xs"><Building2 className="w-3.5 h-3.5 mr-1.5" />Manage</Button>
+                </Link>
+              )}
             </div>
-            {staffUsers.filter(u => u.companyId === GROUP_ID).length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
-                <UserCheck className="w-8 h-8 text-gray-200" />
-                <p className="text-sm text-gray-400">No Group HQ staff yet</p>
-                <Link href="/users"><Button size="sm" variant="outline" className="text-xs">Add Group Staff</Button></Link>
+            {companies.length === 0 ? (
+              <div className="bg-white rounded-xl border border-dashed border-gray-200 p-12 text-center">
+                <Building2 className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                <p className="text-sm text-gray-500 font-medium">No subsidiary companies yet</p>
+                {isSuperAdmin && <Link href="/admin"><Button size="sm" className="mt-3">Add Company</Button></Link>}
               </div>
             ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {companyStats.map(co => {
+                  const grad = industryColors[co.industry ?? ""] ?? industryColors.default;
+                  return (
+                    <div key={co.id} className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden group">
+                      {/* Colored top band */}
+                      <div className={`bg-gradient-to-r ${grad} px-5 py-3.5 flex items-center justify-between`}>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-lg bg-white/20 border border-white/30 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                            {co.name.charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-white text-sm leading-tight line-clamp-1">{co.name}</p>
+                            <p className="text-white/70 text-[10px]">{co.industry ?? "—"}</p>
+                          </div>
+                        </div>
+                        {isSuperAdmin && (
+                          <button onClick={() => switchToCompany(co.id)}
+                            className="shrink-0 text-[11px] bg-white/20 hover:bg-white/30 text-white border border-white/30 rounded-lg px-2.5 py-1 font-medium flex items-center gap-1 transition-colors">
+                            <ArrowLeftRight className="w-3 h-3" />Switch
+                          </button>
+                        )}
+                      </div>
+                      {/* Metrics */}
+                      <div className="grid grid-cols-3 divide-x divide-gray-100">
+                        <div className="px-4 py-3 text-center">
+                          <p className="text-lg font-bold text-gray-900">{co.staff}</p>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider">Staff</p>
+                        </div>
+                        <div className="px-4 py-3 text-center">
+                          <p className="text-sm font-bold text-emerald-700">{formatCurrency(co.revenue)}</p>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider">Revenue</p>
+                        </div>
+                        <div className="px-4 py-3 text-center">
+                          <p className={`text-sm font-bold ${co.profit >= 0 ? "text-blue-700" : "text-red-500"}`}>{formatCurrency(co.profit)}</p>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider">Profit</p>
+                        </div>
+                      </div>
+                      {/* Footer badges */}
+                      <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center gap-3 text-[11px]">
+                        <span className="flex items-center gap-1 text-gray-500"><CheckSquare className="w-3 h-3" />{co.tasks} tasks</span>
+                        <span className="flex items-center gap-1 text-orange-500"><Calendar className="w-3 h-3" />{co.pendingLeave} leave</span>
+                        <span className="flex items-center gap-1 text-green-600 ml-auto font-medium">● {co.activeStaff} active</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-4">
+            {/* Group Summary Card */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-4 py-3">
+                <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Group Financial Summary</p>
+              </div>
               <div className="divide-y divide-gray-50">
-                {staffUsers.filter(u => u.companyId === GROUP_ID).slice(0, 6).map(u => (
-                  <div key={u.id} className="flex items-center gap-3 px-5 py-2.5">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                      {u.name.charAt(0)}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{u.name}</p>
-                      <p className="text-xs text-gray-400 capitalize">{(u.role ?? "staff").replace("_", " ")}</p>
-                    </div>
-                    <span className={`ml-auto text-xs px-2 py-0.5 rounded-full font-medium ${u.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>{u.status}</span>
+                {[
+                  { label: "Total Revenue",  value: formatCurrency(groupRevenue), color: "text-emerald-600" },
+                  { label: "Total Expenses", value: formatCurrency(groupExp),     color: "text-red-500" },
+                  { label: "Net Profit",     value: formatCurrency(groupProfit),  color: groupProfit >= 0 ? "text-blue-700 font-bold" : "text-red-600 font-bold" },
+                  { label: "Open Tasks",     value: String(totalGroupTasks),      color: "text-purple-600" },
+                  { label: "Pending Leave",  value: String(totalGroupLeaveP),     color: "text-orange-500" },
+                ].map(row => (
+                  <div key={row.label} className="flex items-center justify-between px-4 py-2.5">
+                    <p className="text-xs text-gray-500">{row.label}</p>
+                    <p className={`text-sm ${row.color}`}>{row.value}</p>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* Quick Links */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="font-semibold text-gray-900 mb-4">Group Controls</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: "Users & Roles",       href: "/users",       icon: Users,       color: "blue" },
-                { label: "Accounting",           href: "/accounting",  icon: BarChart3,   color: "green" },
-                { label: "All Tasks",            href: "/tasks",       icon: CheckSquare, color: "purple" },
-                { label: "Leave Requests",       href: "/leave",       icon: Calendar,    color: "orange" },
-                { label: "Sales Reports",        href: "/accounting/sales", icon: ShoppingCart, color: "teal" },
-                { label: "Admin Panel",          href: "/admin",       icon: Building2,   color: "red" },
-              ].map(item => {
-                const Icon = item.icon;
-                return (
-                  <Link key={item.label} href={item.href}>
-                    <div className="flex items-center gap-2.5 p-3 rounded-lg border border-gray-100 hover:bg-gray-50 hover:border-gray-200 transition-colors cursor-pointer">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-${item.color}-50`}>
-                        <Icon className={`w-4 h-4 text-${item.color}-600`} />
+            {/* Group HQ Staff */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <p className="text-sm font-semibold text-gray-900">Group HQ Staff</p>
+                <Link href="/users"><button className="text-xs text-blue-600 hover:underline">View all</button></Link>
+              </div>
+              {staffUsers.filter(u => u.companyId === GROUP_ID).length === 0 ? (
+                <div className="flex flex-col items-center py-8 gap-2 text-center">
+                  <UserCheck className="w-7 h-7 text-gray-200" />
+                  <p className="text-xs text-gray-400">No HQ staff yet</p>
+                  <Link href="/users"><Button size="sm" variant="outline" className="text-xs h-7">Add Staff</Button></Link>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-50">
+                  {staffUsers.filter(u => u.companyId === GROUP_ID).slice(0, 5).map(u => (
+                    <div key={u.id} className="flex items-center gap-2.5 px-4 py-2.5">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">{u.name.charAt(0)}</div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-gray-800 truncate">{u.name}</p>
+                        <p className="text-[10px] text-gray-400 capitalize">{(u.role ?? "staff").replace(/_/g, " ")}</p>
                       </div>
-                      <p className="text-xs font-medium text-gray-700">{item.label}</p>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${u.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>{u.status}</span>
                     </div>
-                  </Link>
-                );
-              })}
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Quick Actions */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <p className="text-sm font-semibold text-gray-900 mb-3">Quick Actions</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: "Users",        href: "/users",            icon: Users,       bg: "bg-blue-50",   ic: "text-blue-600" },
+                  { label: "Accounting",   href: "/accounting",       icon: BarChart3,   bg: "bg-green-50",  ic: "text-green-600" },
+                  { label: "Tasks",        href: "/tasks",            icon: CheckSquare, bg: "bg-purple-50", ic: "text-purple-600" },
+                  { label: "Leave",        href: "/leave",            icon: Calendar,    bg: "bg-orange-50", ic: "text-orange-500" },
+                  { label: "Sales",        href: "/accounting/sales", icon: ShoppingCart,bg: "bg-emerald-50",ic: "text-emerald-600" },
+                  { label: "Admin",        href: "/admin",            icon: Building2,   bg: "bg-red-50",    ic: "text-red-500" },
+                ].map(item => {
+                  const Icon = item.icon;
+                  return (
+                    <Link key={item.label} href={item.href}>
+                      <div className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50 hover:border-gray-200 transition-colors cursor-pointer">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${item.bg}`}>
+                          <Icon className={`w-3.5 h-3.5 ${item.ic}`} />
+                        </div>
+                        <p className="text-xs font-medium text-gray-700">{item.label}</p>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -418,17 +445,51 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          title={isBranchManagerDash ? "Branch Staff" : "Total Staff"}
-          value={coStaff.length}
-          icon={Users} iconColor="text-blue-600" iconBg="bg-blue-50"
-          subtitle={isBranchManagerDash ? (myBranch?.name ?? "Your branch") : "Registered employees"}
-        />
-        <StatCard title="Active Staff"    value={coStaff.filter(u => u.status === "active").length}    icon={UserCheck}   iconColor="text-green-600"  iconBg="bg-green-50"  subtitle="Currently active" />
-        <StatCard title="Revenue"         value={formatCurrency(coRevenue)}                            icon={TrendingUp}  iconColor="text-purple-600" iconBg="bg-purple-50" subtitle="Collected" />
-        <StatCard title="Pending Leave"   value={coLeave.length}                                       icon={Calendar}    iconColor="text-orange-600" iconBg="bg-orange-50" subtitle="Needs approval" />
-      </div>
+      {(() => {
+        const pendingExp   = expenses.filter(e => e.companyId === activeCompanyId && e.status === "pending").length;
+        const pendingExpAmt= expenses.filter(e => e.companyId === activeCompanyId && e.status === "pending").reduce((s,e) => s + e.amount, 0);
+        const openTasks    = coTasks.filter(t => t.status === "pending" || t.status === "in-progress").length;
+        return (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              <StatCard
+                title={isBranchManagerDash ? "Branch Staff" : "Total Staff"}
+                value={coStaff.length}
+                icon={Users} iconColor="text-blue-600" iconBg="bg-blue-50"
+                subtitle={isBranchManagerDash ? (myBranch?.name ?? "Your branch") : `${coStaff.filter(u => u.status === "active").length} active`}
+              />
+              <StatCard title="Revenue"           value={formatCurrency(coRevenue)}    icon={TrendingUp}  iconColor="text-emerald-600" iconBg="bg-emerald-50" subtitle={`Profit: ${formatCurrency(coProfit)}`} />
+              <StatCard title="Pending Expenses"  value={pendingExp}                   icon={Receipt}     iconColor="text-red-600"     iconBg="bg-red-50"     subtitle={formatCurrency(pendingExpAmt)} />
+              <StatCard title="Open Tasks"        value={openTasks}                    icon={CheckSquare} iconColor="text-purple-600" iconBg="bg-purple-50"  subtitle={`${coLeave.length} leave pending`} />
+            </div>
+            {/* Pending Approvals Alert Strip */}
+            {(pendingExp > 0 || coLeave.length > 0) && (
+              <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span className="text-sm font-semibold text-amber-800">Pending Approvals</span>
+                </div>
+                <div className="flex flex-wrap gap-3 text-xs">
+                  {pendingExp > 0 && (
+                    <Link href="/expenses">
+                      <span className="inline-flex items-center gap-1.5 bg-white border border-amber-200 text-amber-800 rounded-lg px-3 py-1.5 font-medium hover:bg-amber-100 transition-colors">
+                        <Receipt className="w-3.5 h-3.5" /> {pendingExp} Expense Claim{pendingExp !== 1 ? "s" : ""} ({formatCurrency(pendingExpAmt)})
+                      </span>
+                    </Link>
+                  )}
+                  {coLeave.length > 0 && (
+                    <Link href="/leave">
+                      <span className="inline-flex items-center gap-1.5 bg-white border border-amber-200 text-amber-800 rounded-lg px-3 py-1.5 font-medium hover:bg-amber-100 transition-colors">
+                        <Calendar className="w-3.5 h-3.5" /> {coLeave.length} Leave Request{coLeave.length !== 1 ? "s" : ""}
+                      </span>
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Branch Overview — visible to General Managers (not branch-scoped) */}
       {isGeneralManagerDash && companyBranches.length > 0 && (
@@ -488,42 +549,107 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Financial row */}
+      {/* Financial + Activity Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-xs text-gray-500 mb-1">Revenue</p>
-          <p className="text-2xl font-bold text-blue-700">{formatCurrency(coRevenue)}</p>
-          <p className="text-xs text-gray-400 mt-1">Total collected payments</p>
+        {/* Financial Summary */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
+          <p className="text-sm font-semibold text-gray-900">Financial Summary</p>
+          <div>
+            <div className="flex justify-between text-xs mb-1"><span className="text-gray-500">Revenue</span><span className="font-semibold text-emerald-700">{formatCurrency(coRevenue)}</span></div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full" style={{width: coRevenue > 0 ? "100%" : "0%"}} /></div>
+          </div>
+          <div>
+            <div className="flex justify-between text-xs mb-1"><span className="text-gray-500">Expenses</span><span className="font-semibold text-red-500">{formatCurrency(coExpAmt)}</span></div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-red-400 rounded-full" style={{width: coRevenue > 0 ? `${Math.min(100, Math.round((coExpAmt/coRevenue)*100))}%` : "0%"}} /></div>
+          </div>
+          <div className="border-t border-gray-100 pt-3">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-500">Net Profit</span>
+              <span className={`text-lg font-bold ${coProfit >= 0 ? "text-emerald-700" : "text-red-600"}`}>{formatCurrency(coProfit)}</span>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-0.5">{coProfit >= 0 ? "Profitable" : "Loss"} · Revenue minus expenses</p>
+          </div>
+          <Link href="/accounting/sales">
+            <button className="w-full mt-1 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-100 rounded-lg px-3 py-2 font-medium transition-colors flex items-center justify-center gap-1.5">
+              <ShoppingCart className="w-3.5 h-3.5" /> Record New Sale
+            </button>
+          </Link>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-xs text-gray-500 mb-1">Expenses</p>
-          <p className="text-2xl font-bold text-orange-600">{formatCurrency(coExpAmt)}</p>
-          <p className="text-xs text-gray-400 mt-1">Approved &amp; paid out</p>
+
+        {/* Recent Tasks */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-900">Recent Tasks</p>
+            <Link href="/tasks"><button className="text-xs text-blue-600 hover:underline">View all</button></Link>
+          </div>
+          {coTasks.length === 0 ? (
+            <div className="flex flex-col items-center py-8 gap-2 text-center">
+              <CheckSquare className="w-7 h-7 text-gray-200" />
+              <p className="text-xs text-gray-400">No tasks yet</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {coTasks.slice(0, 5).map((t) => (
+                <div key={t.id} className="flex items-center gap-2.5 px-4 py-2.5">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${t.status === "completed" ? "bg-green-500" : t.status === "in-progress" ? "bg-blue-500" : t.status === "cancelled" ? "bg-gray-400" : "bg-yellow-400"}`} />
+                  <p className="text-xs text-gray-800 flex-1 truncate">{t.title}</p>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${t.priority === "critical" ? "bg-red-100 text-red-700" : t.priority === "high" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-500"}`}>{t.priority}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        <div className={`bg-white rounded-xl border shadow-sm p-5 ${coProfit >= 0 ? "border-green-100" : "border-red-100"}`}>
-          <p className="text-xs text-gray-500 mb-1">Net Profit</p>
-          <p className={`text-2xl font-bold ${coProfit >= 0 ? "text-emerald-700" : "text-red-600"}`}>{formatCurrency(coProfit)}</p>
-          <p className="text-xs text-gray-400 mt-1">Revenue minus expenses</p>
+
+        {/* Pending Leave */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-900">Pending Leave</p>
+            <Link href="/leave"><button className="text-xs text-blue-600 hover:underline">View all</button></Link>
+          </div>
+          {coLeave.length === 0 ? (
+            <div className="flex flex-col items-center py-8 gap-2 text-center">
+              <Calendar className="w-7 h-7 text-gray-200" />
+              <p className="text-xs text-gray-400">No pending leave requests</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {coLeave.slice(0, 5).map((l) => (
+                <div key={l.id} className="flex items-center gap-2.5 px-4 py-2.5">
+                  <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+                    <span className="text-[10px] font-bold text-orange-600">{(l.userName ?? "?").charAt(0)}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-gray-800 truncate">{l.userName ?? "—"}</p>
+                    <p className="text-[10px] text-gray-400">{l.type} · {l.days ?? "—"} days</p>
+                  </div>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full font-medium">pending</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Quick Links */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
         {[
-          { label: "Users & Roles",    href: "/users",      icon: Users,       color: "blue" },
-          { label: "Attendance",       href: "/attendance", icon: CheckSquare, color: "green" },
-          { label: "Leave Management", href: "/leave",      icon: Calendar,    color: "yellow" },
-          { label: "Payroll & Salary", href: "/payroll",    icon: DollarSign,  color: "purple" },
+          { label: "Staff",      href: "/users",            icon: Users,       bg: "bg-blue-50",    ic: "text-blue-600" },
+          { label: "Attendance", href: "/attendance",       icon: Clock,       bg: "bg-green-50",   ic: "text-green-600" },
+          { label: "Leave",      href: "/leave",            icon: Calendar,    bg: "bg-yellow-50",  ic: "text-yellow-600" },
+          { label: "Expenses",   href: "/expenses",         icon: Receipt,     bg: "bg-red-50",     ic: "text-red-500" },
+          { label: "Payroll",    href: "/payroll",          icon: DollarSign,  bg: "bg-purple-50",  ic: "text-purple-600" },
+          { label: "Tasks",      href: "/tasks",            icon: CheckSquare, bg: "bg-indigo-50",  ic: "text-indigo-600" },
+          { label: "Sales",      href: "/accounting/sales", icon: ShoppingCart,bg: "bg-emerald-50", ic: "text-emerald-600" },
+          { label: "Customers",  href: "/customers",        icon: UserCheck,   bg: "bg-teal-50",    ic: "text-teal-600" },
         ].map((item) => {
           const Icon = item.icon;
           return (
             <Link key={item.label} href={item.href}>
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer">
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center bg-${item.color}-50`}>
-                  <Icon className={`w-5 h-5 text-${item.color}-600`} />
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 flex flex-col items-center gap-1.5 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer text-center">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${item.bg}`}>
+                  <Icon className={`w-4.5 h-4.5 ${item.ic}`} />
                 </div>
-                <p className="text-sm font-medium text-gray-800">{item.label}</p>
-                <ArrowRight className="w-4 h-4 text-gray-400 ml-auto" />
+                <p className="text-[11px] font-medium text-gray-700">{item.label}</p>
               </div>
             </Link>
           );

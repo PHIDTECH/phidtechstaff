@@ -71,6 +71,7 @@ const emptyForm = () => ({
   status: "active",
   credentials: "",
   attachments: [] as CustomerAttachment[],
+  _companyId: "",
 });
 
 function fmtBytes(bytes: number) {
@@ -227,18 +228,21 @@ export default function CustomersPage() {
 
   const saveCustomer = async (isEdit: boolean) => {
     if (!form.name.trim()) { setFormError("Customer name is required."); return; }
+    const effectiveCid = activeCompanyId || form._companyId;
+    if (!effectiveCid) { setFormError("Please select a company first."); return; }
     if (isEdit && editCustomer) {
       const payload = { id: editCustomer.id, ...form, credentials: form.credentials, totalRevenue: editCustomer.totalRevenue };
-      await fetch("/api/customers", {
+      const res = await fetch("/api/customers", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); setFormError(err.error || "Save failed. Please try again."); return; }
       setShowEditDialog(false);
     } else {
       const newCust: Customer = {
         id: `cust-${Date.now()}`,
-        companyId: activeCompanyId,
+        companyId: effectiveCid,
         name: form.name.trim(), company: form.company.trim(),
         email: form.email.trim(), phone: form.phone.trim(),
         type: form.type, address: form.address.trim(),
@@ -249,11 +253,12 @@ export default function CustomersPage() {
         totalRevenue: 0,
         createdAt: new Date().toISOString().slice(0, 10),
       };
-      await fetch("/api/customers", {
+      const res = await fetch("/api/customers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newCust),
       });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); setFormError(err.error || "Save failed. Please try again."); return; }
       setShowAddDialog(false);
     }
     await fetchCustomers();
@@ -577,6 +582,20 @@ export default function CustomersPage() {
                 <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                   <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
                   <p className="text-sm text-red-600">{formError}</p>
+                </div>
+              )}
+              {/* Company selector — shown when no company is active (Group HQ mode) */}
+              {!isEdit && !activeCompanyId && (
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">Company <span className="text-red-500">*</span></label>
+                  <Select value={form._companyId ?? ""} onValueChange={v => setForm(f => ({...f, _companyId: v}))}>
+                    <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+                    <SelectContent>
+                      {companies.filter(c => c.id !== "group").map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
               <div>

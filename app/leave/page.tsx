@@ -36,8 +36,10 @@ interface StaffUser { id: string; name: string; companyId: string; department?: 
 interface LeaveRequest {
   id: string; companyId: string; userId: string; userName: string;
   type: string; startDate: string; endDate: string; days: number;
-  reason: string; status: "pending" | "approved" | "rejected";
-  approvedBy?: string; approvedByName?: string; createdAt: string;
+  reason: string; status: "pending" | "manager_approved" | "approved" | "rejected";
+  approvedBy?: string; approvedByName?: string;
+  managerApprovedBy?: string; managerApprovedByName?: string;
+  createdAt: string;
 }
 
 const LEAVE_TYPES = ["Annual", "Sick", "Maternity", "Paternity", "Emergency", "Unpaid", "Study", "Compassionate"];
@@ -134,12 +136,13 @@ export default function LeavePage() {
   const role = (session?.role ?? "").toLowerCase();
   const pos  = (session?.position ?? "").toLowerCase();
   const isGroupUser = session?.companyId === "group" || GROUP_ROLES.includes(role) || GROUP_ROLES.includes(pos);
-  const isGroupMgr  = isGroupUser;
-  const isSubsidMgr = !isGroupUser && (
-    role === "admin" || role === "manager" || role === "hr" ||
-    pos === "admin"  || pos === "manager"  || pos === "hr"
-  );
-  const canManage = session?.isSuperAdmin || isGroupMgr || isSubsidMgr;
+  const isGroupMgr   = isGroupUser;
+  const isManager    = session?.isSuperAdmin || isGroupMgr ||
+    role === "admin" || role === "manager" || pos === "admin" || pos === "manager" ||
+    role === "group_ceo" || role === "group_manager" || pos === "group_ceo" || pos === "group_manager";
+  const isHRAdmin    = session?.isSuperAdmin || isGroupMgr ||
+    role === "admin" || role === "hr" || pos === "admin" || pos === "hr";
+  const canManage    = isManager || isHRAdmin;
 
   const visibleLeaves = cid
     ? leaves.filter(l => l.companyId === cid)
@@ -156,14 +159,18 @@ export default function LeavePage() {
     return matchSearch && matchStatus;
   });
 
-  const pending   = visibleLeaves.filter(l => l.status === "pending").length;
-  const approved  = visibleLeaves.filter(l => l.status === "approved").length;
-  const rejected  = visibleLeaves.filter(l => l.status === "rejected").length;
-  const totalDays = visibleLeaves.filter(l => l.status === "approved").reduce((s, l) => s + l.days, 0);
+  const pending         = visibleLeaves.filter(l => l.status === "pending").length;
+  const managerApproved = visibleLeaves.filter(l => l.status === "manager_approved").length;
+  const approved        = visibleLeaves.filter(l => l.status === "approved").length;
+  const rejected        = visibleLeaves.filter(l => l.status === "rejected").length;
+  const totalDays       = visibleLeaves.filter(l => l.status === "approved").reduce((s, l) => s + l.days, 0);
 
-  const updateStatus = async (id: string, status: "approved" | "rejected") => {
+  const updateStatus = async (id: string, status: LeaveRequest["status"]) => {
+    const extra: Record<string,string> = {};
+    if (status === "manager_approved") { extra.managerApprovedBy = session?.id ?? ""; extra.managerApprovedByName = session?.name ?? ""; }
+    if (status === "approved")         { extra.approvedBy = session?.id ?? ""; extra.approvedByName = session?.name ?? ""; }
     await fetch("/api/leave", { method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status, approvedBy: session?.id, approvedByName: session?.name }) });
+      body: JSON.stringify({ id, status, ...extra }) });
     await fetchLeaves();
   };
 
@@ -222,10 +229,10 @@ export default function LeavePage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Pending Requests" value={pending}   icon={Clock}        iconBg="bg-yellow-50" iconColor="text-yellow-600" />
-        <StatCard title="Approved"         value={approved}  icon={CheckCircle}  iconBg="bg-green-50"  iconColor="text-green-600" />
-        <StatCard title="Rejected"         value={rejected}  icon={XCircle}      iconBg="bg-red-50"    iconColor="text-red-500" />
-        <StatCard title="Days Approved"    value={totalDays} icon={Calendar}     iconBg="bg-blue-50"   iconColor="text-blue-600" subtitle="This year" />
+        <StatCard title="Pending Approval" value={pending}         icon={Clock}        iconBg="bg-yellow-50"  iconColor="text-yellow-600" subtitle="Needs manager" />
+        <StatCard title="Manager Approved"  value={managerApproved} icon={CheckCircle}  iconBg="bg-blue-50"    iconColor="text-blue-600" subtitle="Pending HR confirm" />
+        <StatCard title="Fully Approved"    value={approved}        icon={CheckCircle}  iconBg="bg-green-50"   iconColor="text-green-600" />
+        <StatCard title="Days Approved"     value={totalDays}       icon={Calendar}     iconBg="bg-purple-50"  iconColor="text-purple-600" subtitle="This year" />
       </div>
 
       <Tabs defaultValue="requests">
@@ -241,11 +248,12 @@ export default function LeavePage() {
               <Input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 w-48" />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="manager_approved">Manager Approved</SelectItem>
+                <SelectItem value="approved">Fully Approved</SelectItem>
                 <SelectItem value="rejected">Rejected</SelectItem>
               </SelectContent>
             </Select>
@@ -307,18 +315,46 @@ export default function LeavePage() {
                       </TableCell>
                       <TableCell className="text-sm text-gray-500 max-w-xs truncate">{leave.reason || "—"}</TableCell>
                       <TableCell>
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusColor(leave.status)}`}>
-                          {leave.status}
-                        </span>
+                        {(() => {
+                          const s = leave.status;
+                          const badge =
+                            s === "pending"          ? "bg-yellow-100 text-yellow-700" :
+                            s === "manager_approved" ? "bg-blue-100 text-blue-700" :
+                            s === "approved"         ? "bg-green-100 text-green-700" :
+                            "bg-red-100 text-red-700";
+                          const label =
+                            s === "pending"          ? "⏳ Pending Manager" :
+                            s === "manager_approved" ? "🔵 Pending HR Confirm" :
+                            s === "approved"         ? "✅ Approved" : "❌ Rejected";
+                          return <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${badge}`}>{label}</span>;
+                        })()}
                       </TableCell>
-                      <TableCell className="text-sm text-gray-500">{leave.approvedByName || "—"}</TableCell>
+                      <TableCell className="text-xs text-gray-500">
+                        {leave.approvedByName
+                          ? <span className="text-green-700 font-medium">{leave.approvedByName}</span>
+                          : leave.managerApprovedByName
+                          ? <span className="text-blue-600">{leave.managerApprovedByName} (Mgr)</span>
+                          : "—"}
+                      </TableCell>
                       {canManage && (
                         <TableCell>
-                          <div className="flex items-center justify-end gap-1">
-                            {leave.status === "pending" && (
+                          <div className="flex items-center justify-end gap-1 flex-wrap">
+                            {/* Stage 1: Manager approves pending */}
+                            {leave.status === "pending" && isManager && (
+                              <>
+                                <Button variant="ghost" size="sm" className="text-blue-600 hover:bg-blue-50 text-xs" onClick={() => updateStatus(leave.id, "manager_approved")}>
+                                  <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
+                                </Button>
+                                <Button variant="ghost" size="sm" className="text-red-500 hover:bg-red-50 text-xs" onClick={() => updateStatus(leave.id, "rejected")}>
+                                  <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
+                                </Button>
+                              </>
+                            )}
+                            {/* Stage 2: HR/Admin gives final approval */}
+                            {leave.status === "manager_approved" && isHRAdmin && (
                               <>
                                 <Button variant="ghost" size="sm" className="text-green-600 hover:bg-green-50 text-xs" onClick={() => updateStatus(leave.id, "approved")}>
-                                  <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
+                                  <CheckCircle className="w-3.5 h-3.5 mr-1" /> Confirm
                                 </Button>
                                 <Button variant="ghost" size="sm" className="text-red-500 hover:bg-red-50 text-xs" onClick={() => updateStatus(leave.id, "rejected")}>
                                   <XCircle className="w-3.5 h-3.5 mr-1" /> Reject

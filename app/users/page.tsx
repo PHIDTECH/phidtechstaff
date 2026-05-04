@@ -217,7 +217,7 @@ export default function UsersPage() {
   const [activeCompanyId, setActiveCompanyId] = useState<string>("");
   const [companiesList, setCompaniesList] = useState<Array<{id:string;name:string;industry?:string}>>([]);
   const [branchesList, setBranchesList] = useState<Branch[]>([]);
-  const [sessionData, setSessionData] = useState<{id:string;role:string;position:string;branchId?:string|null;isSuperAdmin:boolean}|null>(null);
+  const [sessionData, setSessionData] = useState<{id:string;role:string;position:string;companyId?:string;branchId?:string|null;isSuperAdmin:boolean}|null>(null);
 
   const [saving, setSaving] = useState(false);
 
@@ -276,11 +276,25 @@ export default function UsersPage() {
     !GENERAL_ROLES_USERS.includes(sessionData.position ?? sessionData.role ?? "");
 
   const isGroupHQMode = !activeCompanyId || activeCompanyId === GROUP_ID;
-  // SuperAdmin always sees all staff (ignore company switcher on this page)
-  const canSeeAllStaff = sessionData?.isSuperAdmin || isGroupHQMode;
+  // Role check: only managers/admins/superadmins can view the full staff list
+  const _ur  = (sessionData?.role ?? "").toLowerCase();
+  const _up  = (sessionData?.position ?? "").toLowerCase();
+  const isGroupManagerUser = sessionData?.isSuperAdmin ||
+    _ur.includes("manager") || _up.includes("manager") ||
+    _ur.includes("admin")   || _up.includes("admin")   ||
+    _ur.includes("ceo")     || _up.includes("ceo")     ||
+    _ur.includes("hr")      || _up.includes("hr")      ||
+    _ur.includes("accountant") || _up.includes("accountant") ||
+    GENERAL_ROLES_USERS.some(r => _ur === r || _up === r);
+  // Subsidiary employees (non-managers) only see themselves — not the full staff list
+  const canSeeAllStaff = sessionData?.isSuperAdmin || (isGroupHQMode && isGroupManagerUser) || (!isGroupHQMode && isGroupManagerUser);
   const companyUsers = (() => {
+    if (!isGroupManagerUser && !sessionData?.isSuperAdmin) {
+      // Regular staff only see their own record
+      return usersList.filter(u => u.id === sessionData?.id);
+    }
     const base = canSeeAllStaff
-      ? usersList // SA or Group HQ: ALL staff across all companies + group staff
+      ? usersList // SA or manager in Group HQ: ALL staff across all companies
       : usersList.filter(u => u.companyId === activeCompanyId);
     if (isBranchManagerSession && sessionData?.branchId)
       return base.filter(u => u.branchId === sessionData.branchId);
@@ -391,12 +405,18 @@ export default function UsersPage() {
     <MainLayout>
       <PageHeader
         title="Users & Role Management"
-        subtitle={canSeeAllStaff ? "Managing staff for: All Companies" : `Managing staff for: ${activeCompany?.name ?? "Select a company"}`}
+        subtitle={
+          !isGroupManagerUser ? "Your profile information" :
+          canSeeAllStaff ? "Managing staff for: All Companies" :
+          `Managing staff for: ${activeCompany?.name ?? "Select a company"}`
+        }
         icon={Users}
         actions={
-          <Button size="sm" onClick={openAdd}>
-            <UserPlus className="w-4 h-4 mr-2" /> Add Employee
-          </Button>
+          isGroupManagerUser && (
+            <Button size="sm" onClick={openAdd}>
+              <UserPlus className="w-4 h-4 mr-2" /> Add Employee
+            </Button>
+          )
         }
       />
 

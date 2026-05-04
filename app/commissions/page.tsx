@@ -53,7 +53,7 @@ export interface Commission {
   saleAmount: number;
   commissionPct: number;
   commissionAmount: number;
-  status: "pending" | "paid" | "cancelled";
+  status: "pending" | "manager_approved" | "paid" | "cancelled";
   createdAt: string;
 }
 
@@ -137,12 +137,17 @@ export default function CommissionsPage() {
     };
   }, []);
 
-  const canManage = session?.isSuperAdmin === true ||
-    session?.role?.toLowerCase().includes("accountant") ||
-    session?.position?.toLowerCase().includes("accountant") ||
-    session?.role?.toLowerCase().includes("manager") ||
-    session?.position?.toLowerCase().includes("manager") ||
-    session?.role?.toLowerCase().includes("admin");
+  const _role = (session?.role ?? "").toLowerCase();
+  const _pos  = (session?.position ?? "").toLowerCase();
+  const isCommManager    = session?.isSuperAdmin === true ||
+    _role.includes("manager") || _pos.includes("manager") ||
+    _role.includes("admin")   || _pos.includes("admin")   ||
+    _role.includes("ceo")     || _pos.includes("ceo")     ||
+    _role.includes("group_manager") || _pos.includes("group_manager");
+  const isCommAccountant = session?.isSuperAdmin === true ||
+    _role.includes("accountant") || _pos.includes("accountant") ||
+    _role.includes("cfo")        || _pos.includes("cfo");
+  const canManage = isCommManager || isCommAccountant;
 
   // Regular staff (not managers/admins) can claim their own commission
   const isRegularStaff = !canManage && !!session?.id;
@@ -238,11 +243,14 @@ export default function CommissionsPage() {
     await fetchCommissions();
   };
 
-  const markPaid = async (id: string) => {
+  const updateCommStatus = async (id: string, status: Commission["status"]) => {
     const c = commissions.find(x => x.id === id);
     if (!c) return;
+    const extra: Record<string,string> = {};
+    if (status === "manager_approved") { extra.approvedBy = session?.name ?? ""; extra.approvedAt = new Date().toISOString(); }
+    if (status === "paid") { extra.disbursedBy = session?.name ?? ""; extra.datePaid = c.datePaid || new Date().toISOString().slice(0,10); }
     await fetch("/api/commissions", { method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status: "paid", datePaid: c.datePaid || new Date().toISOString().slice(0,10) }) });
+      body: JSON.stringify({ id, status, ...extra }) });
     await fetchCommissions();
   };
 
@@ -358,16 +366,31 @@ export default function CommissionsPage() {
                       <TableCell className="font-bold text-green-700">{formatCurrency(c.commissionAmount)}</TableCell>
                       <TableCell className="text-sm text-gray-600">{c.datePaid || "—"}</TableCell>
                       <TableCell>
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                          c.status === "paid" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
-                        }`}>{c.status}</span>
+                        {(() => {
+                          const s = c.status;
+                          const badge =
+                            s === "pending"          ? "bg-yellow-100 text-yellow-700" :
+                            s === "manager_approved" ? "bg-blue-100 text-blue-700" :
+                            s === "paid"             ? "bg-green-100 text-green-700" :
+                            "bg-gray-100 text-gray-600";
+                          const label =
+                            s === "pending"          ? "⏳ Pending Approval" :
+                            s === "manager_approved" ? "🔵 Pending Payment" :
+                            s === "paid"             ? "✅ Paid" : s;
+                          return <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${badge}`}>{label}</span>;
+                        })()}
                       </TableCell>
                       {canManage && (
                         <TableCell>
                           <div className="flex items-center justify-end gap-1">
-                            {c.status === "pending" && (
-                              <Button variant="ghost" size="sm" className="text-green-600 text-xs h-7 px-2" onClick={() => markPaid(c.id)}>
-                                Mark Paid
+                            {c.status === "pending" && isCommManager && (
+                              <Button variant="ghost" size="sm" className="text-blue-600 text-xs h-7 px-2" onClick={() => updateCommStatus(c.id, "manager_approved")}>
+                                ✓ Approve
+                              </Button>
+                            )}
+                            {c.status === "manager_approved" && isCommAccountant && (
+                              <Button variant="ghost" size="sm" className="text-green-600 text-xs h-7 px-2" onClick={() => updateCommStatus(c.id, "paid")}>
+                                💵 Pay
                               </Button>
                             )}
                             <Button variant="ghost" size="icon" onClick={() => openEdit(c)} title="Edit">
@@ -476,6 +499,7 @@ export default function CommissionsPage() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="manager_approved">Manager Approved</SelectItem>
                     <SelectItem value="paid">Paid</SelectItem>
                     <SelectItem value="cancelled">Cancelled</SelectItem>
                   </SelectContent>

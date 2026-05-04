@@ -296,7 +296,9 @@ export default function ExpensesPage() {
                 <TableHead>Title</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Amount</TableHead>
+                <TableHead>Description</TableHead>
                 <TableHead>Submitted</TableHead>
+                <TableHead>Approved By</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>

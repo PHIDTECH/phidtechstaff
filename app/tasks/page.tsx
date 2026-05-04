@@ -47,6 +47,7 @@ interface Task {
   priority: "low"|"medium"|"high"|"critical"; status: "pending"|"in-progress"|"completed"|"cancelled";
   dueDate: string; createdAt: string;
   attachments: Attachment[]; comments: Comment[];
+  participants?: string[];
   customerId?: string; customerName?: string;
   branchId?: string;
 }
@@ -76,7 +77,7 @@ const STATUS_COLOR: Record<string,string> = {
   "cancelled":   "bg-gray-100 text-gray-600",
 };
 
-const emptyForm = () => ({ title:"", description:"", assignedTo:"", priority:"medium" as Task["priority"], department:"", dueDate:"", attachments:[] as Attachment[], customerId:"", branchId:"" });
+const emptyForm = () => ({ title:"", description:"", assignedTo:"", priority:"medium" as Task["priority"], department:"", dueDate:"", attachments:[] as Attachment[], customerId:"", branchId:"", taskCompanyId:"", participants:[] as string[] });
 
 export default function TasksPage() {
   usePermissionGuard("tasks");
@@ -257,11 +258,13 @@ export default function TasksPage() {
     if (!form.assignedTo) { setFormError("Assign to a staff member."); return; }
     if (!form.priority)   { setFormError("Select a priority."); return; }
     if (!form.dueDate)    { setFormError("Set a due date."); return; }
+    const taskCid = form.taskCompanyId || activeCompanyId;
+    if (!taskCid) { setFormError("Please select a company first."); return; }
     const assignee = staffList.find(u => u.id === form.assignedTo);
     const customer = customers.find(c => c.id === form.customerId);
     const task: Task = {
       id: `task-${Date.now()}`,
-      companyId: activeCompanyId,
+      companyId: taskCid,
       title: form.title.trim(),
       description: form.description.trim(),
       assignedTo: form.assignedTo,
@@ -273,11 +276,13 @@ export default function TasksPage() {
       createdAt: new Date().toISOString(),
       attachments: form.attachments,
       comments: [],
+      participants: form.participants,
       customerId: customer?.id,
       customerName: customer?.name,
       branchId: form.branchId || undefined,
     };
-    await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(task) });
+    const res = await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(task) });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); setFormError(err.error || "Save failed. Please try again."); return; }
     pushNotification(form.assignedTo, `You have been assigned a new task: "${task.title}"`, task.id);
     setForm(emptyForm());
     setFormError("");
@@ -312,7 +317,7 @@ export default function TasksPage() {
     if (!task) return;
     const updatedComments = [...task.comments, comment];
     await fetch("/api/tasks", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: selectedTask.id, comments: updatedComments }) });
-    const notifyIds = new Set([task.assignedTo, task.assignedBy].filter(id => id !== (session?.id ?? "superadmin")));
+    const notifyIds = new Set([task.assignedTo, task.assignedBy, ...(task.participants ?? [])].filter(id => id !== (session?.id ?? "superadmin")));
     notifyIds.forEach(uid => pushNotification(uid, `New comment on task "${task.title}": ${comment.text.slice(0,60)}`, task.id));
     setCommentText("");
     await fetchTasks();
@@ -609,6 +614,35 @@ export default function TasksPage() {
                   ))}
                 </div>
               )}
+              {/* Chat Participants strip */}
+              {(() => {
+                const allParticipantIds = [
+                  selectedTask.assignedTo,
+                  selectedTask.assignedBy,
+                  ...(selectedTask.participants ?? []),
+                ].filter((id, i, arr) => id && arr.indexOf(id) === i);
+                if (allParticipantIds.length === 0) return null;
+                return (
+                  <div className="px-6 py-2 border-b border-gray-100">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Chat Participants</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {allParticipantIds.map(uid => {
+                        const u = staffList.find(s => s.id === uid);
+                        const label = uid === selectedTask.assignedTo ? "Assignee" : uid === selectedTask.assignedBy ? "Creator" : "Participant";
+                        return (
+                          <div key={uid} className="flex items-center gap-1.5 bg-gray-50 border border-gray-100 rounded-full px-2.5 py-1">
+                            <Avatar className="w-5 h-5 shrink-0">
+                              <AvatarFallback className="text-[9px]">{getInitials(u?.name ?? "?")}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-[11px] font-medium text-gray-700">{u?.name ?? "Unknown"}</span>
+                            <span className="text-[10px] text-gray-400">({label})</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
               {/* Status update */}
               <div className="px-6 py-2 border-b border-gray-100 flex items-center gap-2">
                 <span className="text-xs text-gray-500 shrink-0">Update status:</span>
@@ -689,15 +723,35 @@ export default function TasksPage() {
               <Textarea placeholder="Describe the task..." rows={3} value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} />
             </div>
 
+            {/* Company selector — shown whenever no company is active */}
+            {!activeCompanyId && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Company *</label>
+                <Select value={form.taskCompanyId} onValueChange={v => setForm(f => ({...f, taskCompanyId: v, branchId: "", assignedTo: "", customerId: ""}))}>
+                  <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+                  <SelectContent>
+                    {companiesList.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Branch + Customer row */}
-            <div className="grid grid-cols-2 gap-3">
+            {(() => {
+              const formCid = form.taskCompanyId || activeCompanyId;
+              const formBranches = branches.filter(b => !formCid || b.companyId === formCid);
+              const formCustomers = customers.filter(c => !formCid || c.companyId === formCid);
+              return (
+              <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Branch</label>
-                <Select value={form.branchId} onValueChange={v => setForm(f => ({...f, branchId: v, assignedTo: ""}))}>  
+                <Select value={form.branchId} onValueChange={v => setForm(f => ({...f, branchId: v, assignedTo: ""}))}>
                   <SelectTrigger><SelectValue placeholder="All branches" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__all">All Branches</SelectItem>
-                    {branches.filter(b => b.companyId === activeCompanyId).map(b => (
+                    {formBranches.map(b => (
                       <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -709,7 +763,7 @@ export default function TasksPage() {
                   <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
                   <SelectContent className="max-h-52">
                     <SelectItem value="__none">None</SelectItem>
-                    {customers.filter(c => c.companyId === activeCompanyId).map(c => (
+                    {formCustomers.map(c => (
                       <SelectItem key={c.id} value={c.id}>
                         <div className="flex items-center gap-2">
                           <span>{c.name}</span>
@@ -721,6 +775,8 @@ export default function TasksPage() {
                 </Select>
               </div>
             </div>
+              );
+            })()}
 
             {/* Customer details card (shown when customer selected) */}
             {form.customerId && form.customerId !== "__none" && (() => {
@@ -767,7 +823,8 @@ export default function TasksPage() {
                   <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
                   <SelectContent className="max-h-52">
                     {(() => {
-                      const filtered = staffList.filter(u =>
+                      const formCid2 = form.taskCompanyId || activeCompanyId;
+                      const filtered = (formCid2 ? allStaffList.filter(u => u.companyId === formCid2) : staffList).filter(u =>
                         !form.branchId || form.branchId === "__all" || u.branchId === form.branchId
                       );
                       if (filtered.length === 0) return (
@@ -817,6 +874,48 @@ export default function TasksPage() {
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Due Date *</label>
                 <Input type="date" value={form.dueDate} onChange={e => setForm(f => ({...f, dueDate: e.target.value}))} />
               </div>
+            </div>
+            {/* Participants (chat members) */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Chat Participants <span className="text-gray-400 font-normal text-xs">(optional — can chat on this task)</span></label>
+              {(() => {
+                const formCid3 = form.taskCompanyId || activeCompanyId;
+                const pickable = (formCid3 ? allStaffList.filter(u => u.companyId === formCid3) : staffList)
+                  .filter(u => u.id !== form.assignedTo && u.status === "active");
+                return (
+                  <div className="border border-gray-200 rounded-lg p-2 max-h-36 overflow-y-auto space-y-1">
+                    {pickable.length === 0 ? (
+                      <p className="text-xs text-gray-400 text-center py-2">No other staff available</p>
+                    ) : pickable.map(u => {
+                      const isSelected = form.participants.includes(u.id);
+                      return (
+                        <button key={u.id} type="button"
+                          onClick={() => setForm(f => ({
+                            ...f,
+                            participants: isSelected
+                              ? f.participants.filter(id => id !== u.id)
+                              : [...f.participants, u.id],
+                          }))}
+                          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition-colors ${
+                            isSelected ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50"
+                          }`}>
+                          <Avatar className="w-6 h-6 shrink-0">
+                            <AvatarFallback className="text-[10px]">{getInitials(u.name)}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-medium text-gray-800">{u.name}</span>
+                            <span className="text-[10px] text-gray-400 ml-1.5">{u.position || u.department}</span>
+                          </div>
+                          {isSelected && <span className="text-[10px] text-blue-600 font-medium shrink-0">✓ Added</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+              {form.participants.length > 0 && (
+                <p className="text-xs text-blue-600 mt-1.5 font-medium">{form.participants.length} participant{form.participants.length !== 1 ? "s" : ""} added to chat</p>
+              )}
             </div>
             {/* Document upload */}
             <div>

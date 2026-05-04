@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ShoppingCart, Plus, Search, DollarSign, CheckCircle, Clock, AlertCircle, Edit, Trash2, Eye, X } from "lucide-react";
+import { ShoppingCart, Plus, Search, DollarSign, CheckCircle, Clock, AlertCircle, Edit, Trash2, Eye, X, BookOpen } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
@@ -338,6 +338,35 @@ export default function AccountingSalesPage() {
                 </div>
               </div>
               {viewItem.notes && <p className="text-sm text-gray-500 italic border-t border-gray-100 pt-3">Note: {viewItem.notes}</p>}
+              {/* Accounting Ledger Entry */}
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5" /> Accounting Ledger Entry
+                </p>
+                <div className="space-y-1 text-xs font-mono">
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 text-slate-400">Dr</span>
+                    <span className="flex-1 text-slate-700">{viewItem.paid > 0 ? "Cash / Bank" : "Accounts Receivable"}</span>
+                    <span className="font-bold text-emerald-700">{formatCurrency(viewItem.amount)}</span>
+                  </div>
+                  {viewItem.balance > 0 && viewItem.paid > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="w-4 text-slate-400">Dr</span>
+                      <span className="flex-1 text-slate-700">Accounts Receivable (outstanding)</span>
+                      <span className="font-bold text-orange-600">{formatCurrency(viewItem.balance)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 border-t border-slate-200 pt-1">
+                    <span className="w-4 text-slate-400">Cr</span>
+                    <span className="flex-1 text-slate-700 pl-4">Sales Revenue</span>
+                    <span className="font-bold text-blue-700">{formatCurrency(viewItem.amount)}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 mt-2">
+                  <CheckCircle className="w-3 h-3 text-green-500" />
+                  <p className="text-[10px] text-green-700 font-medium">Posted to revenue ledger · Ref: {viewItem.id}</p>
+                </div>
+              </div>
             </div>
           )}
           <DialogFooter>
@@ -350,7 +379,14 @@ export default function AccountingSalesPage() {
       {/* Add/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={v => { if (!v) setShowDialog(false); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editItem ? "Edit Sale" : "New Sale"}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {editItem ? <><Edit className="w-4 h-4" /> Edit Sale</> : <><BookOpen className="w-4 h-4 text-emerald-600" /> Record Sale in Books</>}
+            </DialogTitle>
+            {!editItem && (
+              <p className="text-xs text-gray-500 mt-0.5">This sale will be posted as a revenue entry in the accounting ledger.</p>
+            )}
+          </DialogHeader>
           <div className="space-y-4">
             {formError && (
               <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -377,33 +413,37 @@ export default function AccountingSalesPage() {
                   const c = customers.find(cu => cu.id === v) ?? null;
                   setSelCustomer(c); sf({ customerId: v });
                 }}>
-                  <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
-                  <SelectContent>
-                    {customers.length === 0 && (
-                      <div className="px-3 py-4 text-center text-sm text-gray-400">No customers found</div>
-                    )}
-                    {customers.map(c => {
-                      const custSales = coSales.filter(s => s.customerId === c.id);
-                      const custPaid  = custSales.reduce((s, x) => s + x.paid, 0);
-                      const custBal   = custSales.reduce((s, x) => s + x.balance, 0);
-                      return (
-                        <SelectItem key={c.id} value={c.id}>
-                          <div className="flex items-center justify-between gap-3 w-full">
-                            <div>
-                              <span className="font-medium">{c.name}</span>
-                              {c.company && <span className="text-gray-400 text-xs ml-1">· {c.company}</span>}
-                              {c.phone   && <span className="text-gray-400 text-xs ml-1">· {c.phone}</span>}
-                            </div>
-                            {custSales.length > 0 && (
-                              <div className="text-xs shrink-0">
-                                <span className="text-green-600 font-medium">{formatCurrency(custPaid)}</span>
-                                {custBal > 0 && <span className="text-red-500 ml-1">/ {formatCurrency(custBal)} due</span>}
-                              </div>
-                            )}
-                          </div>
-                        </SelectItem>
+                  <SelectTrigger><SelectValue placeholder="Select customer from list" /></SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {(() => {
+                      const formCo = form.saleCompanyId || cid;
+                      const visibleCusts = formCo ? customers.filter(c => c.companyId === formCo) : customers;
+                      if (visibleCusts.length === 0) return (
+                        <div className="px-3 py-4 text-center text-sm text-gray-400">{isGroupHQ && !form.saleCompanyId ? "Select a company first" : "No customers found"}</div>
                       );
-                    })}
+                      return visibleCusts.map(c => {
+                        const custSales = sales.filter(s => s.customerId === c.id);
+                        const custPaid  = custSales.reduce((s, x) => s + x.paid, 0);
+                        const custBal   = custSales.reduce((s, x) => s + x.balance, 0);
+                        return (
+                          <SelectItem key={c.id} value={c.id}>
+                            <div className="flex items-center justify-between gap-3 w-full">
+                              <div>
+                                <span className="font-medium">{c.name}</span>
+                                {c.company && <span className="text-gray-400 text-xs ml-1">· {c.company}</span>}
+                                {c.phone   && <span className="text-gray-400 text-xs ml-1">· {c.phone}</span>}
+                              </div>
+                              {custSales.length > 0 && (
+                                <div className="text-xs shrink-0">
+                                  <span className="text-green-600 font-medium">{formatCurrency(custPaid)}</span>
+                                  {custBal > 0 && <span className="text-red-500 ml-1">/ {formatCurrency(custBal)} due</span>}
+                                </div>
+                              )}
+                            </div>
+                          </SelectItem>
+                        );
+                      });
+                    })()}
                   </SelectContent>
                 </Select>
                 {selCustomer && (
@@ -423,6 +463,35 @@ export default function AccountingSalesPage() {
                 <Input type="number" placeholder="0" value={form.paid} onChange={e => sf({ paid: e.target.value })} />
               </div>
             </div>
+
+            {/* Accounting Entry Preview */}
+            {previewCalc.amount > 0 && (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5" /> Accounting Journal Entry Preview
+                </p>
+                <div className="space-y-1 text-xs font-mono">
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 text-slate-400">Dr</span>
+                    <span className="flex-1 text-slate-700">{previewCalc.paid > 0 ? "Cash / Bank" : "Accounts Receivable"}</span>
+                    <span className="font-bold text-emerald-700">{formatCurrency(previewCalc.amount)}</span>
+                  </div>
+                  {previewCalc.balance > 0 && previewCalc.paid > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="w-4 text-slate-400">Dr</span>
+                      <span className="flex-1 text-slate-700">Accounts Receivable (balance)</span>
+                      <span className="font-bold text-orange-600">{formatCurrency(previewCalc.balance)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 border-t border-slate-200 pt-1">
+                    <span className="w-4 text-slate-400">Cr</span>
+                    <span className="flex-1 text-slate-700 pl-4">Sales Revenue</span>
+                    <span className="font-bold text-blue-700">{formatCurrency(previewCalc.amount)}</span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2">This entry will be recorded in the revenue ledger upon saving.</p>
+              </div>
+            )}
 
             {/* Line Items */}
             <div className="border border-gray-100 rounded-lg p-3 space-y-2">
