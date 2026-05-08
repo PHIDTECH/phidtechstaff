@@ -217,7 +217,7 @@ export default function DocumentsPage() {
   const coDocs = (session
     ? docs.filter(d => canViewDoc(d, session, groupCid) && (!co || d.companyId === co))
     : []
-  ).sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+  ).sort((a, b) => (b.uploadedAt ?? "").localeCompare(a.uploadedAt ?? ""));
 
   const categories = [...new Set(coDocs.map(d => d.category))];
   const thisMonth = new Date().toISOString().slice(0, 7);
