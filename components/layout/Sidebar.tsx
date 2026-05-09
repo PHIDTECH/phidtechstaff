@@ -137,14 +137,19 @@ const ALL_NAV: NavGroup[] = [
     ]
   },
   {
+    title: "Messages",
+    items: [
+      { label: "SMS Messages", href: "/messages", icon: MessageSquare },
+    ]
+  },
+  {
     title: "System",
     items: [
-      { label: "Documents",               href: "/documents",     icon: FileText       },
-      { label: "Messages",                href: "/messages",      icon: MessageSquare  },
-      { label: "Messages & Notifications",href: "/notifications", icon: Bell           },
-      { label: "Reports",                 href: "/reports",       icon: BarChart3      },
-      { label: "Branches",                href: "/admin#branches",icon: MapPin         },
-      { label: "Admin Panel",             href: "/admin",         icon: Settings       },
+      { label: "Documents",               href: "/documents",     icon: FileText  },
+      { label: "Messages & Notifications",href: "/notifications", icon: Bell      },
+      { label: "Reports",                 href: "/reports",       icon: BarChart3 },
+      { label: "Branches",                href: "/admin#branches",icon: MapPin    },
+      { label: "Admin Panel",             href: "/admin",         icon: Settings  },
     ]
   },
 ];
