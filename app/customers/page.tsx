@@ -628,9 +628,10 @@ export default function CustomersPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700 mb-1.5 block">Branch / Office</label>
-                  <Select value={form.branch} onValueChange={v => setForm(f => ({...f, branch: v}))}>
+                  <Select value={form.branch || undefined} onValueChange={v => setForm(f => ({...f, branch: v}))}>
                     <SelectTrigger><SelectValue placeholder="Select Branch" /></SelectTrigger>
                     <SelectContent className="max-h-60 overflow-y-auto">
+                      <SelectItem value="head_office">— Head Office —</SelectItem>
                       {companyBranches.map(b => (
                         <SelectItem key={b.id} value={b.id}>{b.name}{b.location && b.location !== b.name ? ` — ${b.location}` : ""}</SelectItem>
                       ))}

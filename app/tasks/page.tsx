@@ -747,10 +747,11 @@ export default function TasksPage() {
               <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Branch</label>
-                <Select value={form.branchId} onValueChange={v => setForm(f => ({...f, branchId: v, assignedTo: ""}))}>
+                <Select value={form.branchId || undefined} onValueChange={v => setForm(f => ({...f, branchId: v, assignedTo: ""}))}>
                   <SelectTrigger><SelectValue placeholder="All branches" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__all">All Branches</SelectItem>
+                    <SelectItem value="head_office">— Head Office —</SelectItem>
                     {formBranches.map(b => (
                       <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                     ))}
@@ -759,7 +760,7 @@ export default function TasksPage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Customer (optional)</label>
-                <Select value={form.customerId} onValueChange={v => setForm(f => ({...f, customerId: v}))}>
+                <Select value={form.customerId || undefined} onValueChange={v => setForm(f => ({...f, customerId: v}))}>
                   <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
                   <SelectContent className="max-h-52">
                     <SelectItem value="__none">None</SelectItem>

@@ -250,6 +250,15 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* ── Staff Reminder Banner ── */}
+        <div className="mb-5 rounded-xl bg-yellow-50 border border-yellow-300 px-4 py-3 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+          <p className="text-sm text-yellow-800 font-medium leading-relaxed">
+            Ndugu wafanyakazi, pole na majukumu. Mnakumbusha kujaza <strong>maudhurio</strong> kila siku kuondoa usumbufu.
+            Pia tujaze <strong>wateja</strong>, <strong>task</strong>, <strong>report za masoko</strong> na <strong>expenses</strong> kulingana na majukumu yako.
+          </p>
+        </div>
+
         {/* ── Main Grid: Companies (left) + Sidebar (right) ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
           {/* Subsidiary Cards - 2 cols */}
@@ -442,6 +451,15 @@ export default function DashboardPage() {
             </Button>
           )}
         </div>
+      </div>
+
+      {/* ── Staff Reminder Banner ── */}
+      <div className="mb-5 rounded-xl bg-yellow-50 border border-yellow-300 px-4 py-3 flex items-start gap-3">
+        <AlertCircle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+        <p className="text-sm text-yellow-800 font-medium leading-relaxed">
+          Ndugu wafanyakazi, pole na majukumu. Mnakumbusha kujaza <strong>maudhurio</strong> kila siku kuondoa usumbufu.
+          Pia tujaze <strong>wateja</strong>, <strong>task</strong>, <strong>report za masoko</strong> na <strong>expenses</strong> kulingana na majukumu yako.
+        </p>
       </div>
 
       {/* Stats Grid */}

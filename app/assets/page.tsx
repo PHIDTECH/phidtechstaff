@@ -440,7 +440,7 @@ export default function AssetsPage() {
               </div>
               <div className="col-span-2">
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Branch</label>
-                <Select value={form.branchId ?? ""} onValueChange={v => sf({ branchId: v })}>  
+                <Select value={form.branchId || undefined} onValueChange={v => sf({ branchId: v })}>  
                   <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
                   <SelectContent className="max-h-48">
                     <SelectItem value="__none">No specific branch</SelectItem>
