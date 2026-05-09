@@ -8,7 +8,7 @@ import {
   ChevronRight, Building2, ShoppingCart, Megaphone, Package,
   Receipt, BarChart3, FileText, Warehouse, TrendingUp, Briefcase,
   Clock, HelpCircle, X, Menu, Percent, Wrench, Activity, Scale, MapPin,
-  Users2, MessageSquarePlus
+  Users2, MessageSquarePlus, MessageSquare
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -41,6 +41,7 @@ const PERM_ROUTES: Record<string, string[]> = {
   documents:       ["/documents"],
   reports:         ["/reports"],
   services:        ["/services"],
+  messages:        ["/messages"],
   admin:           ["/admin", "/notifications"],
 };
 
@@ -138,11 +139,12 @@ const ALL_NAV: NavGroup[] = [
   {
     title: "System",
     items: [
-      { label: "Documents",               href: "/documents",     icon: FileText  },
-      { label: "Messages & Notifications",href: "/notifications", icon: Bell      },
-      { label: "Reports",                 href: "/reports",       icon: BarChart3 },
-      { label: "Branches",                href: "/admin#branches",icon: MapPin    },
-      { label: "Admin Panel",             href: "/admin",         icon: Settings  },
+      { label: "Documents",               href: "/documents",     icon: FileText       },
+      { label: "Messages",                href: "/messages",      icon: MessageSquare  },
+      { label: "Messages & Notifications",href: "/notifications", icon: Bell           },
+      { label: "Reports",                 href: "/reports",       icon: BarChart3      },
+      { label: "Branches",                href: "/admin#branches",icon: MapPin         },
+      { label: "Admin Panel",             href: "/admin",         icon: Settings       },
     ]
   },
 ];

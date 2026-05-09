@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readDb, writeDb } from "@/lib/serverDb";
+import { sendSms } from "@/lib/beemSms";
 
 interface PayrollEntry {
   id: string; staffId: string; companyId: string;
@@ -54,8 +55,18 @@ export async function PUT(req: NextRequest) {
     const list = readDb<PayrollEntry[]>("payroll", []);
     const idx = list.findIndex(x => x.id === body.id);
     if (idx === -1) return NextResponse.json({ error: "Not found." }, { status: 404 });
-    list[idx] = { ...list[idx], ...body };
+    const prev = list[idx];
+    list[idx] = { ...prev, ...body };
     writeDb("payroll", list);
+    if (body.status === "paid" && prev.status !== "paid") {
+      const users = readDb<{id:string;name:string;phone:string}[]>("users", []);
+      const staff = users.find(u => u.id === list[idx].staffId);
+      if (staff?.phone) {
+        await sendSms(staff.phone, staff.name,
+          `Habari ${staff.name}, mshahara wako wa ${list[idx].month} ${list[idx].year} wa TZS ${list[idx].netSalary} umelipwa. - PHIDTECH`,
+          "salary_paid");
+      }
+    }
     return NextResponse.json(list[idx]);
   } catch (e) { console.error(e); return NextResponse.json({ error: "Server error." }, { status: 500 }); }
 }

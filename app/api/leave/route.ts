@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readDb, writeDb } from "@/lib/serverDb";
+import { sendSms } from "@/lib/beemSms";
 
 interface LeaveRequest {
   id: string; companyId: string; userId: string; userName: string;
@@ -20,6 +21,16 @@ export async function POST(req: NextRequest) {
     const item: LeaveRequest = { ...body, id: body.id ?? `lv_${Date.now()}` };
     list.push(item);
     writeDb("leave", list);
+    // Auto-SMS confirmation to the applicant
+    if (item.userId) {
+      const users = readDb<{id:string;name:string;phone:string}[]>("users", []);
+      const staff = users.find(u => u.id === item.userId);
+      if (staff?.phone) {
+        await sendSms(staff.phone, staff.name,
+          `Habari ${staff.name}, ombi lako la likizo (${item.type}) kutoka ${item.startDate} hadi ${item.endDate} limepokelewa na linasubiri idhini. - PHIDTECH`,
+          "leave_applied");
+      }
+    }
     return NextResponse.json(item, { status: 201 });
   } catch (e) { console.error(e); return NextResponse.json({ error: "Server error." }, { status: 500 }); }
 }

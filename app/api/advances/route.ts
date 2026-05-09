@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readDb, writeDb } from "@/lib/serverDb";
+import { sendSms } from "@/lib/beemSms";
 
 interface SalaryAdvance {
   id: string;
@@ -54,8 +55,18 @@ export async function PUT(req: NextRequest) {
     const idx = advances.findIndex(a => a.id === body.id);
     if (idx === -1) return NextResponse.json({ error: "Advance not found." }, { status: 404 });
 
-    advances[idx] = { ...advances[idx], ...body };
+    const prev = advances[idx];
+    advances[idx] = { ...prev, ...body };
     writeDb("advances", advances);
+    if (body.status === "disbursed" && prev.status !== "disbursed") {
+      const users = readDb<{id:string;name:string;phone:string}[]>("users", []);
+      const staff = users.find(u => u.id === advances[idx].staffId);
+      if (staff?.phone) {
+        await sendSms(staff.phone, staff.name,
+          `Habari ${staff.name}, ombi lako la advance ya mshahara ya TZS ${advances[idx].amount} imelipwa. - PHIDTECH`,
+          "advance_disbursed");
+      }
+    }
     return NextResponse.json(advances[idx]);
   } catch (err) {
     console.error("PUT /api/advances:", err);

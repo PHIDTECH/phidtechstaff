@@ -96,6 +96,9 @@ export default function AdminPage() {
   const [detectedIP, setDetectedIP] = useState("");
   const [detectingIP, setDetectingIP] = useState(false);
   const [ipCopied, setIpCopied] = useState(false);
+  const [beemSettings, setBeemSettings] = useState({ apiKey: "", secretKey: "", senderId: "INFO" });
+  const [beemSaving, setBeemSaving] = useState(false);
+  const [beemMsg, setBeemMsg] = useState<{ok:boolean;text:string}|null>(null);
 
   const detectMyIP = async () => {
     setDetectingIP(true);
@@ -138,6 +141,11 @@ export default function AdminPage() {
     try {
       const res = await fetch("/api/branches", { cache: "no-store" });
       if (res.ok) setBranches(await res.json());
+    } catch {}
+    // Beem settings
+    try {
+      const res = await fetch("/api/settings/beem", { cache: "no-store" });
+      if (res.ok) setBeemSettings(await res.json());
     } catch {}
     // Active company from raw localStorage
     try {
@@ -229,6 +237,19 @@ export default function AdminPage() {
     setDeleteBranchId(null);
   };
 
+  const saveBeem = async () => {
+    setBeemSaving(true); setBeemMsg(null);
+    try {
+      const res = await fetch("/api/settings/beem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(beemSettings),
+      });
+      setBeemMsg(res.ok ? { ok: true, text: "Settings saved successfully!" } : { ok: false, text: "Failed to save settings." });
+    } catch { setBeemMsg({ ok: false, text: "Network error." }); }
+    setBeemSaving(false);
+  };
+
   const systemStats = [
     { label: "Total Companies", value: companiesList.length, icon: Building2, color: "text-blue-600", bg: "bg-blue-50" },
     { label: "Total Branches", value: branches.length, icon: MapPin, color: "text-teal-600", bg: "bg-teal-50" },
@@ -302,6 +323,7 @@ export default function AdminPage() {
           <TabsTrigger value="branding">Branding</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="backup">Backup</TabsTrigger>
+          <TabsTrigger value="sms">SMS Settings</TabsTrigger>
           <TabsTrigger value="audit">Audit Logs</TabsTrigger>
         </TabsList>
 
@@ -756,6 +778,71 @@ export default function AdminPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* SMS Settings Tab */}
+        <TabsContent value="sms">
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm max-w-lg p-6 space-y-5">
+            <div>
+              <h3 className="font-semibold text-gray-900 text-base">Beem Africa SMS Settings</h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Get your API credentials from{" "}
+                <a href="https://app.beem.africa" target="_blank" rel="noreferrer" className="text-blue-600 underline">app.beem.africa</a>.
+                Used for sending SMS to staff and customers automatically.
+              </p>
+            </div>
+            {beemMsg && (
+              <div className={`px-3 py-2 rounded-lg text-sm border ${beemMsg.ok ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+                {beemMsg.text}
+              </div>
+            )}
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">API Key <span className="text-red-500">*</span></label>
+                <Input
+                  value={beemSettings.apiKey}
+                  onChange={e => setBeemSettings(s => ({ ...s, apiKey: e.target.value }))}
+                  placeholder="Your Beem Africa API Key"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Secret Key <span className="text-red-500">*</span></label>
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={beemSettings.secretKey}
+                  onChange={e => setBeemSettings(s => ({ ...s, secretKey: e.target.value }))}
+                  placeholder="Your Beem Africa Secret Key"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Sender ID</label>
+                <Input
+                  value={beemSettings.senderId}
+                  onChange={e => setBeemSettings(s => ({ ...s, senderId: e.target.value }))}
+                  placeholder="e.g. PHIDTECH (max 11 chars)"
+                  maxLength={11}
+                />
+                <p className="text-xs text-gray-400 mt-1">Max 11 characters, no spaces. Must be registered with Beem.</p>
+              </div>
+            </div>
+            <div className="pt-2 border-t border-gray-100">
+              <Button onClick={saveBeem} disabled={beemSaving}>
+                {beemSaving ? "Saving…" : "Save SMS Settings"}
+              </Button>
+            </div>
+            <div className="rounded-lg bg-blue-50 border border-blue-100 p-4 text-xs text-blue-800 space-y-1">
+              <p className="font-semibold">Auto-SMS Triggers (sent when Beem is configured):</p>
+              <ul className="list-disc ml-4 space-y-0.5">
+                <li>Expense claim <strong>disbursed / paid</strong></li>
+                <li>Salary advance <strong>disbursed</strong></li>
+                <li>Leave request <strong>submitted</strong></li>
+                <li>Task <strong>assigned</strong> to a staff member</li>
+                <li>Payroll <strong>marked as paid</strong></li>
+                <li>Commission <strong>marked as paid</strong></li>
+              </ul>
             </div>
           </div>
         </TabsContent>

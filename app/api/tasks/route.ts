@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readDb, writeDb } from "@/lib/serverDb";
+import { sendSms } from "@/lib/beemSms";
 
 interface Task {
   id: string; companyId: string; title: string; description: string;
@@ -22,6 +23,16 @@ export async function POST(req: NextRequest) {
     const item: Task = { ...body, id: body.id ?? `task-${Date.now()}` };
     list.push(item);
     writeDb("tasks", list);
+    // Auto-SMS to assigned staff
+    if (item.assignedTo) {
+      const users = readDb<{id:string;name:string;phone:string}[]>("users", []);
+      const staff = users.find(u => u.id === item.assignedTo);
+      if (staff?.phone) {
+        await sendSms(staff.phone, staff.name,
+          `Habari ${staff.name}, umepewa kazi mpya: "${item.title}". Tarehe ya kukamilisha: ${item.dueDate || 'haijabainishwa'}. - PHIDTECH`,
+          "task_assigned");
+      }
+    }
     return NextResponse.json(item, { status: 201 });
   } catch (e) { console.error(e); return NextResponse.json({ error: "Server error." }, { status: 500 }); }
 }

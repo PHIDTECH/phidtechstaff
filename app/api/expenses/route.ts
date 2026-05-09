@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readDb, writeDb } from "@/lib/serverDb";
+import { sendSms } from "@/lib/beemSms";
 
 interface Expense {
   id: string; companyId: string; userId: string; title: string;
@@ -48,8 +49,19 @@ export async function PUT(req: NextRequest) {
     const list = readDb<Expense[]>("expenses", []);
     const idx = list.findIndex(x => x.id === body.id);
     if (idx === -1) return NextResponse.json({ error: "Not found." }, { status: 404 });
-    list[idx] = { ...list[idx], ...body };
+    const prev = list[idx];
+    list[idx] = { ...prev, ...body };
     writeDb("expenses", list);
+    // Auto-SMS when expense is disbursed
+    if (body.status === "disbursed" && prev.status !== "disbursed") {
+      const users = readDb<{id:string;name:string;phone:string}[]>("users", []);
+      const staff = users.find(u => u.id === list[idx].userId);
+      if (staff?.phone) {
+        await sendSms(staff.phone, staff.name,
+          `Habari ${staff.name}, madai yako ya gharama ya TZS ${list[idx].amount} yameidhinishwa na kulipwa. Asante. - PHIDTECH`,
+          "expense_disbursed");
+      }
+    }
     return NextResponse.json(list[idx]);
   } catch (e) { console.error(e); return NextResponse.json({ error: "Server error." }, { status: 500 }); }
 }

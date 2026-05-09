@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readDb, writeDb } from "@/lib/serverDb";
+import { sendSms } from "@/lib/beemSms";
 
 interface Commission {
   id: string; staffId: string; companyId: string;
@@ -42,8 +43,18 @@ export async function PUT(req: NextRequest) {
     const list = readDb<Commission[]>("commissions", []);
     const idx = list.findIndex(x => x.id === body.id);
     if (idx === -1) return NextResponse.json({ error: "Not found." }, { status: 404 });
-    list[idx] = { ...list[idx], ...body };
+    const prev = list[idx];
+    list[idx] = { ...prev, ...body };
     writeDb("commissions", list);
+    if (body.status === "paid" && prev.status !== "paid") {
+      const users = readDb<{id:string;name:string;phone:string}[]>("users", []);
+      const staff = users.find(u => u.id === list[idx].staffId);
+      if (staff?.phone) {
+        await sendSms(staff.phone, staff.name,
+          `Habari ${staff.name}, commission yako ya TZS ${list[idx].commissionAmount} kwa ${list[idx].month} ${list[idx].year} imelipwa. - PHIDTECH`,
+          "commission_paid");
+      }
+    }
     return NextResponse.json(list[idx]);
   } catch (e) { console.error(e); return NextResponse.json({ error: "Server error." }, { status: 500 }); }
 }
