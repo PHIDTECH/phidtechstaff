@@ -33,7 +33,7 @@ export async function sendSms(
   recipientName: string,
   message: string,
   trigger?: string
-): Promise<boolean> {
+): Promise<{ ok: boolean; error?: string }> {
   const settings = readDb<BeemSettings>("beem_settings", {
     apiKey: "", secretKey: "", senderId: "INFO",
   });
@@ -51,14 +51,14 @@ export async function sendSms(
   try {
     if (!settings.apiKey || !settings.secretKey) {
       appendLog(log);
-      return false;
+      return { ok: false, error: "Beem API credentials not configured. Go to Admin → SMS Settings." };
     }
 
     const normalised = normalisePhone(phone);
-    if (normalised.length < 10) {
+    if (normalised.length < 9) {
       log.status = "failed";
       appendLog(log);
-      return false;
+      return { ok: false, error: `Invalid phone number: ${phone}` };
     }
 
     const credentials = Buffer.from(`${settings.apiKey}:${settings.secretKey}`).toString("base64");
@@ -77,14 +77,29 @@ export async function sendSms(
       }),
     });
 
-    log.status = res.ok ? "sent" : "failed";
+    // Parse Beem response — success code is 100 (or 200 in some versions)
+    let body: Record<string, unknown> = {};
+    try { body = await res.json(); } catch {}
+    console.log("[beemSms] HTTP", res.status, JSON.stringify(body));
+
+    const beemOk =
+      res.ok &&
+      (body.code === 100 || body.code === 200 ||
+       (typeof body.message === "string" && body.message.toLowerCase().includes("success")));
+
+    log.status = beemOk ? "sent" : "failed";
     appendLog(log);
-    return res.ok;
+
+    if (!beemOk) {
+      const reason = (body.message as string) || (body.error as string) || `HTTP ${res.status}`;
+      return { ok: false, error: `Beem error: ${reason}` };
+    }
+    return { ok: true };
   } catch (err) {
     console.error("[beemSms] sendSms error:", err);
     log.status = "failed";
     appendLog(log);
-    return false;
+    return { ok: false, error: String(err) };
   }
 }
 

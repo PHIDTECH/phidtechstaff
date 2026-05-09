@@ -19,8 +19,8 @@ export async function POST(req: NextRequest) {
     if (!phone?.trim())   return NextResponse.json({ error: "phone required." }, { status: 400 });
     if (!message?.trim()) return NextResponse.json({ error: "message required." }, { status: 400 });
 
-    const ok = await sendSms(phone, recipientName ?? phone, message, "manual");
-    return NextResponse.json({ success: ok, sent: ok });
+    const result = await sendSms(phone, recipientName ?? phone, message, "manual");
+    return NextResponse.json({ success: result.ok, sent: result.ok, error: result.error });
   } catch (e) {
     console.error("POST /api/messages:", e);
     return NextResponse.json({ error: "Server error." }, { status: 500 });

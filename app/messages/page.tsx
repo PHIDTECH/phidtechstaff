@@ -96,7 +96,7 @@ export default function MessagesPage() {
         setMessage(""); setSinglePhone(""); setRecipientId("");
         loadData();
       } else {
-        setResult({ ok: false, msg: "SMS failed. Check Beem API credentials in Admin → SMS Settings." });
+        setResult({ ok: false, msg: data.error ?? "SMS failed. Check Beem API credentials in Admin → SMS Settings." });
       }
     } catch { setResult({ ok: false, msg: "Network error." }); }
     setSending(false);
