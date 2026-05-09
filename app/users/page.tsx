@@ -336,11 +336,14 @@ export default function UsersPage() {
     setEditUser(u);
     // password intentionally set to "" — API strips it from responses.
     // Leaving blank on save preserves the existing password (see saveUser).
-    setForm({ name: u.name, email: u.email, password: "", phone: u.phone,
-      department: u.department, position: u.position, salary: String(u.salary),
-      status: u.status, permissions: [...u.permissions], companyId: u.companyId,
+    setForm({ name: u.name, email: u.email ?? "", password: "", phone: u.phone ?? "",
+      department: u.department ?? "", position: u.position ?? "staff",
+      salary: String(u.salary ?? 0),
+      status: u.status ?? "active",
+      permissions: Array.isArray(u.permissions) ? [...u.permissions] : [],
+      companyId: u.companyId ?? "",
       branchId: u.branchId ?? "",
-      allowances: u.allowances ? [...u.allowances] : [] });
+      allowances: Array.isArray(u.allowances) ? [...u.allowances] : [] });
     setFormError("");
     setShowEditDialog(true);
   };
@@ -370,7 +373,7 @@ export default function UsersPage() {
     if (!form.email.trim()) { setFormError("Email is required."); return; }
     if (!isEdit && !form.password.trim()) { setFormError("Password is required."); return; }
     if (!isEdit && form.password.length < 6) { setFormError("Password must be at least 6 characters."); return; }
-    if (!form.department) { setFormError("Department is required."); return; }
+    if (!isEdit && !form.department) { setFormError("Department is required."); return; }
 
     setSaving(true);
     try {
@@ -380,6 +383,7 @@ export default function UsersPage() {
           password: form.password || undefined,
           phone: form.phone, department: form.department,
           position: form.position, role: form.position,
+          companyId: form.companyId || editUser.companyId,
           salary: Number(form.salary) || 0,
           status: form.status, permissions: form.permissions,
           allowances: form.allowances,
