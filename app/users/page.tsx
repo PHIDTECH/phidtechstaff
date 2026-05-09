@@ -807,7 +807,7 @@ export default function UsersPage() {
                 <Select value={form.companyId} onValueChange={v => {
                   const isGroup = v === GROUP_ID;
                   const defaultPos = isGroup ? "group_manager" : "staff";
-                  setForm(f => ({ ...f, companyId: v, position: defaultPos, permissions: DEFAULT_PERMISSIONS[defaultPos] ?? DEFAULT_PERMISSIONS.staff }));
+                  setForm(f => ({ ...f, companyId: v, branchId: "", position: defaultPos, permissions: DEFAULT_PERMISSIONS[defaultPos] ?? DEFAULT_PERMISSIONS.staff }));
                 }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select company" />
@@ -832,10 +832,10 @@ export default function UsersPage() {
                     <SelectTrigger><SelectValue placeholder="Select branch (optional)" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">— Head Office (no branch) —</SelectItem>
-                      {branchesList.map(b => (
+                      {branchesList.filter(b => b.companyId === form.companyId).map(b => (
                         <SelectItem key={b.id} value={b.id}>📍 {b.name}{b.location ? ` — ${b.location}` : ""}</SelectItem>
                       ))}
-                      {branchesList.length === 0 && (
+                      {branchesList.filter(b => b.companyId === form.companyId).length === 0 && (
                         <SelectItem value="none" disabled>No branches added yet — add in Admin Panel</SelectItem>
                       )}
                     </SelectContent>
