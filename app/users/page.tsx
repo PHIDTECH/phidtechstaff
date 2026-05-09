@@ -57,7 +57,7 @@ interface Branch {
 // ── Constants ───────────────────────────────────────────────────────────────
 const DEFAULT_DEPARTMENTS = [
   "Administration", "Human Resources", "Finance & Accounting", "Sales & Marketing",
-  "Information Technology", "Operations", "Customer Service", "Procurement",
+  "Marketing", "Information Technology", "Operations", "Customer Service", "Procurement",
   "Legal & Compliance", "Research & Development", "Logistics", "Production",
 ];
 
