@@ -221,6 +221,7 @@ export default function CustomersPage() {
       date: c.date, branch: c.branch, status: c.status,
       credentials: c.credentials ?? "",
       attachments: c.attachments ?? [],
+      _companyId: "",
     });
     setFormError("");
     setShowEditDialog(true);
