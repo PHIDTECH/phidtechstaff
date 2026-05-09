@@ -360,7 +360,7 @@ export default function ExpensesPage() {
                     <TableCell>
                       <div className="flex items-center justify-end gap-1 flex-wrap">
                         <Button variant="ghost" size="icon" onClick={() => setViewItem(claim)}><Eye className="w-4 h-4 text-gray-400" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(claim)}><Edit className="w-4 h-4 text-blue-400" /></Button>
+                        {isECEO && <Button variant="ghost" size="icon" onClick={() => openEdit(claim)}><Edit className="w-4 h-4 text-blue-400" /></Button>}
                         {/* Stage 1: General Manager */}
                         {claim.status === "pending" && isEManager && (
                           <>
@@ -392,7 +392,7 @@ export default function ExpensesPage() {
                             💵 Disburse
                           </Button>
                         )}
-                        <Button variant="ghost" size="icon" onClick={() => setDeleteId(claim.id)}><Trash2 className="w-4 h-4 text-red-400" /></Button>
+                        {isECEO && <Button variant="ghost" size="icon" onClick={() => setDeleteId(claim.id)}><Trash2 className="w-4 h-4 text-red-400" /></Button>}
                       </div>
                     </TableCell>
                   </TableRow>

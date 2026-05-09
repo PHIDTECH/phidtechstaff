@@ -974,7 +974,7 @@ export default function PayrollPage() {
                                 Pay
                               </Button>
                             )}
-                            {session?.isSuperAdmin && (
+                            {isCEO && (
                               <>
                                 <Button variant="ghost" size="icon" title="Edit Entry" onClick={() => openEditEntry(payroll)}>
                                   <Edit className="w-4 h-4 text-blue-400" />
@@ -1085,7 +1085,7 @@ export default function PayrollPage() {
                             {((adv.status as string) === "ceo_approved" || (adv.status as string) === "approved") && (isAccountant || isCEO) && (
                               <Button variant="ghost" size="sm" className="text-green-700 text-xs" onClick={() => updateAdvStatus(adv.id, "disbursed")}>💵 Disburse</Button>
                             )}
-                            {(session?.isSuperAdmin || isGroupManager) && (
+                            {isCEO && (
                               <Button variant="ghost" size="sm" className="text-gray-400 hover:text-red-600 text-xs px-1" onClick={() => deleteAdvance(adv.id)}>
                                 <Trash2 className="w-3.5 h-3.5" />
                               </Button>

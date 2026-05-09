@@ -196,7 +196,11 @@ export default function DocumentsPage() {
     };
   }, []);
 
-  const canDelete   = session?.isSuperAdmin === true;
+  const _dRole = (session?.role ?? "").toLowerCase();
+  const _dPos  = (session?.position ?? "").toLowerCase();
+  const canDelete = session?.isSuperAdmin === true ||
+    _dRole === "admin" || _dPos === "admin" ||
+    _dRole.includes("ceo") || _dPos.includes("ceo");
 
   const co         = cidRef.current || cid;
   const isSA       = session?.isSuperAdmin === true;

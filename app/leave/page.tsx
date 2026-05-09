@@ -364,7 +364,7 @@ export default function LeavePage() {
                                 </Button>
                               </>
                             )}
-                            {(session?.isSuperAdmin || isGroupMgr) && (
+                            {(session?.isSuperAdmin || isGroupMgr || isCEO) && (
                               <Button variant="ghost" size="icon" className="text-gray-400 hover:text-red-600 h-7 w-7" onClick={() => deleteLeave(leave.id)}>
                                 <Trash2 className="w-3.5 h-3.5" />
                               </Button>

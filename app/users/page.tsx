@@ -279,6 +279,9 @@ export default function UsersPage() {
   // Role check: only managers/admins/superadmins can view the full staff list
   const _ur  = (sessionData?.role ?? "").toLowerCase();
   const _up  = (sessionData?.position ?? "").toLowerCase();
+  const canEditUser = sessionData?.isSuperAdmin ||
+    _ur === "admin" || _up === "admin" ||
+    _ur.includes("ceo") || _up.includes("ceo");
   const isGroupManagerUser = sessionData?.isSuperAdmin ||
     _ur.includes("manager") || _up.includes("manager") ||
     _ur.includes("admin")   || _up.includes("admin")   ||
@@ -547,12 +550,16 @@ export default function UsersPage() {
                           <Button variant="ghost" size="icon" onClick={() => setSelectedUser(user)}>
                             <Eye className="w-4 h-4 text-gray-400" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(user)}>
-                            <Edit className="w-4 h-4 text-gray-400" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => deleteUser(user.id)}>
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </Button>
+                          {canEditUser && (
+                            <>
+                              <Button variant="ghost" size="icon" onClick={() => openEdit(user)}>
+                                <Edit className="w-4 h-4 text-blue-400" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => deleteUser(user.id)}>
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -625,12 +632,16 @@ export default function UsersPage() {
                           <Button variant="ghost" size="icon" onClick={() => setSelectedUser(user)}>
                             <Eye className="w-4 h-4 text-gray-400" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(user)}>
-                            <Edit className="w-4 h-4 text-gray-400" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => deleteUser(user.id)}>
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </Button>
+                          {canEditUser && (
+                            <>
+                              <Button variant="ghost" size="icon" onClick={() => openEdit(user)}>
+                                <Edit className="w-4 h-4 text-blue-400" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => deleteUser(user.id)}>
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
