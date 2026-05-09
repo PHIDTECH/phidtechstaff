@@ -432,7 +432,9 @@ export default function AdminPage() {
                 </TableHeader>
                 <TableBody>
                   {branches.map(branch => {
-                    const company = companiesList.find(c => c.id === branch.companyId);
+                    const company = branch.companyId === "group"
+                      ? { name: "👑 PHIDTECH GROUP HQ" }
+                      : companiesList.find(c => c.id === branch.companyId);
                     const manager = staffUsers.find(u => u.id === branch.managerId);
                     const branchStaff = staffUsers.filter((u: {id:string;companyId:string;status:string;name:string;role:string} & {branchId?: string}) => u.branchId === branch.id);
                     return (
@@ -901,9 +903,10 @@ export default function AdminPage() {
               )}
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Company <span className="text-red-500">*</span></label>
-                <Select value={branchForm.companyId} onValueChange={v => bf({ companyId: v })}>
+                <Select value={branchForm.companyId || undefined} onValueChange={v => bf({ companyId: v })}>
                   <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="group">👑 PHIDTECH GROUP HQ (visible to all)</SelectItem>
                     {companiesList.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>

@@ -741,7 +741,7 @@ export default function TasksPage() {
             {/* Branch + Customer row */}
             {(() => {
               const formCid = form.taskCompanyId || activeCompanyId;
-              const formBranches = branches.filter(b => !formCid || b.companyId === formCid);
+              const formBranches = branches.filter(b => !formCid || b.companyId === formCid || b.companyId === "group");
               const formCustomers = customers.filter(c => !formCid || c.companyId === formCid);
               return (
               <div className="grid grid-cols-2 gap-3">

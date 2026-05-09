@@ -832,10 +832,10 @@ export default function UsersPage() {
                     <SelectTrigger><SelectValue placeholder="Select branch (optional)" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">— Head Office (no branch) —</SelectItem>
-                      {branchesList.filter(b => b.companyId === form.companyId).map(b => (
+                      {branchesList.filter(b => b.companyId === form.companyId || b.companyId === "group").map(b => (
                         <SelectItem key={b.id} value={b.id}>📍 {b.name}{b.location ? ` — ${b.location}` : ""}</SelectItem>
                       ))}
-                      {branchesList.filter(b => b.companyId === form.companyId).length === 0 && (
+                      {branchesList.filter(b => b.companyId === form.companyId || b.companyId === "group").length === 0 && (
                         <SelectItem value="none" disabled>No branches added yet — add in Admin Panel</SelectItem>
                       )}
                     </SelectContent>
