@@ -325,7 +325,9 @@ export default function UsersPage() {
 
   const openEdit = (u: StaffUser) => {
     setEditUser(u);
-    setForm({ name: u.name, email: u.email, password: u.password, phone: u.phone,
+    // password intentionally set to "" — API strips it from responses.
+    // Leaving blank on save preserves the existing password (see saveUser).
+    setForm({ name: u.name, email: u.email, password: "", phone: u.phone,
       department: u.department, position: u.position, salary: String(u.salary),
       status: u.status, permissions: [...u.permissions], companyId: u.companyId,
       branchId: u.branchId ?? "",
@@ -858,7 +860,7 @@ export default function UsersPage() {
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <Input className="pl-9" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder={isEdit ? "Leave blank to keep current" : "Min. 6 characters"} />
+                  <Input className="pl-9" type="password" autoComplete="new-password" value={form.password ?? ""} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder={isEdit ? "Leave blank to keep current" : "Min. 6 characters"} />
                 </div>
               </div>
               <div>

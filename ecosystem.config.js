@@ -10,6 +10,9 @@ module.exports = {
         NODE_ENV: "production",
         PORT: 3002,
         HOSTNAME: "0.0.0.0",
+        // Explicitly pin the data directory so data NEVER ends up inside .next/standalone/
+        // which is wiped on every `npm run build`.
+        DATA_PATH: "/var/www/boms/data",
       },
       // Restart if it uses more than 1.5 GB RAM
       max_memory_restart: "1500M",
