@@ -289,8 +289,10 @@ export default function UsersPage() {
   const _ur  = (sessionData?.role ?? "").toLowerCase();
   const _up  = (sessionData?.position ?? "").toLowerCase();
   const canEditUser = sessionData?.isSuperAdmin ||
-    _ur === "admin" || _up === "admin" ||
-    _ur.includes("ceo") || _up.includes("ceo");
+    _ur === "admin"     || _up === "admin"    ||
+    _ur.includes("ceo") || _up.includes("ceo") ||
+    _ur.includes("manager") || _up.includes("manager") ||
+    GENERAL_ROLES_USERS.some(r => _ur === r || _up === r);
   const isGroupManagerUser = sessionData?.isSuperAdmin ||
     _ur.includes("manager") || _up.includes("manager") ||
     _ur.includes("admin")   || _up.includes("admin")   ||
@@ -305,9 +307,16 @@ export default function UsersPage() {
       // Regular staff only see their own record
       return usersList.filter(u => u.id === sessionData?.id);
     }
-    const base = canSeeAllStaff
-      ? usersList // SA or manager in Group HQ: ALL staff across all companies
-      : usersList.filter(u => u.companyId === activeCompanyId);
+    let base: StaffUser[];
+    if (sessionData?.isSuperAdmin || isGroupHQMode) {
+      // SuperAdmin or Group HQ staff: ALL users across all companies
+      base = usersList;
+    } else {
+      // Subsidiary manager/CEO: their company + Group HQ staff always visible
+      base = usersList.filter(u =>
+        u.companyId === activeCompanyId || u.companyId === GROUP_ID
+      );
+    }
     if (isBranchManagerSession && sessionData?.branchId)
       return base.filter(u => u.branchId === sessionData.branchId);
     return base;
