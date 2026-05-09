@@ -86,22 +86,15 @@ const ALL_NAV: NavGroup[] = [
   {
     title: "Finance",
     items: [
-      {
-        label: "Accounting",
-        href: "/accounting",
-        icon: BookOpen,
-        children: [
-          { label: "Dashboard",            href: "/accounting",                     icon: BarChart3   },
-          { label: "Customer Sales",      href: "/accounting/sales",               icon: ShoppingCart },
-          { label: "Staff Expense Claims",href: "/accounting/expenses",            icon: Receipt     },
-          { label: "Office Expenses",     href: "/accounting/office-expenses",     icon: DollarSign  },
-          { label: "Profit & Loss",       href: "/accounting/profit-loss",         icon: TrendingUp  },
-          { label: "Balance Sheet",       href: "/accounting/balance-sheet",       icon: Scale       },
-          { label: "Cash Flow",           href: "/accounting/cashflow",            icon: Activity    },
-        ]
-      },
-      { label: "Invoices",   href: "/invoices",    icon: FileText  },
-      { label: "Petty Cash", href: "/petty-cash",  icon: DollarSign },
+      { label: "Accounting",           href: "/accounting",                 icon: BookOpen     },
+      { label: "Customer Sales",       href: "/accounting/sales",           icon: ShoppingCart },
+      { label: "Staff Expense Claims", href: "/accounting/expenses",        icon: Receipt      },
+      { label: "Office Expenses",      href: "/accounting/office-expenses", icon: DollarSign   },
+      { label: "Profit & Loss",        href: "/accounting/profit-loss",     icon: TrendingUp   },
+      { label: "Balance Sheet",        href: "/accounting/balance-sheet",   icon: Scale        },
+      { label: "Cash Flow",            href: "/accounting/cashflow",        icon: Activity     },
+      { label: "Invoices",             href: "/invoices",                   icon: FileText     },
+      { label: "Petty Cash",           href: "/petty-cash",                 icon: DollarSign   },
     ]
   },
   {
