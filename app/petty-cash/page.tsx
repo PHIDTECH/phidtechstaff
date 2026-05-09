@@ -70,8 +70,7 @@ export default function PettyCashPage() {
   useEffect(() => { reload(); }, []);
 
   const cid = cidRef.current || activeCompanyId;
-  const companyPettyCash = cid ? entries.filter(p => p.companyId === cid) : entries;
-  const companyStaff     = cid ? staff.filter(u => u.companyId === cid) : staff;
+  const companyStaff = cid ? staff.filter(u => u.companyId === cid) : staff;
 
   const _role = (session?.role ?? "").toLowerCase();
   const _pos  = (session?.position ?? "").toLowerCase();
@@ -83,6 +82,11 @@ export default function PettyCashPage() {
     _role.includes("accountant") || _pos.includes("accountant") ||
     _role.includes("cfo")        || _pos.includes("cfo");
   const canManagePC = isPCManager || isPCAccountant;
+  const myOnlyPC    = !canManagePC && !!session?.id;
+  const companyPettyCash = (() => {
+    const base = cid ? entries.filter(p => p.companyId === cid) : entries;
+    return myOnlyPC ? base.filter(p => p.createdBy === session?.id) : base;
+  })();
 
   // Approved entries only count in the ledger / balance
   const approvedEntries  = companyPettyCash.filter(p => !p.status || p.status === "approved");

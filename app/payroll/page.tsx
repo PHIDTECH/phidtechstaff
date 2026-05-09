@@ -199,10 +199,21 @@ export default function PayrollPage() {
   }, []);
 
   const monthKey = `${selectedMonth}-${selectedYear}`;
+  const _pr = (session?.role ?? "").toLowerCase();
+  const _pp = (session?.position ?? "").toLowerCase();
+  const canManagePayroll = session?.isSuperAdmin ||
+    GENERAL_ROLES_PAYROLL.some(r => _pr.includes(r) || _pp.includes(r));
+  const myPayrollOnly = !canManagePayroll && !!session?.id;
+
   // Group HQ (activeCompanyId === "") → show ALL companies' payroll in read-only mode
   const companyEntries = payrollEntries.filter(
-    p => (!activeCompanyId || p.companyId === activeCompanyId) && p.month === selectedMonth && p.year === selectedYear
+    p => (!activeCompanyId || p.companyId === activeCompanyId) &&
+         p.month === selectedMonth && p.year === selectedYear &&
+         (!myPayrollOnly || p.staffId === session?.id)
   );
+  const visibleAdvances = myPayrollOnly
+    ? advances.filter(a => a.staffId === session?.id)
+    : advances.filter(a => !activeCompanyId || a.companyId === activeCompanyId);
   const filtered = companyEntries.filter(p => {
     const emp = staffList.find(u => u.id === p.staffId);
     return emp?.name.toLowerCase().includes(search.toLowerCase()) ?? false;
@@ -994,7 +1005,7 @@ export default function PayrollPage() {
 
         <TabsContent value="advances">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            {(activeCompanyId ? advances.filter(a => a.companyId === activeCompanyId) : advances).length === 0 ? (
+            {visibleAdvances.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <AlertCircle className="w-10 h-10 text-gray-300 mb-3" />
                 <p className="text-sm text-gray-500">No salary advances yet</p>
@@ -1016,7 +1027,7 @@ export default function PayrollPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(activeCompanyId ? advances.filter(a => a.companyId === activeCompanyId) : advances).map((adv) => {
+                  {visibleAdvances.map((adv) => {
                     const emp = allStaffList.find(u => u.id === adv.staffId);
                     return (
                       <TableRow key={adv.id}>

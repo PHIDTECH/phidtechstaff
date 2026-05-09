@@ -143,10 +143,12 @@ export default function LeavePage() {
   const isHRAdmin    = session?.isSuperAdmin || isGroupMgr ||
     role === "admin" || role === "hr" || pos === "admin" || pos === "hr";
   const canManage    = isManager || isHRAdmin;
+  const myOnly       = !canManage && !!session?.id;
 
-  const visibleLeaves = cid
-    ? leaves.filter(l => l.companyId === cid)
-    : leaves;
+  const visibleLeaves = (() => {
+    const base = cid ? leaves.filter(l => l.companyId === cid) : leaves;
+    return myOnly ? base.filter(l => l.userId === session?.id) : base;
+  })();
 
   const visibleStaff = cid
     ? staff.filter(u => u.companyId === cid && u.status !== "inactive")
@@ -191,7 +193,7 @@ export default function LeavePage() {
       id: `lv_${Date.now()}`,
       companyId: emp?.companyId ?? cid,
       userId: form.userId,
-      userName: emp?.name ?? "Unknown",
+      userName: emp?.name ?? (form.userId === session?.id ? (session?.name ?? "Unknown") : "Unknown"),
       type: form.type,
       startDate: form.startDate,
       endDate: form.endDate,
@@ -222,7 +224,7 @@ export default function LeavePage() {
         subtitle="Manage leave requests, approvals and balances"
         icon={Calendar}
         actions={
-          <Button size="sm" onClick={() => { setForm(emptyForm()); setFormError(""); setShowAddDialog(true); }}>
+          <Button size="sm" onClick={() => { setForm({ ...emptyForm(), userId: myOnly ? (session?.id ?? "") : "" }); setFormError(""); setShowAddDialog(true); }}>
             <Plus className="w-4 h-4 mr-2" /> Request Leave
           </Button>
         }
@@ -475,17 +477,24 @@ export default function LeavePage() {
             {formError && (
               <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{formError}</div>
             )}
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Employee <span className="text-red-500">*</span></label>
-              <Select value={form.userId} onValueChange={v => setForm(p => ({ ...p, userId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                <SelectContent className="max-h-64">
-                  {visibleStaff.map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.name}{u.department ? ` — ${u.department}` : ""}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {myOnly ? (
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Employee</label>
+                <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">{session?.name}</div>
+              </div>
+            ) : (
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Employee <span className="text-red-500">*</span></label>
+                <Select value={form.userId} onValueChange={v => setForm(p => ({ ...p, userId: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    {visibleStaff.map(u => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}{u.department ? ` — ${u.department}` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Leave Type <span className="text-red-500">*</span></label>
               <Select value={form.type} onValueChange={v => setForm(p => ({ ...p, type: v }))}>

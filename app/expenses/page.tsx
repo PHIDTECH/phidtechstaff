@@ -153,9 +153,13 @@ export default function ExpensesPage() {
   const isEManager    = _r === "manager"    || _p === "manager"    || _r === "group_manager" || _p === "group_manager";
   const isECEO        = session?.isSuperAdmin || _r === "admin" || _p === "admin" || _r === "group_ceo" || _p === "group_ceo";
   const isEAccountant = _r === "accountant" || _p === "accountant" || _r === "group_cfo" || _p === "group_cfo" || _r === "group_accountant" || _p === "group_accountant";
-  const companyExpenses = cid ? expenses.filter(e => e.companyId === cid) : expenses;
-  const companyStaff    = cid ? allStaff.filter(u => u.companyId === cid) : allStaff;
   const canManage = session?.isSuperAdmin || isGroupUser || isEManager || isECEO || isEAccountant;
+  const myOnly    = !canManage && !!session?.id;
+  const companyExpenses = (() => {
+    const base = cid ? expenses.filter(e => e.companyId === cid) : expenses;
+    return myOnly ? base.filter(e => e.userId === session?.id) : base;
+  })();
+  const companyStaff    = cid ? allStaff.filter(u => u.companyId === cid) : allStaff;
 
   const filtered = companyExpenses.filter(e => {
     const emp         = companyStaff.find(u => u.id === e.userId);
