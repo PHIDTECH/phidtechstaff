@@ -349,8 +349,8 @@ export default function ExpensesPage() {
                           s === "disbursed"        ? "bg-green-100 text-green-700"  :
                           s === "rejected"         ? "bg-red-100 text-red-600"      : "bg-gray-100 text-gray-600";
                         const label =
-                          s === "pending"          ? "⏳ Pending Manager" :
-                          s === "manager_approved" ? "🔵 Pending CEO"     :
+                          s === "pending"          ? "⏳ Pending GM"      :
+                          s === "manager_approved" ? "🔵 GM Approved — Pending CEO" :
                           s === "ceo_approved"     ? "✅ CEO Approved"    :
                           s === "disbursed"        ? "💵 Disbursed"       :
                           s === "rejected"         ? "❌ Rejected"        : s;
@@ -361,22 +361,22 @@ export default function ExpensesPage() {
                       <div className="flex items-center justify-end gap-1 flex-wrap">
                         <Button variant="ghost" size="icon" onClick={() => setViewItem(claim)}><Eye className="w-4 h-4 text-gray-400" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => openEdit(claim)}><Edit className="w-4 h-4 text-blue-400" /></Button>
-                        {/* Stage 1: Manager */}
+                        {/* Stage 1: General Manager */}
                         {claim.status === "pending" && isEManager && (
                           <>
                             <Button variant="ghost" size="sm" className="text-green-600 text-xs px-2" onClick={() => updateStatus(claim.id, "manager_approved")}>
-                              <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
+                              <CheckCircle className="w-3.5 h-3.5 mr-1" /> GM Approve
                             </Button>
                             <Button variant="ghost" size="sm" className="text-red-500 text-xs px-2" onClick={() => updateStatus(claim.id, "rejected")}>
                               <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
                             </Button>
                           </>
                         )}
-                        {/* Stage 2: CEO — approve or disburse directly */}
+                        {/* Stage 2: CEO approves */}
                         {claim.status === "manager_approved" && isECEO && (
                           <>
                             <Button variant="ghost" size="sm" className="text-indigo-600 text-xs px-2" onClick={() => updateStatus(claim.id, "ceo_approved")}>
-                              <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
+                              <CheckCircle className="w-3.5 h-3.5 mr-1" /> CEO Approve
                             </Button>
                             <Button variant="ghost" size="sm" className="text-green-700 text-xs px-2" onClick={() => updateStatus(claim.id, "disbursed")}>
                               💵 Disburse

@@ -36,7 +36,7 @@ interface MarketingReport {
   feedback: string;
   attachmentUrl?: string;
   attachmentName?: string;
-  status: "draft" | "submitted";
+  status: "draft" | "submitted" | "marketing_manager_approved" | "gm_approved" | "rejected";
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -59,9 +59,19 @@ const emptyForm = (): Omit<MarketingReport, "id" | "createdAt" | "updatedAt"> =>
   createdBy: "",
 });
 
-const statusColors: Record<MarketingReport["status"], string> = {
+const statusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700",
-  submitted: "bg-green-100 text-green-700",
+  submitted: "bg-blue-100 text-blue-700",
+  marketing_manager_approved: "bg-yellow-100 text-yellow-800",
+  gm_approved: "bg-green-100 text-green-700",
+  rejected: "bg-red-100 text-red-700",
+};
+const statusLabels: Record<string, string> = {
+  draft: "Draft",
+  submitted: "⏳ Pending Mktg Mgr",
+  marketing_manager_approved: "🔵 Pending GM",
+  gm_approved: "✅ GM Approved",
+  rejected: "❌ Rejected",
 };
 
 export default function MarketingReportsPage() {
@@ -89,9 +99,13 @@ export default function MarketingReportsPage() {
     setSession(sess);
     const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
+    const _rr = (sess.role ?? "").toLowerCase();
+    const _pp = (sess.position ?? "").toLowerCase();
     const isMgr = sess.isSuperAdmin ||
-      ["admin", "hr", "manager"].includes(sess.role ?? "") ||
-      ["admin", "hr", "manager"].includes(sess.position ?? "");
+      ["admin", "hr", "manager"].includes(_rr) ||
+      ["admin", "hr", "manager"].includes(_pp) ||
+      _pp.includes("marketing") || _rr.includes("marketing") ||
+      _pp.includes("general manager") || _rr.includes("group_manager") || _rr.includes("gm");
     try {
       const res = await fetch("/api/marketing-reports", { cache: "no-store" });
       if (res.ok) {
@@ -171,10 +185,19 @@ export default function MarketingReportsPage() {
         headers: { "Content-Type": "application/json" }, 
         body: JSON.stringify({ id, status: "submitted" }) 
       });
-      if (r.ok) {
-        await reload();
-      }
+      if (r.ok) await reload();
     } catch { setFormError("Failed to submit report."); }
+  };
+
+  const approveReport = async (id: string, status: MarketingReport["status"]) => {
+    try {
+      const r = await fetch("/api/marketing-reports", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status }),
+      });
+      if (r.ok) await reload();
+    } catch { setFormError("Failed to update status."); }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,9 +217,16 @@ export default function MarketingReportsPage() {
     }
   };
 
-  const canManage = session?.isSuperAdmin ||
-    ["admin", "hr", "manager"].includes(session?.role ?? "") ||
-    ["admin", "hr", "manager"].includes(session?.position ?? "");
+  const _mr = (session?.role ?? "").toLowerCase();
+  const _mp = (session?.position ?? "").toLowerCase();
+  const isMarketingMgr = session?.isSuperAdmin ||
+    _mr === "admin" || _mp === "admin" || _mr === "manager" || _mp === "manager" ||
+    _mp.includes("marketing") || _mr.includes("marketing");
+  const isGM = session?.isSuperAdmin ||
+    _mr === "admin" || _mp === "admin" ||
+    _mp.includes("general manager") || _mr.includes("group_manager") ||
+    _mr === "gm" || _mp === "gm" || _mr.includes("group_ceo") || _mp.includes("group_ceo");
+  const canManage = isMarketingMgr || isGM;
 
   return (
     <MainLayout>
@@ -277,12 +307,12 @@ export default function MarketingReportsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge className={statusColors[report.status]}>
-                        {report.status.charAt(0).toUpperCase() + report.status.slice(1)}
+                      <Badge className={statusColors[report.status] ?? "bg-gray-100 text-gray-700"}>
+                        {statusLabels[report.status] ?? report.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center justify-end gap-1 flex-wrap">
                         {report.attachmentUrl && (
                           <Button variant="outline" size="sm" asChild>
                             <a href={report.attachmentUrl} target="_blank" rel="noopener noreferrer">
@@ -290,17 +320,44 @@ export default function MarketingReportsPage() {
                             </a>
                           </Button>
                         )}
+                        {/* Submit draft */}
                         {report.status === "draft" && (
-                          <Button variant="outline" size="sm" onClick={() => submitReport(report.id)}>
-                            <CheckCircle className="w-3 h-3" />
+                          <Button variant="outline" size="sm" className="text-blue-600" onClick={() => submitReport(report.id)}>
+                            <CheckCircle className="w-3 h-3 mr-1" /> Submit
                           </Button>
                         )}
-                        <Button variant="outline" size="sm" onClick={() => openEdit(report)}>
-                          <Edit className="w-3 h-3" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => setDeleteId(report.id)}>
-                          <Trash2 className="w-3 h-3 text-red-400" />
-                        </Button>
+                        {/* Marketing Manager approval */}
+                        {report.status === "submitted" && isMarketingMgr && (
+                          <>
+                            <Button variant="ghost" size="sm" className="text-yellow-700 hover:bg-yellow-50 text-xs" onClick={() => approveReport(report.id, "marketing_manager_approved")}>
+                              <CheckCircle className="w-3 h-3 mr-1" /> Mktg Approve
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-500 hover:bg-red-50 text-xs" onClick={() => approveReport(report.id, "rejected")}>
+                              <XCircle className="w-3 h-3 mr-1" /> Reject
+                            </Button>
+                          </>
+                        )}
+                        {/* GM approval */}
+                        {report.status === "marketing_manager_approved" && isGM && (
+                          <>
+                            <Button variant="ghost" size="sm" className="text-green-700 hover:bg-green-50 text-xs" onClick={() => approveReport(report.id, "gm_approved")}>
+                              <CheckCircle className="w-3 h-3 mr-1" /> GM Approve
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-500 hover:bg-red-50 text-xs" onClick={() => approveReport(report.id, "rejected")}>
+                              <XCircle className="w-3 h-3 mr-1" /> Reject
+                            </Button>
+                          </>
+                        )}
+                        {report.status === "draft" && (
+                          <Button variant="outline" size="sm" onClick={() => openEdit(report)}>
+                            <Edit className="w-3 h-3" />
+                          </Button>
+                        )}
+                        {canManage && (
+                          <Button variant="ghost" size="sm" onClick={() => setDeleteId(report.id)}>
+                            <Trash2 className="w-3 h-3 text-red-400" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

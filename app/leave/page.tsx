@@ -140,9 +140,10 @@ export default function LeavePage() {
   const isManager    = session?.isSuperAdmin || isGroupMgr ||
     role === "admin" || role === "manager" || pos === "admin" || pos === "manager" ||
     role === "group_ceo" || role === "group_manager" || pos === "group_ceo" || pos === "group_manager";
-  const isHRAdmin    = session?.isSuperAdmin || isGroupMgr ||
-    role === "admin" || role === "hr" || pos === "admin" || pos === "hr";
-  const canManage    = isManager || isHRAdmin;
+  const isCEO        = session?.isSuperAdmin ||
+    role === "admin" || pos === "admin" ||
+    role.includes("ceo") || pos.includes("ceo");
+  const canManage    = isManager || isCEO;
   const myOnly       = !canManage && !!session?.id;
 
   const visibleLeaves = (() => {
@@ -325,38 +326,38 @@ export default function LeavePage() {
                             s === "approved"         ? "bg-green-100 text-green-700" :
                             "bg-red-100 text-red-700";
                           const label =
-                            s === "pending"          ? "⏳ Pending Manager" :
-                            s === "manager_approved" ? "🔵 Pending HR Confirm" :
-                            s === "approved"         ? "✅ Approved" : "❌ Rejected";
+                            s === "pending"          ? "⏳ Pending GM" :
+                            s === "manager_approved" ? "🔵 GM Approved — Pending CEO" :
+                            s === "approved"         ? "✅ CEO Approved" : "❌ Rejected";
                           return <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${badge}`}>{label}</span>;
                         })()}
                       </TableCell>
                       <TableCell className="text-xs text-gray-500">
                         {leave.approvedByName
-                          ? <span className="text-green-700 font-medium">{leave.approvedByName}</span>
+                          ? <span className="text-green-700 font-medium">{leave.approvedByName} (CEO)</span>
                           : leave.managerApprovedByName
-                          ? <span className="text-blue-600">{leave.managerApprovedByName} (Mgr)</span>
+                          ? <span className="text-blue-600">{leave.managerApprovedByName} (GM)</span>
                           : "—"}
                       </TableCell>
                       {canManage && (
                         <TableCell>
                           <div className="flex items-center justify-end gap-1 flex-wrap">
-                            {/* Stage 1: Manager approves pending */}
+                            {/* Stage 1: General Manager approves pending */}
                             {leave.status === "pending" && isManager && (
                               <>
                                 <Button variant="ghost" size="sm" className="text-blue-600 hover:bg-blue-50 text-xs" onClick={() => updateStatus(leave.id, "manager_approved")}>
-                                  <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
+                                  <CheckCircle className="w-3.5 h-3.5 mr-1" /> GM Approve
                                 </Button>
                                 <Button variant="ghost" size="sm" className="text-red-500 hover:bg-red-50 text-xs" onClick={() => updateStatus(leave.id, "rejected")}>
                                   <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
                                 </Button>
                               </>
                             )}
-                            {/* Stage 2: HR/Admin gives final approval */}
-                            {leave.status === "manager_approved" && isHRAdmin && (
+                            {/* Stage 2: CEO gives final approval */}
+                            {leave.status === "manager_approved" && isCEO && (
                               <>
                                 <Button variant="ghost" size="sm" className="text-green-600 hover:bg-green-50 text-xs" onClick={() => updateStatus(leave.id, "approved")}>
-                                  <CheckCircle className="w-3.5 h-3.5 mr-1" /> Confirm
+                                  <CheckCircle className="w-3.5 h-3.5 mr-1" /> CEO Approve
                                 </Button>
                                 <Button variant="ghost" size="sm" className="text-red-500 hover:bg-red-50 text-xs" onClick={() => updateStatus(leave.id, "rejected")}>
                                   <XCircle className="w-3.5 h-3.5 mr-1" /> Reject

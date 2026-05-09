@@ -31,7 +31,7 @@ function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
 interface Session { id: string; name: string; role: string; position: string; isSuperAdmin: boolean; companyId: string; branchId?: string | null; }
-interface StaffUser { id: string; name: string; email?: string; companyId: string; branchId?: string | null; department?: string; position?: string; status?: string; }
+interface StaffUser { id: string; name: string; email?: string; companyId: string; branchId?: string | null; department?: string; position?: string; role?: string; status?: string; }
 interface Branch { id: string; companyId: string; name: string; allowedIPs?: string; }
 interface AttendanceRecord {
   id: string; companyId: string; userId: string; userName?: string; date: string;
@@ -78,7 +78,7 @@ function calcOvertime(hours: number): number {
 const today = new Date().toISOString().slice(0, 10);
 
 const emptyForm = () => ({
-  employeeName: "",
+  userId: "",
   date: today,
   action: "in" as "in" | "out",
   time: new Date().toTimeString().slice(0, 5),
@@ -207,6 +207,12 @@ export default function AttendancePage() {
     : cid
       ? staff.filter(u => u.companyId === cid && u.status !== "inactive")
       : staff.filter(u => u.status !== "inactive");
+  // Exclude CEO and system admin from attendance dropdown
+  const attendanceStaff = allCompanyStaff.filter(u => {
+    const p = (u.position ?? "").toLowerCase();
+    const r = (u.role ?? "").toLowerCase();
+    return !p.includes("ceo") && r !== "admin" && !p.includes("group ceo");
+  });
 
   // Table view: branch managers only see their own branch; everyone else sees all
   const companyStaff = (() => {
@@ -230,15 +236,15 @@ export default function AttendancePage() {
   };
 
   const saveRecord = async () => {
-    if (!form.employeeName.trim()) { setFormError("Enter employee name."); return; }
+    if (!form.userId) { setFormError("Select an employee."); return; }
     if (!form.date)   { setFormError("Select a date."); return; }
     if (!form.time)   { setFormError("Enter the time."); return; }
 
-    // Try to match typed name to a staff record; fall back to using name as ID
-    const matchedEmp = staff.find(u => u.name.toLowerCase() === form.employeeName.trim().toLowerCase());
-    const userId = matchedEmp?.id ?? `manual-${form.employeeName.trim().toLowerCase().replace(/\s+/g, "-")}`;
-    const companyId = matchedEmp?.companyId || cidRef.current || activeCompanyId;
-    const existing = records.find(r => r.userId === userId && r.date === form.date && r.companyId === companyId)
+    const selectedEmp = staff.find(u => u.id === form.userId);
+    const userId      = form.userId;
+    const userName    = selectedEmp?.name ?? userId;
+    const companyId   = selectedEmp?.companyId || cidRef.current || activeCompanyId;
+    const existing    = records.find(r => r.userId === userId && r.date === form.date && r.companyId === companyId)
       ?? records.find(r => r.userId === userId && r.date === form.date);
 
     if (form.action === "in") {
@@ -246,14 +252,14 @@ export default function AttendancePage() {
       const lateMinutes = calcLateMinutes(form.time);
       if (existing) {
         await fetch("/api/attendance", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-          id: existing.id, clockIn: form.time, userName: form.employeeName.trim(), status,
+          id: existing.id, clockIn: form.time, userName, status,
           lateMinutes: lateMinutes > 0 ? lateMinutes : existing.lateMinutes,
           hoursWorked: calcHours(form.time, existing.clockOut),
           overtime: calcOvertime(calcHours(form.time, existing.clockOut)),
         }) });
       } else {
         await fetch("/api/attendance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-          id: `att-${Date.now()}`, companyId, userId, userName: form.employeeName.trim(), date: form.date,
+          id: `att-${Date.now()}`, companyId, userId, userName, date: form.date,
           clockIn: form.time, status,
           lateMinutes: lateMinutes > 0 ? lateMinutes : undefined,
         }) });
@@ -270,7 +276,7 @@ export default function AttendancePage() {
         }) });
       } else {
         await fetch("/api/attendance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-          id: `att-${Date.now()}`, companyId, userId, userName: form.employeeName.trim(), date: form.date,
+          id: `att-${Date.now()}`, companyId, userId, userName, date: form.date,
           clockOut: form.time, status: "present",
         }) });
       }
@@ -545,39 +551,33 @@ export default function AttendancePage() {
               </div>
             )}
 
-            {/* Employee name — free text with autocomplete suggestions */}
+            {/* Employee selector dropdown */}
             <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Employee Name</label>
-              <div className="relative">
-                <Input
-                  list="staff-suggestions"
-                  placeholder="Type employee name…"
-                  value={form.employeeName}
-                  onChange={e => sf({ employeeName: e.target.value })}
-                  className="h-11"
-                  autoComplete="off"
-                />
-                <datalist id="staff-suggestions">
-                  {allCompanyStaff.map(u => (
-                    <option key={u.id} value={u.name} />
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Employee</label>
+              <Select value={form.userId} onValueChange={v => sf({ userId: v })}>
+                <SelectTrigger className="h-11"><SelectValue placeholder="Select employee…" /></SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {attendanceStaff.map(u => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.name}{u.department ? ` — ${u.department}` : ""}
+                    </SelectItem>
                   ))}
-                </datalist>
-              </div>
-              {form.employeeName.trim() && (() => {
-                const matchedEmp = allCompanyStaff.find(u => u.name.toLowerCase() === form.employeeName.trim().toLowerCase());
-                const matchId = matchedEmp?.id ?? `manual-${form.employeeName.trim().toLowerCase().replace(/\s+/g, "-")}`;
-                const existingRec = records.find(r => r.userId === matchId && r.date === form.date);
+                </SelectContent>
+              </Select>
+              {form.userId && (() => {
+                const existingRec = records.find(r => r.userId === form.userId && r.date === form.date);
+                const emp = attendanceStaff.find(u => u.id === form.userId);
                 if (!existingRec) return null;
                 const suggestedAction = existingRec.clockIn && !existingRec.clockOut ? "out" : "in";
                 return (
                   <div className="mt-2 bg-gray-50 rounded-xl border border-gray-100 p-3 space-y-2">
                     <div className="flex items-center gap-3">
                       <Avatar className="w-8 h-8">
-                        <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-bold">{getInitials(form.employeeName)}</AvatarFallback>
+                        <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-bold">{getInitials(emp?.name ?? "?")}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <p className="font-semibold text-gray-900 text-sm">{form.employeeName}</p>
-                        {matchedEmp && <p className="text-xs text-gray-400">{matchedEmp.position ?? matchedEmp.department}</p>}
+                        <p className="font-semibold text-gray-900 text-sm">{emp?.name}</p>
+                        {emp && <p className="text-xs text-gray-400">{emp.position ?? emp.department}</p>}
                       </div>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[existingRec.status]}`}>{existingRec.status}</span>
                     </div>
@@ -594,7 +594,7 @@ export default function AttendancePage() {
                     )}
                   </div>
                 );
-              })()}            
+              })()}
             </div>
 
             {/* Date, Action, Time row */}
