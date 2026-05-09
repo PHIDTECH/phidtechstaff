@@ -99,6 +99,8 @@ export default function AdminPage() {
   const [beemSettings, setBeemSettings] = useState({ apiKey: "", secretKey: "", senderId: "INFO" });
   const [beemSaving, setBeemSaving] = useState(false);
   const [beemMsg, setBeemMsg] = useState<{ok:boolean;text:string}|null>(null);
+  const [seedingBranches, setSeedingBranches] = useState(false);
+  const [seedMsg, setSeedMsg] = useState<{ok:boolean;text:string}|null>(null);
 
   const detectMyIP = async () => {
     setDetectingIP(true);
@@ -235,6 +237,21 @@ export default function AdminPage() {
     await fetch(`/api/branches?id=${id}`, { method: "DELETE" });
     await reload();
     setDeleteBranchId(null);
+  };
+
+  const seedDefaultBranches = async () => {
+    setSeedingBranches(true); setSeedMsg(null);
+    try {
+      const res = await fetch("/api/branches/seed", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setSeedMsg({ ok: true, text: `Done! Added ${data.added} new branch(es). Total: ${data.total}.` });
+        await reload();
+      } else {
+        setSeedMsg({ ok: false, text: data.error ?? "Failed to seed branches." });
+      }
+    } catch { setSeedMsg({ ok: false, text: "Network error." }); }
+    setSeedingBranches(false);
   };
 
   const saveBeem = async () => {
@@ -428,10 +445,20 @@ export default function AdminPage() {
                 <h3 className="font-semibold text-gray-900">Branch Management</h3>
                 <p className="text-xs text-gray-400 mt-0.5">Manage branches per company and assign branch managers</p>
               </div>
-              <Button size="sm" onClick={openAddBranch}>
-                <Plus className="w-4 h-4 mr-2" /> Add Branch
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={seedDefaultBranches} disabled={seedingBranches}>
+                  <Download className="w-4 h-4 mr-2" />{seedingBranches ? "Seeding…" : "Seed Default Branches"}
+                </Button>
+                <Button size="sm" onClick={openAddBranch}>
+                  <Plus className="w-4 h-4 mr-2" /> Add Branch
+                </Button>
+              </div>
             </div>
+            {seedMsg && (
+              <div className={`mx-5 mt-3 px-3 py-2 rounded-lg text-sm border ${seedMsg.ok ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+                {seedMsg.text}
+              </div>
+            )}
             {branches.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
                 <MapPin className="w-12 h-12 text-gray-200" />
