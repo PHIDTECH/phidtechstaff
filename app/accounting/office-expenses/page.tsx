@@ -38,6 +38,8 @@ interface OfficeExpense {
   description: string; referenceNo: string;
   status: "pending" | "manager_approved" | "ceo_approved" | "disbursed" | "rejected" | string;
   date: string; createdAt: string;
+  paymentMode?: "cash" | "bank" | "phone" | string;
+  paymentDetails?: string;
   managerApprovedBy?: string; managerApprovedAt?: string;
   ceoApprovedBy?: string; ceoApprovedAt?: string;
   disbursedBy?: string; disbursedAt?: string;
@@ -82,6 +84,7 @@ const emptyForm = () => ({
   recordedBy: "", title: "", category: OFFICE_EXPENSE_CATEGORIES[0],
   amount: "", description: "", referenceNo: "",
   date: new Date().toISOString().slice(0, 10),
+  paymentMode: "cash", paymentDetails: "",
 });
 
 export default function OfficeExpensesPage() {
@@ -200,7 +203,7 @@ export default function OfficeExpensesPage() {
 
   const openEdit = (e: OfficeExpense) => {
     setEditItem(e);
-    setForm({ recordedBy: e.recordedBy, title: e.title, category: e.category, amount: String(e.amount), description: e.description, referenceNo: e.referenceNo, date: e.date });
+    setForm({ recordedBy: e.recordedBy, title: e.title, category: e.category, amount: String(e.amount), description: e.description, referenceNo: e.referenceNo, date: e.date, paymentMode: e.paymentMode || "cash", paymentDetails: e.paymentDetails || "" });
     setFormError("");
     setShowDialog(true);
   };
@@ -215,7 +218,7 @@ export default function OfficeExpensesPage() {
       let res: Response;
       if (editItem) {
         res = await fetch("/api/office-expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: editItem.id, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description, referenceNo: form.referenceNo, date: form.date, recordedBy: form.recordedBy }) });
+          body: JSON.stringify({ id: editItem.id, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description, referenceNo: form.referenceNo, date: form.date, recordedBy: form.recordedBy, paymentMode: form.paymentMode, paymentDetails: form.paymentDetails }) });
       } else {
         res = await fetch("/api/office-expenses", { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -227,6 +230,8 @@ export default function OfficeExpensesPage() {
             amount: Number(form.amount) || 0,
             description: form.description,
             referenceNo: form.referenceNo,
+            paymentMode: form.paymentMode,
+            paymentDetails: form.paymentDetails,
             status: "pending",
             date: form.date,
             createdAt: new Date().toISOString(),
@@ -464,6 +469,20 @@ export default function OfficeExpensesPage() {
                     </div>
                   ))}
                 </div>
+                {viewItem.paymentMode && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <p className="text-xs text-gray-400 mb-1">Payment Mode</p>
+                      <p className="font-semibold text-blue-800 text-sm capitalize">{viewItem.paymentMode}</p>
+                    </div>
+                    {viewItem.paymentDetails && (
+                      <div className="p-3 bg-blue-50 rounded-lg">
+                        <p className="text-xs text-gray-400 mb-1">{viewItem.paymentMode === "bank" ? "Bank Account" : viewItem.paymentMode === "phone" ? "Phone Number" : "Details"}</p>
+                        <p className="font-semibold text-blue-800 text-sm">{viewItem.paymentDetails}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {viewItem.description && (
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-gray-400 mb-1">Description / Notes</p>
@@ -541,6 +560,29 @@ export default function OfficeExpensesPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Payment Mode</label>
+                <Select value={form.paymentMode} onValueChange={v => sf({ paymentMode: v, paymentDetails: "" })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">💵 Cash</SelectItem>
+                    <SelectItem value="bank">🏦 Bank Transfer</SelectItem>
+                    <SelectItem value="phone">📱 Mobile Money (Phone)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {(form.paymentMode === "bank" || form.paymentMode === "phone") && (
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                    {form.paymentMode === "bank" ? "Bank Account Number / Details" : "Phone Number (e.g. M-Pesa / Tigo Pesa)"}
+                  </label>
+                  <Input
+                    placeholder={form.paymentMode === "bank" ? "e.g. CRDB 0123456789" : "e.g. +255 712 345 678"}
+                    value={form.paymentDetails}
+                    onChange={e => sf({ paymentDetails: e.target.value })}
+                  />
+                </div>
+              )}
               <div className="col-span-2">
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Description / Notes</label>
                 <Textarea placeholder="Additional details about this expense..." rows={3} value={form.description} onChange={e => sf({ description: e.target.value })} />
