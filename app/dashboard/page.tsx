@@ -25,8 +25,9 @@ const EXPENSES_KEY      = "phidtech_expenses";
 const OFFICE_EXP_KEY    = "phidtech_office_expenses";
 const PAYROLL_KEY       = "phidtech_payroll";
 
-const GROUP_ID = "group";
+const GROUP_ID   = "group";
 const GROUP_NAME = "PHIDTECH GROUP OF COMPANIES LIMITED";
+const GROUP_KEY  = "phidtech_group_company";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -57,6 +58,7 @@ export default function DashboardPage() {
   usePermissionGuard("dashboard");
   const [session, setSession] = useState<{name:string;isSuperAdmin:boolean;companyId:string|null;role?:string;position?:string;branchId?:string|null} | null>(null);
   const [activeCompanyId, setActiveCompanyId] = useState("");
+  const [groupCid, setGroupCid]               = useState("");
   const [companies, setCompanies]     = useState<Company[]>([]);
   const [branches, setBranches]       = useState<Branch[]>([]);
   const [staffUsers, setStaffUsers]   = useState<StaffUser[]>([]);
@@ -73,6 +75,8 @@ export default function DashboardPage() {
     let cid = "";
     try { const raw = localStorage.getItem(ACTIVE_KEY); cid = raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : ""; } catch {}
     setActiveCompanyId(cid);
+    const gc = lsStr(GROUP_KEY).replace(/^"|"$/g, "");
+    setGroupCid(gc);
     // Load all data in parallel for faster dashboard
     const safe = async <T,>(url: string, fallback: T): Promise<T> => {
       try {
@@ -122,7 +126,8 @@ export default function DashboardPage() {
   const _dp = (session?.position ?? "").toLowerCase();
   const isGroupRole  = session?.companyId === GROUP_ID || ALL_GROUP_ROLES.includes(_dr) || ALL_GROUP_ROLES.includes(_dp);
   // Group HQ mode only when no specific company is selected — respects the company switcher for both SA and group staff
-  const isGroupMode  = (isSuperAdmin || isGroupRole) && (!activeCompanyId || activeCompanyId === GROUP_ID);
+  const isGroupHqId  = (id: string) => !id || id === GROUP_ID || (!!groupCid && id === groupCid);
+  const isGroupMode  = (isSuperAdmin || isGroupRole) && isGroupHqId(activeCompanyId);
 
   // Branch scope detection
   const GENERAL_ROLES_DASH = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal","group_accountant"];
@@ -135,8 +140,8 @@ export default function DashboardPage() {
   const firstName  = session?.name?.split(" ")[0] ?? "";
   const activeComp = companies.find(c => c.id === activeCompanyId);
 
-  // Per-company stats for group dashboard
-  const companyStats = companies.map(co => {
+  // Per-company stats for group dashboard — exclude the company flagged as Group HQ
+  const companyStats = companies.filter(co => co.id !== GROUP_ID && co.id !== groupCid).map(co => {
     const coStaff   = staffUsers.filter(u => u.companyId === co.id);
     const coSales   = sales.filter(s => s.companyId === co.id);
     const PAID_S = ["paid","approved","disbursed","ceo_approved"];
@@ -170,25 +175,26 @@ export default function DashboardPage() {
   const groupStaff_HQ = staffUsers.filter(u => u.companyId === GROUP_ID).length;
 
   // Single-company stats (branch-scoped when applicable)
-  const allCoStaff = staffUsers.filter(u => u.companyId === activeCompanyId);
+  const _effCid = isGroupHqId(activeCompanyId) ? "" : activeCompanyId;
+  const allCoStaff = _effCid ? staffUsers.filter(u => u.companyId === _effCid) : staffUsers.filter(u => u.companyId !== GROUP_ID && (!groupCid || u.companyId !== groupCid));
   const coStaff    = isBranchManagerDash && session?.branchId
     ? allCoStaff.filter(u => u.branchId === session.branchId)
     : allCoStaff;
-  const coSales    = sales.filter(s => s.companyId === activeCompanyId);
+  const coSales    = _effCid ? sales.filter(s => s.companyId === _effCid) : sales;
   const _PAID = ["paid","approved","disbursed","ceo_approved"];
-  const coExp      = expenses.filter(e => e.companyId === activeCompanyId && _PAID.includes(e.status));
-  const coOE       = officeExp.filter(e => e.companyId === activeCompanyId && _PAID.includes(e.status));
-  const coPay      = payroll.filter(p => p.companyId === activeCompanyId && p.status === "paid");
+  const coExp      = _effCid ? expenses.filter(e => e.companyId === _effCid && _PAID.includes(e.status)) : expenses.filter(e => _PAID.includes(e.status));
+  const coOE       = _effCid ? officeExp.filter(e => e.companyId === _effCid && _PAID.includes(e.status)) : officeExp.filter(e => _PAID.includes(e.status));
+  const coPay      = _effCid ? payroll.filter(p => p.companyId === _effCid && p.status === "paid") : payroll.filter(p => p.status === "paid");
   const coRevenue  = coSales.reduce((s, e) => s + e.paid, 0);
   const coExpAmt   = coExp.reduce((s, e) => s + e.amount, 0)
                    + coOE.reduce((s, e) => s + e.amount, 0)
                    + coPay.reduce((s, p) => s + p.netSalary, 0);
   const coProfit   = coRevenue - coExpAmt;
-  const coTasks    = tasks.filter(t => t.companyId === activeCompanyId);
-  const coLeave    = leaves.filter(l => l.companyId === activeCompanyId && l.status === "pending");
+  const coTasks    = _effCid ? tasks.filter(t => t.companyId === _effCid) : tasks;
+  const coLeave    = _effCid ? leaves.filter(l => l.companyId === _effCid && l.status === "pending") : leaves.filter(l => l.status === "pending");
 
   // Branch overview data (for general managers)
-  const companyBranches = branches.filter(b => b.companyId === activeCompanyId);
+  const companyBranches = branches.filter(b => b.companyId === (activeCompanyId || _effCid));
   const branchStats = companyBranches.map(b => ({
     ...b,
     staffCount: allCoStaff.filter(u => u.branchId === b.id).length,
