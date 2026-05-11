@@ -6,7 +6,7 @@ import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BarChart3, Printer, Download, RefreshCw, Users, ShoppingCart, Receipt, DollarSign, TrendingUp, Activity, Landmark } from "lucide-react";
+import { BarChart3, Printer, Download, RefreshCw, Users, ShoppingCart, Receipt, DollarSign, TrendingUp, Activity, FileText, Wallet, CreditCard, Landmark, UserCheck } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
@@ -18,19 +18,26 @@ function lsGet<T>(key: string, fb: T): T {
 
 interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; }
 interface Company { id: string; name: string; }
-type ReportType = "customers" | "sales" | "marketing_expenses" | "office_expenses" | "revenue_summary" | "profit_loss";
-type DatePreset  = "today" | "week" | "month" | "year" | "custom";
+type ReportType = "customers" | "sales" | "marketing_expenses" | "office_expenses" | "staff_claims" | "payroll" | "invoices" | "petty_cash" | "loan_customers" | "loan_interest" | "revenue_summary" | "profit_loss";
+type DatePreset  = "all" | "today" | "week" | "month" | "year" | "custom";
 
-const REPORT_TYPES = [
+const REPORT_TYPES: { key: ReportType; label: string; icon: React.ElementType; color: string; bg: string }[] = [
   { key: "customers",          label: "All Customers",      icon: Users,        color: "text-blue-600",    bg: "bg-blue-50"    },
   { key: "sales",              label: "Customer Sales",     icon: ShoppingCart, color: "text-green-600",   bg: "bg-green-50"   },
   { key: "marketing_expenses", label: "Marketing Expenses", icon: Receipt,      color: "text-orange-600",  bg: "bg-orange-50"  },
   { key: "office_expenses",    label: "Office Expenses",    icon: DollarSign,   color: "text-purple-600",  bg: "bg-purple-50"  },
+  { key: "staff_claims",       label: "Staff Expense Claims", icon: UserCheck,  color: "text-cyan-600",    bg: "bg-cyan-50"    },
+  { key: "payroll",            label: "Payroll",            icon: Wallet,       color: "text-indigo-600",  bg: "bg-indigo-50"  },
+  { key: "invoices",           label: "Invoices",           icon: FileText,     color: "text-pink-600",    bg: "bg-pink-50"    },
+  { key: "petty_cash",         label: "Petty Cash",         icon: CreditCard,   color: "text-teal-600",    bg: "bg-teal-50"    },
+  { key: "loan_customers",     label: "Loan Customers",     icon: Landmark,     color: "text-amber-600",   bg: "bg-amber-50"   },
+  { key: "loan_interest",      label: "Loan Interest",      icon: TrendingUp,   color: "text-lime-600",    bg: "bg-lime-50"    },
   { key: "revenue_summary",    label: "Revenue Summary",    icon: TrendingUp,   color: "text-emerald-600", bg: "bg-emerald-50" },
   { key: "profit_loss",        label: "Profit & Loss",      icon: Activity,     color: "text-red-600",     bg: "bg-red-50"     },
-] as const;
+];
 
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
+  { key: "all",    label: "All Time"   },
   { key: "today",  label: "Today"      },
   { key: "week",   label: "This Week"  },
   { key: "month",  label: "This Month" },
@@ -39,10 +46,10 @@ const DATE_PRESETS: { key: DatePreset; label: string }[] = [
 ];
 
 function getDateRange(preset: DatePreset, from: string, to: string): [Date, Date] {
-  const now  = new Date();
+  if (preset === "all") return [new Date(0), new Date(32503680000000)];
+  const now   = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (preset === "today")
-    return [today, new Date(today.getTime() + 86_399_999)];
+  if (preset === "today")  return [today, new Date(today.getTime() + 86_399_999)];
   if (preset === "week") {
     const day = today.getDay();
     const mon = new Date(today); mon.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
@@ -54,10 +61,9 @@ function getDateRange(preset: DatePreset, from: string, to: string): [Date, Date
     const e = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     return [s, e];
   }
-  if (preset === "year") {
+  if (preset === "year")
     return [new Date(now.getFullYear(), 0, 1), new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)];
-  }
-  const s = from ? new Date(from) : new Date(2000, 0, 1);
+  const s = from ? new Date(from) : new Date(0);
   const e = to   ? new Date(to + "T23:59:59") : new Date();
   return [s, e];
 }
@@ -71,11 +77,11 @@ function inRange(dateStr: unknown, s: Date, e: Date): boolean {
 type Row = Record<string, unknown>;
 type Col  = { key: string; label: string; render?: (r: Row) => string };
 
-export default function FinancialReportsPage() {
+export default function ReportsPage() {
   usePermissionGuard("financial_reports");
 
   const [report, setReport] = useState<ReportType>("customers");
-  const [preset, setPreset] = useState<DatePreset>("month");
+  const [preset, setPreset] = useState<DatePreset>("all");
   const [from, setFrom]     = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0,10); });
   const [to,   setTo]       = useState(() => new Date().toISOString().slice(0,10));
   const [loading, setLoading] = useState(false);
@@ -84,11 +90,15 @@ export default function FinancialReportsPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [cid,       setCid]       = useState("");
 
-  const [customers, setCustomers] = useState<Row[]>([]);
-  const [sales,     setSales]     = useState<Row[]>([]);
-  const [mktExp,    setMktExp]    = useState<Row[]>([]);
-  const [offExp,    setOffExp]    = useState<Row[]>([]);
-  const [loanInt,   setLoanInt]   = useState<Row[]>([]);
+  const [customers,  setCustomers]  = useState<Row[]>([]);
+  const [sales,      setSales]      = useState<Row[]>([]);
+  const [mktExp,     setMktExp]     = useState<Row[]>([]);
+  const [offExp,     setOffExp]     = useState<Row[]>([]);
+  const [loanInt,    setLoanInt]    = useState<Row[]>([]);
+  const [loanCust,   setLoanCust]   = useState<Row[]>([]);
+  const [payroll,    setPayroll]    = useState<Row[]>([]);
+  const [invoices,   setInvoices]   = useState<Row[]>([]);
+  const [pettyCash,  setPettyCash]  = useState<Row[]>([]);
 
   const loadData = async () => {
     setLoading(true);
@@ -98,18 +108,21 @@ export default function FinancialReportsPage() {
       const activeCid = getActiveCid(sess);
       setCid(activeCid);
       setCompanies(lsGet<Company[]>(COMPANIES_KEY, []));
-      const [r1, r2, r3, r4, r5] = await Promise.all([
+      const results = await Promise.allSettled([
         fetch("/api/customers",        { cache: "no-store" }),
         fetch("/api/accounting/sales", { cache: "no-store" }),
         fetch("/api/expenses",         { cache: "no-store" }),
         fetch("/api/office-expenses",  { cache: "no-store" }),
         fetch("/api/loan-interest",    { cache: "no-store" }),
+        fetch("/api/loans",            { cache: "no-store" }),
+        fetch("/api/payroll",          { cache: "no-store" }),
+        fetch("/api/invoices",         { cache: "no-store" }),
+        fetch("/api/petty-cash",       { cache: "no-store" }),
       ]);
-      if (r1.ok) setCustomers(await r1.json());
-      if (r2.ok) setSales(await r2.json());
-      if (r3.ok) setMktExp(await r3.json());
-      if (r4.ok) setOffExp(await r4.json());
-      if (r5.ok) setLoanInt(await r5.json());
+      const parse = async (r: PromiseSettledResult<Response>) => r.status === "fulfilled" && r.value.ok ? r.value.json().catch(() => []) : [];
+      const [d1,d2,d3,d4,d5,d6,d7,d8,d9] = await Promise.all(results.map(parse));
+      setCustomers(d1); setSales(d2);   setMktExp(d3);  setOffExp(d4);
+      setLoanInt(d5);   setLoanCust(d6); setPayroll(d7); setInvoices(d8); setPettyCash(d9);
     } catch {}
     setLoading(false);
   };
@@ -118,71 +131,130 @@ export default function FinancialReportsPage() {
 
   const filterByCo = (arr: Row[]) => cid ? arr.filter(x => x.companyId === cid) : arr;
   const [start, end] = getDateRange(preset, from, to);
+  const fd = (arr: Row[], ...keys: string[]) =>
+    filterByCo(arr).filter(x => inRange(keys.reduce<unknown>((v, k) => v ?? x[k], undefined), start, end));
 
-  const fCustomers = filterByCo(customers).filter(x => inRange(x.date || x.createdAt, start, end));
-  const fSales     = filterByCo(sales).filter(x => inRange(x.date, start, end));
-  const fMkt       = filterByCo(mktExp).filter(x => inRange(x.date || x.createdAt, start, end));
-  const fOff       = filterByCo(offExp).filter(x => inRange(x.date, start, end));
-  const fLoanInt   = filterByCo(loanInt).filter(x => inRange(x.date, start, end));
+  const fCustomers = fd(customers, "date", "createdAt");
+  const fSales     = fd(sales,     "date");
+  const fMkt       = fd(mktExp,    "date", "createdAt");
+  const fOff       = fd(offExp,    "date");
+  const fLoanInt   = fd(loanInt,   "date");
+  const fLoanCust  = fd(loanCust,  "date", "createdAt");
+  const fPayroll   = fd(payroll,   "generatedAt");
+  const fInvoices  = fd(invoices,  "date", "createdAt", "invoiceDate");
+  const fPettyCash = fd(pettyCash, "date");
 
-  const PAID_EXP   = ["paid","approved","disbursed","ceo_approved","manager_approved"];
-  const totalSales   = fSales.reduce((s, x) => s + Number(x.amount || 0), 0);
+  const PAID_EXP     = ["paid","approved","disbursed","ceo_approved","manager_approved"];
+  const totalSales   = fSales.reduce((s,x) => s + Number(x.amount || 0), 0);
   const totalLoanRev = fLoanInt.filter(x => ["active","paid"].includes(String(x.status))).reduce((s,x) => s + Number(x.interestRevenue || 0), 0);
   const totalRevenue = totalSales + totalLoanRev;
   const totalMktExp  = fMkt.filter(x => PAID_EXP.includes(String(x.status))).reduce((s,x) => s + Number(x.amount || 0), 0);
   const totalOffExp  = fOff.filter(x => PAID_EXP.includes(String(x.status))).reduce((s,x) => s + Number(x.amount || 0), 0);
-  const totalExpenses = totalMktExp + totalOffExp;
+  const totalPayroll = fPayroll.filter(x => x.status === "paid").reduce((s,x) => s + Number(x.netSalary || 0), 0);
+  const totalExpenses = totalMktExp + totalOffExp + totalPayroll;
   const netProfit     = totalRevenue - totalExpenses;
 
   const fRevenue: Row[] = [
-    ...fSales.map(s => ({ source: "Customer Sale", customerName: s.customerName, date: s.date, amount: s.amount, status: s.status })),
+    ...fSales.map(s => ({ source: "Customer Sale",  customerName: s.customerName, date: s.date, amount: s.amount, status: s.status })),
     ...fLoanInt.map(l => ({ source: "Loan Interest", customerName: l.customerName, date: l.date, amount: l.interestRevenue, status: l.status })),
   ];
 
   const COLUMNS: Record<ReportType, Col[]> = {
     customers: [
-      { key: "name",           label: "Customer Name"          },
-      { key: "company",        label: "Company"                },
-      { key: "type",           label: "Type"                   },
-      { key: "phone",          label: "Phone"                  },
-      { key: "email",          label: "Email"                  },
-      { key: "serviceProduct", label: "Service / Product"      },
-      { key: "status",         label: "Status"                 },
-      { key: "date",           label: "Date", render: r => formatDate(String(r.date || r.createdAt || "")) },
+      { key: "name",           label: "Customer Name"                                                        },
+      { key: "company",        label: "Company"                                                              },
+      { key: "type",           label: "Type"                                                                 },
+      { key: "phone",          label: "Phone"                                                                },
+      { key: "email",          label: "Email"                                                                },
+      { key: "serviceProduct", label: "Service / Product"                                                    },
+      { key: "status",         label: "Status"                                                               },
+      { key: "date",           label: "Date",        render: r => formatDate(String(r.date || r.createdAt || "")) },
     ],
     sales: [
-      { key: "customerName", label: "Customer"                                                         },
-      { key: "date",         label: "Date",    render: r => formatDate(String(r.date || ""))           },
-      { key: "amount",       label: "Amount",  render: r => formatCurrency(Number(r.amount || 0))      },
-      { key: "paid",         label: "Paid",    render: r => formatCurrency(Number(r.paid || 0))        },
-      { key: "balance",      label: "Balance", render: r => formatCurrency(Number(r.balance || 0))     },
-      { key: "status",       label: "Status"                                                           },
-      { key: "notes",        label: "Notes"                                                            },
+      { key: "customerName", label: "Customer"                                                               },
+      { key: "date",         label: "Date",          render: r => formatDate(String(r.date || ""))           },
+      { key: "amount",       label: "Amount",        render: r => formatCurrency(Number(r.amount   || 0))   },
+      { key: "paid",         label: "Paid",          render: r => formatCurrency(Number(r.paid     || 0))   },
+      { key: "balance",      label: "Balance",       render: r => formatCurrency(Number(r.balance  || 0))   },
+      { key: "status",       label: "Status"                                                                 },
+      { key: "notes",        label: "Notes"                                                                  },
     ],
     marketing_expenses: [
-      { key: "userName",    label: "Employee"                                                          },
-      { key: "title",       label: "Title"                                                             },
-      { key: "category",    label: "Category"                                                          },
-      { key: "amount",      label: "Amount",   render: r => formatCurrency(Number(r.amount || 0))     },
-      { key: "date",        label: "Date",     render: r => formatDate(String(r.date || r.createdAt || "")) },
-      { key: "status",      label: "Status"                                                            },
-      { key: "paymentMode", label: "Payment Mode"                                                     },
+      { key: "userName",    label: "Employee"                                                                },
+      { key: "title",       label: "Title"                                                                   },
+      { key: "category",    label: "Category"                                                                },
+      { key: "amount",      label: "Amount",         render: r => formatCurrency(Number(r.amount   || 0))   },
+      { key: "date",        label: "Date",           render: r => formatDate(String(r.date || r.createdAt || "")) },
+      { key: "status",      label: "Status"                                                                  },
+      { key: "paymentMode", label: "Payment Mode"                                                           },
     ],
     office_expenses: [
-      { key: "title",       label: "Title"                                                             },
-      { key: "category",    label: "Category"                                                          },
-      { key: "amount",      label: "Amount",   render: r => formatCurrency(Number(r.amount || 0))     },
-      { key: "date",        label: "Date",     render: r => formatDate(String(r.date || ""))          },
-      { key: "status",      label: "Status"                                                            },
-      { key: "recordedBy",  label: "Recorded By"                                                      },
-      { key: "paymentMode", label: "Payment Mode"                                                     },
+      { key: "title",       label: "Title"                                                                   },
+      { key: "category",    label: "Category"                                                                },
+      { key: "amount",      label: "Amount",         render: r => formatCurrency(Number(r.amount   || 0))   },
+      { key: "date",        label: "Date",           render: r => formatDate(String(r.date || ""))          },
+      { key: "status",      label: "Status"                                                                  },
+      { key: "recordedBy",  label: "Recorded By"                                                            },
+      { key: "paymentMode", label: "Payment Mode"                                                           },
+    ],
+    staff_claims: [
+      { key: "userName",    label: "Employee"                                                                },
+      { key: "title",       label: "Title"                                                                   },
+      { key: "category",    label: "Category"                                                                },
+      { key: "amount",      label: "Amount",         render: r => formatCurrency(Number(r.amount   || 0))   },
+      { key: "date",        label: "Date",           render: r => formatDate(String(r.date || r.createdAt || "")) },
+      { key: "status",      label: "Status"                                                                  },
+      { key: "description", label: "Description"                                                            },
+    ],
+    payroll: [
+      { key: "staffId",     label: "Staff ID"                                                                },
+      { key: "month",       label: "Month"                                                                   },
+      { key: "year",        label: "Year"                                                                    },
+      { key: "basicSalary", label: "Basic Salary",  render: r => formatCurrency(Number(r.basicSalary || 0))},
+      { key: "grossSalary", label: "Gross Salary",  render: r => formatCurrency(Number(r.grossSalary || 0))},
+      { key: "netSalary",   label: "Net Salary",    render: r => formatCurrency(Number(r.netSalary   || 0))},
+      { key: "status",      label: "Status"                                                                  },
+      { key: "generatedAt", label: "Generated",     render: r => formatDate(String(r.generatedAt || ""))   },
+    ],
+    invoices: [
+      { key: "invoiceNumber", label: "Invoice No"                                                            },
+      { key: "customerName",  label: "Customer"                                                              },
+      { key: "date",          label: "Date",         render: r => formatDate(String(r.date || r.invoiceDate || r.createdAt || "")) },
+      { key: "amount",        label: "Amount",       render: r => formatCurrency(Number(r.amount || r.total || 0)) },
+      { key: "status",        label: "Status"                                                                },
+      { key: "dueDate",       label: "Due Date",     render: r => formatDate(String(r.dueDate || ""))       },
+    ],
+    petty_cash: [
+      { key: "description", label: "Description"                                                             },
+      { key: "category",    label: "Category"                                                                },
+      { key: "type",        label: "Type"                                                                    },
+      { key: "amount",      label: "Amount",         render: r => formatCurrency(Number(r.amount   || 0))   },
+      { key: "balance",     label: "Balance",        render: r => formatCurrency(Number(r.balance  || 0))   },
+      { key: "date",        label: "Date",           render: r => formatDate(String(r.date || ""))          },
+      { key: "createdBy",   label: "Recorded By"                                                            },
+    ],
+    loan_customers: [
+      { key: "customerName",   label: "Customer"                                                             },
+      { key: "contactPhone",   label: "Phone"                                                                },
+      { key: "date",           label: "Date",        render: r => formatDate(String(r.date || ""))          },
+      { key: "amountOfLoan",   label: "Loan Amount", render: r => formatCurrency(Number(r.amountOfLoan || 0)) },
+      { key: "interestPerMonth", label: "Rate/Mo",   render: r => `${r.interestPerMonth}%`                  },
+      { key: "loanPeriod",     label: "Period",      render: r => `${r.loanPeriod} mo.`                     },
+      { key: "status",         label: "Status"                                                               },
+    ],
+    loan_interest: [
+      { key: "customerName",   label: "Customer"                                                             },
+      { key: "date",           label: "Date",        render: r => formatDate(String(r.date || ""))          },
+      { key: "amountOfLoan",   label: "Loan Amount", render: r => formatCurrency(Number(r.amountOfLoan || 0)) },
+      { key: "interestRevenue",label: "Interest Revenue", render: r => formatCurrency(Number(r.interestRevenue || 0)) },
+      { key: "status",         label: "Status"                                                               },
     ],
     revenue_summary: [
-      { key: "source",       label: "Source"                                                           },
-      { key: "customerName", label: "Customer"                                                         },
-      { key: "date",         label: "Date",    render: r => formatDate(String(r.date || ""))           },
-      { key: "amount",       label: "Revenue", render: r => formatCurrency(Number(r.amount || 0))      },
-      { key: "status",       label: "Status"                                                           },
+      { key: "source",       label: "Source"                                                                 },
+      { key: "customerName", label: "Customer"                                                               },
+      { key: "date",         label: "Date",          render: r => formatDate(String(r.date || ""))           },
+      { key: "amount",       label: "Revenue",       render: r => formatCurrency(Number(r.amount || 0))      },
+      { key: "status",       label: "Status"                                                                 },
     ],
     profit_loss: [],
   };
@@ -192,6 +264,12 @@ export default function FinancialReportsPage() {
     sales:              fSales,
     marketing_expenses: fMkt,
     office_expenses:    fOff,
+    staff_claims:       fMkt,
+    payroll:            fPayroll,
+    invoices:           fInvoices,
+    petty_cash:         fPettyCash,
+    loan_customers:     fLoanCust,
+    loan_interest:      fLoanInt,
     revenue_summary:    fRevenue,
     profit_loss:        [],
   };
@@ -199,8 +277,8 @@ export default function FinancialReportsPage() {
   const cfg  = REPORT_TYPES.find(r => r.key === report)!;
   const cols = COLUMNS[report];
   const data = DATA[report];
-  const companyName  = companies.find(c => c.id === cid)?.name ?? "All Companies";
-  const dateLabel    = preset === "custom" ? `${from} to ${to}` : DATE_PRESETS.find(p => p.key === preset)?.label ?? "";
+  const companyName = companies.find(c => c.id === cid)?.name ?? "All Companies";
+  const dateLabel   = preset === "custom" ? `${from} to ${to}` : DATE_PRESETS.find(p => p.key === preset)?.label ?? "";
 
   // ─── Print ───
   const printReport = () => {
@@ -219,6 +297,7 @@ export default function FinancialReportsPage() {
           <tr><th>Description</th><th>Amount</th></tr>
           <tr><td>Marketing Expenses</td><td>${formatCurrency(totalMktExp)}</td></tr>
           <tr><td>Office Expenses</td><td>${formatCurrency(totalOffExp)}</td></tr>
+          <tr><td>Payroll</td><td>${formatCurrency(totalPayroll)}</td></tr>
           <tr class="${netProfit >= 0 ? "total" : "loss"}"><td>Total Expenses</td><td>${formatCurrency(totalExpenses)}</td></tr>
         </table></div>
         <div class="section"><h2>Net ${netProfit >= 0 ? "Profit" : "Loss"}</h2><table>
@@ -244,6 +323,7 @@ export default function FinancialReportsPage() {
         `Revenue,Total Revenue,${totalRevenue}`,
         `Expenses,Marketing Expenses,${totalMktExp}`,
         `Expenses,Office Expenses,${totalOffExp}`,
+        `Expenses,Payroll,${totalPayroll}`,
         `Expenses,Total Expenses,${totalExpenses}`,
         `Net,${netProfit >= 0 ? "Profit" : "Loss"},${Math.abs(netProfit)}`,
       ].join("\n");
@@ -267,8 +347,8 @@ export default function FinancialReportsPage() {
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-blue-50 rounded-xl"><BarChart3 className="w-6 h-6 text-blue-600" /></div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Financial Reports</h1>
-              <p className="text-sm text-gray-500">Print and download financial reports • {companyName}</p>
+              <h1 className="text-xl font-bold text-gray-900">Reports</h1>
+              <p className="text-sm text-gray-500">Print and download reports • {companyName}</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -355,8 +435,9 @@ export default function FinancialReportsPage() {
                     <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Expenses</h3>
                     <div className="divide-y divide-gray-50">
                       {[
-                        { label: "Marketing Expenses", value: totalMktExp },
-                        { label: "Office Expenses",    value: totalOffExp },
+                        { label: "Marketing Expenses", value: totalMktExp  },
+                        { label: "Office Expenses",    value: totalOffExp  },
+                        { label: "Payroll",             value: totalPayroll },
                       ].map(r => (
                         <div key={r.label} className="flex justify-between py-2.5">
                           <span className="text-sm text-gray-700">{r.label}</span>
