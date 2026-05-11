@@ -4,9 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { MessageSquare, Send, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw } from "lucide-react";
+import { MessageSquare, Send, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, Users } from "lucide-react";
 
 interface Staff    { id: string; name: string; phone: string; companyId: string; status: string; }
 interface Customer { id: string; name: string; phone: string; companyId: string; }
@@ -29,20 +28,22 @@ export default function MessagesPage() {
   const [balance,   setBalance]   = useState<number | null>(null);
   const [senderId,  setSenderId]  = useState("INFO");
 
-  const [mode,        setMode]        = useState<SendMode>("single");
-  const [singlePhone, setSinglePhone] = useState("");
-  const [recipientId, setRecipientId] = useState("");
-  const [message,     setMessage]     = useState("");
-  const [sending,     setSending]     = useState(false);
-  const [result,      setResult]      = useState<{ ok: boolean; msg: string } | null>(null);
+  const [mode,            setMode]            = useState<SendMode>("single");
+  const [singlePhone,     setSinglePhone]     = useState("");
+  const [selectedIds,     setSelectedIds]     = useState<string[]>([]);
+  const [recipientSearch, setRecipientSearch] = useState("");
+  const [message,         setMessage]         = useState("");
+  const [sending,         setSending]         = useState(false);
+  const [sendProgress,    setSendProgress]    = useState<{ done: number; total: number } | null>(null);
+  const [result,          setResult]          = useState<{ ok: boolean; msg: string } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const loadData = async () => {
     const [sr, cr, lr, br] = await Promise.allSettled([
-      fetch("/api/users",                  { cache: "no-store" }),
-      fetch("/api/customers",              { cache: "no-store" }),
-      fetch("/api/messages",               { cache: "no-store" }),
-      fetch("/api/settings/beem/balance",  { cache: "no-store" }),
+      fetch("/api/users",                 { cache: "no-store" }),
+      fetch("/api/customers",             { cache: "no-store" }),
+      fetch("/api/messages",              { cache: "no-store" }),
+      fetch("/api/settings/beem/balance", { cache: "no-store" }),
     ]);
     if (sr.status === "fulfilled" && sr.value.ok) setStaff((await sr.value.json()).filter((u: Staff) => u.status !== "inactive"));
     if (cr.status === "fulfilled" && cr.value.ok) setCustomers(await cr.value.json());
@@ -57,16 +58,10 @@ export default function MessagesPage() {
   useEffect(() => { loadData(); }, []);
 
   const recipientList: (Staff | Customer)[] = mode === "staff" ? staff : customers;
-
-  const resolvedPhone = (() => {
-    if (mode === "single") return singlePhone.trim();
-    return (recipientList.find(r => r.id === recipientId) as Staff | Customer | undefined)?.phone ?? "";
-  })();
-
-  const resolvedName = (() => {
-    if (mode === "single") return singlePhone.trim();
-    return (recipientList.find(r => r.id === recipientId) as Staff | Customer | undefined)?.name ?? "";
-  })();
+  const filteredRecipients = recipientList.filter(r =>
+    r.name.toLowerCase().includes(recipientSearch.toLowerCase()) ||
+    (r.phone ?? "").includes(recipientSearch)
+  );
 
   const insertVar = (v: string) => {
     const ta = textareaRef.current;
@@ -79,35 +74,52 @@ export default function MessagesPage() {
   };
 
   const smsCount = Math.ceil((message.length || 1) / SMS_LEN);
+  const canSend  = !!message.trim() && (mode === "single" ? !!singlePhone.trim() : selectedIds.length > 0);
 
-  const send = async () => {
-    if (!message.trim())   { setResult({ ok: false, msg: "Please type a message." }); return; }
-    if (!resolvedPhone)    { setResult({ ok: false, msg: "Please select a recipient or enter a phone number." }); return; }
-    setSending(true); setResult(null);
-    try {
-      const res  = await fetch("/api/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: resolvedPhone, recipientName: resolvedName, message }),
-      });
-      const data = await res.json();
-      if (data.sent) {
-        setResult({ ok: true, msg: "SMS sent successfully!" });
-        setMessage(""); setSinglePhone(""); setRecipientId("");
-        loadData();
-      } else {
-        setResult({ ok: false, msg: data.error ?? "SMS failed. Check Beem API credentials in Admin → SMS Settings." });
+  const sendMessages = async () => {
+    if (!message.trim()) { setResult({ ok: false, msg: "Please type a message." }); return; }
+    const toSend: { phone: string; name: string }[] = [];
+    if (mode === "single") {
+      if (!singlePhone.trim()) { setResult({ ok: false, msg: "Please enter a phone number." }); return; }
+      toSend.push({ phone: singlePhone.trim(), name: singlePhone.trim() });
+    } else {
+      if (selectedIds.length === 0) { setResult({ ok: false, msg: "Please select at least one recipient." }); return; }
+      for (const id of selectedIds) {
+        const r = recipientList.find(x => x.id === id);
+        if (r?.phone) toSend.push({ phone: r.phone, name: r.name });
       }
-    } catch { setResult({ ok: false, msg: "Network error." }); }
-    setSending(false);
+      if (toSend.length === 0) { setResult({ ok: false, msg: "None of the selected recipients have a phone number." }); return; }
+    }
+
+    setSending(true); setResult(null); setSendProgress({ done: 0, total: toSend.length });
+    let sent = 0; let failed = 0;
+    for (let i = 0; i < toSend.length; i++) {
+      try {
+        const res  = await fetch("/api/messages", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: toSend[i].phone, recipientName: toSend[i].name, message }),
+        });
+        const data = await res.json();
+        if (data.sent) sent++; else failed++;
+      } catch { failed++; }
+      setSendProgress({ done: i + 1, total: toSend.length });
+    }
+    setSending(false); setSendProgress(null);
+    if (sent > 0) {
+      setResult({ ok: true, msg: `${sent} SMS sent successfully!${failed > 0 ? ` (${failed} failed)` : ""}` });
+      setMessage(""); setSinglePhone(""); setSelectedIds([]); setRecipientSearch("");
+      loadData();
+    } else {
+      setResult({ ok: false, msg: `All ${failed} SMS failed. Check Beem API credentials in Admin → SMS Settings.` });
+    }
   };
 
   const statusColor = (s: string) =>
     s === "sent" ? "text-green-600" : s === "failed" ? "text-red-500" : "text-gray-400";
   const StatusIcon = ({ s }: { s: string }) =>
-    s === "sent" ? <CheckCircle className="w-3.5 h-3.5 text-green-500" /> :
-    s === "failed" ? <XCircle className="w-3.5 h-3.5 text-red-500" /> :
-    <AlertCircle className="w-3.5 h-3.5 text-gray-400" />;
+    s === "sent"   ? <CheckCircle className="w-3.5 h-3.5 text-green-500" /> :
+    s === "failed" ? <XCircle     className="w-3.5 h-3.5 text-red-500"   /> :
+                     <AlertCircle className="w-3.5 h-3.5 text-gray-400"  />;
 
   return (
     <MainLayout>
@@ -141,7 +153,7 @@ export default function MessagesPage() {
             <h2 className="font-semibold text-gray-800 text-sm">Recipients</h2>
           </div>
           <div className="p-5 space-y-4">
-            {/* Radio row */}
+            {/* Mode radio row */}
             <div>
               <p className="text-xs font-medium text-gray-500 mb-2.5 uppercase tracking-wide">Send To</p>
               <div className="flex flex-wrap gap-5">
@@ -150,19 +162,19 @@ export default function MessagesPage() {
                     <input
                       type="radio" name="sendMode" value={m}
                       checked={mode === m}
-                      onChange={() => { setMode(m); setRecipientId(""); setSinglePhone(""); }}
+                      onChange={() => { setMode(m); setSelectedIds([]); setSinglePhone(""); setRecipientSearch(""); }}
                       className="w-4 h-4 accent-blue-600"
                     />
                     <span className="text-sm text-gray-700 font-medium">
-                      {m === "single" ? "Single Number" : m === "staff" ? "Select Staff" : "Select Customer"}
+                      {m === "single" ? "Single Number" : m === "staff" ? "Staff Members" : "Customers"}
                     </span>
                   </label>
                 ))}
               </div>
             </div>
 
-            {/* Input based on mode */}
-            {mode === "single" ? (
+            {/* Single number input */}
+            {mode === "single" && (
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Phone Number</label>
                 <Input
@@ -173,29 +185,82 @@ export default function MessagesPage() {
                 />
                 <p className="text-xs text-gray-400 mt-1">Enter phone number with or without country code</p>
               </div>
-            ) : (
+            )}
+
+            {/* Multi-select checklist */}
+            {mode !== "single" && (
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                  {mode === "staff" ? "Select Staff Member" : "Select Customer"}
-                </label>
-                <Select value={recipientId || undefined} onValueChange={setRecipientId}>
-                  <SelectTrigger className="max-w-sm">
-                    <SelectValue placeholder={mode === "staff" ? "Choose staff member…" : "Choose customer…"} />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-64">
-                    {recipientList.map(r => (
-                      <SelectItem key={r.id} value={r.id}>
-                        <span className="font-medium">{r.name}</span>
-                        {r.phone && <span className="text-gray-400 text-xs ml-2">{r.phone}</span>}
-                      </SelectItem>
-                    ))}
-                    {recipientList.length === 0 && (
-                      <SelectItem value="__none" disabled>No records found</SelectItem>
+                {/* Header: label + count badge + Select All / Clear */}
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <Users className="w-4 h-4 text-gray-400" />
+                    {mode === "staff" ? "Staff Members" : "Customers"}
+                    {selectedIds.length > 0 && (
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-semibold">
+                        {selectedIds.length} selected
+                      </span>
                     )}
-                  </SelectContent>
-                </Select>
-                {resolvedPhone && (
-                  <p className="text-xs text-gray-500 mt-1">📱 {resolvedPhone}</p>
+                  </label>
+                  <div className="flex gap-3 text-xs">
+                    <button type="button"
+                      onClick={() => setSelectedIds(filteredRecipients.map(r => r.id))}
+                      className="text-blue-600 hover:underline font-medium"
+                    >Select All</button>
+                    <button type="button"
+                      onClick={() => setSelectedIds([])}
+                      className="text-gray-400 hover:underline"
+                    >Clear</button>
+                  </div>
+                </div>
+
+                {/* Search box */}
+                <Input
+                  placeholder={`Search ${mode === "staff" ? "staff" : "customers"} by name or phone…`}
+                  value={recipientSearch}
+                  onChange={e => setRecipientSearch(e.target.value)}
+                  className="mb-2"
+                />
+
+                {/* Checklist */}
+                <div className="border border-gray-200 rounded-lg max-h-56 overflow-y-auto divide-y divide-gray-50">
+                  {filteredRecipients.length === 0 ? (
+                    <div className="py-8 text-center text-sm text-gray-400">No records found</div>
+                  ) : (
+                    filteredRecipients.map(r => {
+                      const checked = selectedIds.includes(r.id);
+                      return (
+                        <label
+                          key={r.id}
+                          className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${checked ? "bg-blue-50" : "hover:bg-gray-50"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={e => {
+                              if (e.target.checked) setSelectedIds(ids => [...ids, r.id]);
+                              else setSelectedIds(ids => ids.filter(id => id !== r.id));
+                            }}
+                            className="w-4 h-4 accent-blue-600 rounded shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800">{r.name}</p>
+                            {r.phone
+                              ? <p className="text-xs text-gray-400">{r.phone}</p>
+                              : <p className="text-xs text-red-400 italic">No phone number</p>
+                            }
+                          </div>
+                          {checked && <CheckCircle className="w-4 h-4 text-blue-500 shrink-0" />}
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+
+                {selectedIds.length > 0 && (
+                  <p className="text-xs text-blue-600 mt-1.5 font-medium">
+                    {selectedIds.length} recipient{selectedIds.length !== 1 ? "s" : ""} selected
+                    {" · "}{selectedIds.filter(id => !!recipientList.find(x => x.id === id)?.phone).length} with phone numbers
+                  </p>
                 )}
               </div>
             )}
@@ -208,7 +273,6 @@ export default function MessagesPage() {
             <h2 className="font-semibold text-gray-800 text-sm">Message</h2>
           </div>
           <div className="p-5 space-y-4">
-            {/* Sender ID */}
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Sender ID</label>
               <div className="flex items-center gap-2 max-w-sm px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700">
@@ -216,8 +280,6 @@ export default function MessagesPage() {
               </div>
               <p className="text-xs text-gray-400 mt-1">Change Sender ID in Admin → SMS Settings</p>
             </div>
-
-            {/* Message textarea */}
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Message</label>
               <Textarea
@@ -235,17 +297,12 @@ export default function MessagesPage() {
                 <span className="text-xs text-gray-400">SMS count: {smsCount}</span>
               </div>
             </div>
-
-            {/* Variable chips */}
             <div>
               <p className="text-xs font-medium text-gray-500 mb-2">Available Variables:</p>
               <div className="flex flex-wrap gap-2">
                 {VARS.map(v => (
-                  <button
-                    key={v}
-                    onClick={() => insertVar(v)}
-                    className="px-2.5 py-1 text-xs rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors font-mono"
-                  >
+                  <button key={v} onClick={() => insertVar(v)}
+                    className="px-2.5 py-1 text-xs rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors font-mono">
                     {v}
                   </button>
                 ))}
@@ -254,14 +311,32 @@ export default function MessagesPage() {
           </div>
         </div>
 
+        {/* ── Send Progress Bar ── */}
+        {sending && sendProgress && sendProgress.total > 1 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-3 flex items-center gap-3">
+            <RefreshCw className="w-4 h-4 text-blue-500 animate-spin shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-800">
+                Sending… {sendProgress.done} / {sendProgress.total}
+              </p>
+              <div className="mt-1.5 h-1.5 bg-blue-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                  style={{ width: `${(sendProgress.done / sendProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Footer Buttons ── */}
         <div className="flex items-center justify-end gap-3 pb-4">
-          <Button variant="outline" onClick={() => { setMessage(""); setSinglePhone(""); setRecipientId(""); setResult(null); }}>
+          <Button variant="outline" onClick={() => { setMessage(""); setSinglePhone(""); setSelectedIds([]); setRecipientSearch(""); setResult(null); }}>
             Cancel
           </Button>
-          <Button onClick={send} disabled={sending || !message.trim() || !resolvedPhone} className="bg-blue-600 hover:bg-blue-700 text-white px-6">
+          <Button onClick={sendMessages} disabled={sending || !canSend} className="bg-blue-600 hover:bg-blue-700 text-white px-6">
             <Send className="w-4 h-4 mr-2" />
-            {sending ? "Sending…" : "Send Message"}
+            {sending ? "Sending…" : mode !== "single" && selectedIds.length > 1 ? `Send to ${selectedIds.length} Recipients` : "Send Message"}
           </Button>
         </div>
 
@@ -281,7 +356,6 @@ export default function MessagesPage() {
               </button>
             </div>
           </div>
-
           {logs.length === 0 ? (
             <div className="flex flex-col items-center py-14 text-center">
               <MessageSquare className="w-10 h-10 text-gray-200 mb-3" />

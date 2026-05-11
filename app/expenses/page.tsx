@@ -150,8 +150,8 @@ export default function ExpensesPage() {
   const _p = (session?.position ?? "").toLowerCase();
   const GROUP_ROLES_E = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
   const isGroupUser   = session?.companyId === "group" || GROUP_ROLES_E.includes(_r) || GROUP_ROLES_E.includes(_p);
-  const isEManager    = _r === "manager"    || _p === "manager"    || _r === "group_manager" || _p === "group_manager";
-  const isECEO        = session?.isSuperAdmin || _r === "admin" || _p === "admin" || _r === "group_ceo" || _p === "group_ceo";
+  const isEManager    = _r === "manager"    || _p === "manager"    || _r === "group_manager" || _p === "group_manager" || _p === "general manager";
+  const isECEO        = session?.isSuperAdmin || _r === "admin" || _p === "admin" || _r === "ceo" || _p === "ceo" || _r === "group_ceo" || _p === "group_ceo";
   const isEAccountant = _r === "accountant" || _p === "accountant" || _r === "group_cfo" || _p === "group_cfo" || _r === "group_accountant" || _p === "group_accountant";
   const canManage = session?.isSuperAdmin || isGroupUser || isEManager || isECEO || isEAccountant;
   const myOnly    = !canManage && !!session?.id;
@@ -178,9 +178,11 @@ export default function ExpensesPage() {
 
   const openAdd = () => {
     setEditItem(null);
-    // Pre-fill the logged-in user as employee (admins/superadmin leave blank to pick)
-    const canPickAny = session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager" || session?.role === "accountant";
-    setForm({ ...emptyForm(), userId: canPickAny ? "" : (session?.id ?? "") });
+    const rr = (session?.role ?? "").toLowerCase();
+    const pp = (session?.position ?? "").toLowerCase();
+    // Admins/superadmin start blank so they can pick any employee; everyone else pre-fills with themselves
+    const isAdminLevel = session?.isSuperAdmin || rr === "admin" || pp === "admin";
+    setForm({ ...emptyForm(), userId: isAdminLevel ? "" : (session?.id ?? "") });
     setFormError("");
     setShowDialog(true);
   };
@@ -201,12 +203,15 @@ export default function ExpensesPage() {
       await fetch("/api/expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: editItem.id, userId: form.userId, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description }) });
     } else {
-      // Resolve companyId: selected staff's company → current session company → active company
+      // Resolve companyId: prefer selected staff's real company, then active-switched company, then session company
       const selectedStaff = allStaff.find(u => u.id === form.userId);
-      const expCompanyId  = selectedStaff?.companyId
-        || (!session?.isSuperAdmin ? session?.companyId : undefined)
-        || cidRef.current
-        || activeCompanyId;
+      const co = cidRef.current || activeCompanyId;
+      const expCompanyId =
+        (selectedStaff?.companyId && selectedStaff.companyId !== "group" ? selectedStaff.companyId : null) ||
+        (co && co !== "group" ? co : null) ||
+        selectedStaff?.companyId ||
+        (!session?.isSuperAdmin ? session?.companyId : null) ||
+        co || "group";
       const newExp: Expense = {
         id: `exp-${Date.now()}`,
         companyId: expCompanyId,
@@ -372,14 +377,11 @@ export default function ExpensesPage() {
                             </Button>
                           </>
                         )}
-                        {/* Stage 2: CEO approves */}
+                        {/* Stage 2: CEO approves only — accountant disburses at stage 3 */}
                         {claim.status === "manager_approved" && isECEO && (
                           <>
                             <Button variant="ghost" size="sm" className="text-indigo-600 text-xs px-2" onClick={() => updateStatus(claim.id, "ceo_approved")}>
                               <CheckCircle className="w-3.5 h-3.5 mr-1" /> CEO Approve
-                            </Button>
-                            <Button variant="ghost" size="sm" className="text-green-700 text-xs px-2" onClick={() => updateStatus(claim.id, "disbursed")}>
-                              💵 Disburse
                             </Button>
                             <Button variant="ghost" size="sm" className="text-red-500 text-xs px-2" onClick={() => updateStatus(claim.id, "rejected")}>
                               <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
@@ -467,7 +469,9 @@ export default function ExpensesPage() {
               </div>
             )}
             {(() => {
-              const canPickAny = session?.isSuperAdmin || session?.role === "admin" || session?.role === "manager" || session?.role === "accountant";
+              const rr2 = (session?.role ?? "").toLowerCase();
+              const pp2 = (session?.position ?? "").toLowerCase();
+              const canPickAny = session?.isSuperAdmin || ["admin","manager","accountant","ceo","group_ceo","group_manager","group_cfo","group_accountant","group_controller","group_hr"].some(x => rr2 === x || pp2 === x);
               if (canPickAny) {
                 return (
                   <div>
