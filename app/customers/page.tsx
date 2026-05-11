@@ -22,6 +22,7 @@ const COMPANIES_KEY = "phidtech_companies";
 const SESSION_KEY   = "phidtech_session";
 const CUSTOMERS_KEY = "phidtech_customers";
 const GROUP_KEY     = "phidtech_group_company";
+const USERS_KEY     = "phidtech_users";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -168,9 +169,14 @@ export default function CustomersPage() {
       const res = await fetch("/api/users", { cache: "no-store" });
       if (res.ok) {
         const data: StaffUser[] = await res.json();
-        setAllStaff(Array.isArray(data) ? data.filter(u => u.status !== "inactive") : []);
+        const active = Array.isArray(data) ? data.filter(u => u.status !== "inactive") : [];
+        setAllStaff(active.length > 0 ? active : lsGet<StaffUser[]>(USERS_KEY, []));
+      } else {
+        setAllStaff(lsGet<StaffUser[]>(USERS_KEY, []));
       }
-    } catch {}
+    } catch {
+      setAllStaff(lsGet<StaffUser[]>(USERS_KEY, []));
+    }
   };
 
   const reload = () => {
