@@ -232,6 +232,7 @@ export default function UsersPage() {
   const [sessionData, setSessionData] = useState<{id:string;role:string;position:string;companyId?:string;branchId?:string|null;isSuperAdmin:boolean}|null>(null);
 
   const [saving, setSaving] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   // Load users from server API; load companies/depts from localStorage
   const reload = async () => {
@@ -425,9 +426,10 @@ export default function UsersPage() {
     finally { setSaving(false); }
   };
 
-  const deleteUser = async (id: string) => {
-    if (!confirm("Delete this employee?")) return;
-    await apiDelete(`/api/users?id=${id}`);
+  const doDelete = async () => {
+    if (!deleteId) return;
+    await apiDelete(`/api/users?id=${deleteId}`);
+    setDeleteId(null);
     await reload();
   };
 
@@ -582,7 +584,7 @@ export default function UsersPage() {
                               <Button variant="ghost" size="icon" onClick={() => openEdit(user)}>
                                 <Edit className="w-4 h-4 text-blue-400" />
                               </Button>
-                              <Button variant="ghost" size="icon" onClick={() => deleteUser(user.id)}>
+                              <Button variant="ghost" size="icon" onClick={() => setDeleteId(user.id)}>
                                 <Trash2 className="w-4 h-4 text-red-400" />
                               </Button>
                             </>
@@ -664,7 +666,7 @@ export default function UsersPage() {
                               <Button variant="ghost" size="icon" onClick={() => openEdit(user)}>
                                 <Edit className="w-4 h-4 text-blue-400" />
                               </Button>
-                              <Button variant="ghost" size="icon" onClick={() => deleteUser(user.id)}>
+                              <Button variant="ghost" size="icon" onClick={() => setDeleteId(user.id)}>
                                 <Trash2 className="w-4 h-4 text-red-400" />
                               </Button>
                             </>
@@ -1014,6 +1016,19 @@ export default function UsersPage() {
           </DialogContent>
         </Dialog>
       ))}
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteId} onOpenChange={open => { if (!open) setDeleteId(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete Employee</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-600 py-2">Are you sure you want to delete this employee? This action cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={doDelete}>
+              <Trash2 className="w-4 h-4 mr-2" />Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
