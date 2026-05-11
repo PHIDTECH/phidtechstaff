@@ -114,6 +114,8 @@ const ALL_PERMISSIONS = [
   { key: "messages",       label: "SMS Messages" },
   { key: "petty_cash",     label: "Petty Cash" },
   { key: "office_expenses", label: "Office Expenses" },
+  { key: "loans",           label: "Loan Customers" },
+  { key: "loan_interest",   label: "Interest from Loans" },
   { key: "admin",           label: "Admin Panel" },
 ];
 
