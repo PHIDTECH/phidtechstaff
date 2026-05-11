@@ -20,8 +20,10 @@ const ACTIVE_KEY     = "phidtech_active_company";
 const USERS_KEY      = "phidtech_users";
 const TASKS_KEY      = "phidtech_tasks";
 const LEAVE_KEY      = "phidtech_leave";
-const SALES_KEY      = "phidtech_accounting_sales";
-const EXPENSES_KEY   = "phidtech_expenses";
+const SALES_KEY         = "phidtech_accounting_sales";
+const EXPENSES_KEY      = "phidtech_expenses";
+const OFFICE_EXP_KEY    = "phidtech_office_expenses";
+const PAYROLL_KEY       = "phidtech_payroll";
 
 const GROUP_ID = "group";
 const GROUP_NAME = "PHIDTECH GROUP OF COMPANIES LIMITED";
@@ -48,6 +50,8 @@ interface Task { id: string; companyId: string; status: string; title?: string; 
 interface LeaveReq { id: string; companyId: string; status: string; userName?: string; employeeName?: string; staffName?: string; type?: string; days?: number; duration?: string; }
 interface Sale { id: string; companyId: string; paid: number; amount: number; }
 interface Expense { id: string; companyId: string; amount: number; status: string; }
+interface OfficeExpense { id: string; companyId: string; amount: number; status: string; }
+interface PayrollEntry { id: string; companyId: string; netSalary: number; status: string; }
 
 export default function DashboardPage() {
   usePermissionGuard("dashboard");
@@ -60,6 +64,8 @@ export default function DashboardPage() {
   const [leaves, setLeaves]           = useState<LeaveReq[]>([]);
   const [sales, setSales]             = useState<Sale[]>([]);
   const [expenses, setExpenses]       = useState<Expense[]>([]);
+  const [officeExp, setOfficeExp]     = useState<OfficeExpense[]>([]);
+  const [payroll, setPayroll]         = useState<PayrollEntry[]>([]);
 
   const reload = async () => {
     const sess = lsGet<{name:string;isSuperAdmin:boolean;companyId:string|null;role?:string;position?:string;branchId?:string|null}>(SESSION_KEY, null as never);
@@ -74,7 +80,7 @@ export default function DashboardPage() {
         return r.ok ? await r.json() : fallback;
       } catch { return fallback; }
     };
-    const [companies, users, branches, taskList, leaveList, salesList, expList] = await Promise.all([
+    const [companies, users, branches, taskList, leaveList, salesList, expList, oeList, payList] = await Promise.all([
       safe<Company[]>("/api/companies", lsGet<Company[]>(COMPANIES_KEY, [])),
       safe<StaffUser[]>("/api/users", lsGet<StaffUser[]>(USERS_KEY, [])),
       safe<Branch[]>("/api/branches", []),
@@ -82,6 +88,8 @@ export default function DashboardPage() {
       safe<LeaveReq[]>("/api/leave", lsGet<LeaveReq[]>(LEAVE_KEY, [])),
       safe<Sale[]>("/api/accounting/sales", lsGet<Sale[]>(SALES_KEY, [])),
       safe<Expense[]>("/api/expenses", lsGet<Expense[]>(EXPENSES_KEY, [])),
+      safe<OfficeExpense[]>("/api/office-expenses", lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, [])),
+      safe<PayrollEntry[]>("/api/payroll", lsGet<PayrollEntry[]>(PAYROLL_KEY, [])),
     ]);
     setCompanies(companies);
     try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(companies)); } catch {}
@@ -92,6 +100,8 @@ export default function DashboardPage() {
     setLeaves(leaveList);
     setSales(salesList);
     setExpenses(expList);
+    setOfficeExp(oeList);
+    setPayroll(payList);
   };
 
   useEffect(() => {
@@ -129,9 +139,14 @@ export default function DashboardPage() {
   const companyStats = companies.map(co => {
     const coStaff   = staffUsers.filter(u => u.companyId === co.id);
     const coSales   = sales.filter(s => s.companyId === co.id);
-    const coExp     = expenses.filter(e => e.companyId === co.id && (e.status === "paid" || e.status === "approved"));
+    const PAID_S = ["paid","approved","disbursed","ceo_approved"];
+    const coExp     = expenses.filter(e => e.companyId === co.id && PAID_S.includes(e.status));
+    const coOE      = officeExp.filter(e => e.companyId === co.id && PAID_S.includes(e.status));
+    const coPay     = payroll.filter(p => p.companyId === co.id && p.status === "paid");
     const revenue   = coSales.reduce((s, e) => s + e.paid, 0);
-    const expAmt    = coExp.reduce((s, e) => s + e.amount, 0);
+    const expAmt    = coExp.reduce((s, e) => s + e.amount, 0)
+                    + coOE.reduce((s, e) => s + e.amount, 0)
+                    + coPay.reduce((s, p) => s + p.netSalary, 0);
     return {
       id: co.id, name: co.name, industry: co.industry ?? "—",
       staff: coStaff.length, activeStaff: coStaff.filter(u => u.status === "active").length,
@@ -144,8 +159,12 @@ export default function DashboardPage() {
   // Group-wide totals
   const groupStaff   = staffUsers.filter(u => u.companyId !== GROUP_ID).length;
   const groupRevenue = sales.reduce((s, e) => s + e.paid, 0);
-  const groupExp     = expenses.filter(e => e.status === "paid" || e.status === "approved").reduce((s, e) => s + e.amount, 0);
-  const groupProfit  = groupRevenue - groupExp;
+  const PAID_STATUSES = ["paid","approved","disbursed","ceo_approved"];
+  const groupExpClaims  = expenses.filter(e => PAID_STATUSES.includes(e.status)).reduce((s, e) => s + e.amount, 0);
+  const groupOfficeExp  = officeExp.filter(e => PAID_STATUSES.includes(e.status)).reduce((s, e) => s + e.amount, 0);
+  const groupPayroll    = payroll.filter(p => p.status === "paid").reduce((s, p) => s + p.netSalary, 0);
+  const groupExp        = groupExpClaims + groupOfficeExp + groupPayroll;
+  const groupProfit     = groupRevenue - groupExp;
   const groupTasks   = tasks.length;
   const groupLeave   = leaves.filter(l => l.status === "pending").length;
   const groupStaff_HQ = staffUsers.filter(u => u.companyId === GROUP_ID).length;
@@ -156,9 +175,14 @@ export default function DashboardPage() {
     ? allCoStaff.filter(u => u.branchId === session.branchId)
     : allCoStaff;
   const coSales    = sales.filter(s => s.companyId === activeCompanyId);
-  const coExp      = expenses.filter(e => e.companyId === activeCompanyId && (e.status === "paid" || e.status === "approved"));
+  const _PAID = ["paid","approved","disbursed","ceo_approved"];
+  const coExp      = expenses.filter(e => e.companyId === activeCompanyId && _PAID.includes(e.status));
+  const coOE       = officeExp.filter(e => e.companyId === activeCompanyId && _PAID.includes(e.status));
+  const coPay      = payroll.filter(p => p.companyId === activeCompanyId && p.status === "paid");
   const coRevenue  = coSales.reduce((s, e) => s + e.paid, 0);
-  const coExpAmt   = coExp.reduce((s, e) => s + e.amount, 0);
+  const coExpAmt   = coExp.reduce((s, e) => s + e.amount, 0)
+                   + coOE.reduce((s, e) => s + e.amount, 0)
+                   + coPay.reduce((s, p) => s + p.netSalary, 0);
   const coProfit   = coRevenue - coExpAmt;
   const coTasks    = tasks.filter(t => t.companyId === activeCompanyId);
   const coLeave    = leaves.filter(l => l.companyId === activeCompanyId && l.status === "pending");

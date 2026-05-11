@@ -223,7 +223,6 @@ export default function CustomersPage() {
 
   const activeCount   = visibleCustomers.filter(c => c.status === "active").length;
   const businessCount = visibleCustomers.filter(c => c.type === "business").length;
-  const totalRevenue  = visibleCustomers.reduce((s, c) => s + (c.totalRevenue || 0), 0);
 
   const getCompanyName = (cid: string) =>
     companies.find(c => c.id === cid)?.name ?? cid;
@@ -314,11 +313,10 @@ export default function CustomersPage() {
         }
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <StatCard title="Total Customers" value={visibleCustomers.length} icon={UserCheck} iconBg="bg-blue-50" iconColor="text-blue-600" />
         <StatCard title="Active" value={activeCount} icon={UserCheck} iconBg="bg-green-50" iconColor="text-green-600" />
         <StatCard title="Business Clients" value={businessCount} icon={Building2} iconBg="bg-purple-50" iconColor="text-purple-600" />
-        <StatCard title="Total Revenue" value={formatCurrency(totalRevenue)} icon={TrendingUp} iconBg="bg-orange-50" iconColor="text-orange-600" />
       </div>
 
       <Tabs defaultValue="list">
