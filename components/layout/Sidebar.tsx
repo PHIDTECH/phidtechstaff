@@ -80,7 +80,7 @@ const ALL_NAV: NavGroup[] = [
       { label: "Tasks", href: "/tasks", icon: CheckSquare },
       { label: "KPIs & Reports", href: "/kpis", icon: Target },
       { label: "Assets", href: "/assets", icon: Briefcase },
-      { label: "Expenses", href: "/expenses", icon: Receipt },
+      { label: "Marketing Expenses", href: "/expenses", icon: Receipt },
     ]
   },
   {

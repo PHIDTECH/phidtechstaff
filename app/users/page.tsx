@@ -99,7 +99,7 @@ const ALL_PERMISSIONS = [
   { key: "tasks",        label: "Tasks" },
   { key: "kpis",         label: "KPIs & Reports" },
   { key: "assets",       label: "Assets" },
-  { key: "expenses",     label: "Expenses" },
+  { key: "expenses",     label: "Marketing Expenses" },
   { key: "accounting",   label: "Accounting" },
   { key: "invoices",     label: "Invoices" },
   { key: "sales",        label: "Sales" },
