@@ -16,37 +16,66 @@ function lsStr(key: string, fallback = ""): string {
   try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
 }
 
+// Module-level company cache — shared across all re-mounts on navigation
+let _hdrCoCache: {id:string;name:string;industry?:string}[] | null = null;
+let _hdrCoCacheAt = 0;
+const HDR_CO_TTL = 60_000;
+
+const GRP_ROLES_H = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
+
+function readHdrSession() {
+  try {
+    const s = localStorage.getItem(SESSION_KEY);
+    if (!s) return { name:"", role:"Admin", isSuperAdmin:true as boolean, companyId:"", isGroupStaff:false };
+    const sess = JSON.parse(s);
+    const r = (sess.role ?? "").toLowerCase();
+    const p = (sess.position ?? "").toLowerCase();
+    return {
+      name: sess.name ?? "",
+      role: sess.position ?? sess.role ?? "Admin",
+      isSuperAdmin: sess.isSuperAdmin === true,
+      companyId: sess.companyId ?? "",
+      isGroupStaff: !sess.isSuperAdmin && (sess.companyId === "group" || GRP_ROLES_H.includes(r) || GRP_ROLES_H.includes(p)),
+    };
+  } catch { return { name:"", role:"Admin", isSuperAdmin:true as boolean, companyId:"", isGroupStaff:false }; }
+}
+function readHdrActiveCid() {
+  try { const raw = localStorage.getItem(ACTIVE_KEY) ?? ""; return raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : ""; } catch { return ""; }
+}
+
 interface HeaderProps {
   onMobileMenuOpen: () => void;
 }
 
 export default function Header({ onMobileMenuOpen }: HeaderProps) {
+  const _hs = readHdrSession();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showCompanySwitcher, setShowCompanySwitcher] = useState(false);
-  const [companiesList, setCompaniesList] = useState<{id:string;name:string;industry?:string}[]>([]);
-  const [activeCompanyId, setActiveCompanyIdState] = useState("");
-  const [isSuperAdmin, setIsSuperAdmin] = useState(true);
-  const [isGroupStaff, setIsGroupStaff] = useState(false);
-  const [profileName, setProfileName] = useState("");
-  const [profileRole, setProfileRole] = useState("Admin");
+  const [companiesList, setCompaniesList] = useState<{id:string;name:string;industry?:string}[]>(() => _hdrCoCache ?? lsGet(COMPANIES_KEY, []));
+  const [activeCompanyId, setActiveCompanyIdState] = useState(readHdrActiveCid);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(_hs.isSuperAdmin);
+  const [isGroupStaff, setIsGroupStaff] = useState(_hs.isGroupStaff);
+  const [profileName, setProfileName] = useState(_hs.name);
+  const [profileRole, setProfileRole] = useState(_hs.role);
   const [profilePhoto, setProfilePhoto] = useState("");
-  const [myCompanyId, setMyCompanyId] = useState(""); // staff's own company
+  const [myCompanyId, setMyCompanyId] = useState(_hs.companyId);
   const [notifList, setNotifList] = useState<{id:string;userId:string;message:string;read:boolean;createdAt:string}[]>([]);
 
   const reloadCompanies = async () => {
-    // Load from server so all devices share the same list
-    try {
-      const res = await fetch("/api/companies", { cache: "no-store" });
-      if (res.ok) {
-        const list = await res.json();
-        setCompaniesList(list);
-        try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(list)); } catch {}
-      } else {
-        setCompaniesList(lsGet(COMPANIES_KEY, []));
-      }
-    } catch {
-      setCompaniesList(lsGet(COMPANIES_KEY, []));
+    const now = Date.now();
+    if (_hdrCoCache && now - _hdrCoCacheAt < HDR_CO_TTL) {
+      setCompaniesList(_hdrCoCache);
+    } else {
+      try {
+        const res = await fetch("/api/companies", { cache: "no-store" });
+        if (res.ok) {
+          const list = await res.json();
+          _hdrCoCache = list; _hdrCoCacheAt = Date.now();
+          setCompaniesList(list);
+          try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(list)); } catch {}
+        } else { setCompaniesList(lsGet(COMPANIES_KEY, [])); }
+      } catch { setCompaniesList(lsGet(COMPANIES_KEY, [])); }
     }
     // Active company from raw localStorage
     try {

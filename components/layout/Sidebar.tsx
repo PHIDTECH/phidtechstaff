@@ -19,6 +19,11 @@ function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
 }
 
+// Module-level company cache — avoids a network round-trip on every navigation
+let _sbCoCache: {id:string;name:string}[] | null = null;
+let _sbCoCacheAt = 0;
+const SB_CO_TTL = 60_000;
+
 // Map permission keys to route prefixes
 const PERM_ROUTES: Record<string, string[]> = {
   dashboard:       ["/dashboard"],
@@ -187,18 +192,20 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
         if (s) {
           const sess = JSON.parse(s);
           setSession(sess);
-          // Load companies from server API for always-fresh names
+          // Load companies — use module cache to avoid network hit on every navigation
           let companies: {id:string;name:string}[] = [];
-          try {
-            const r = await fetch("/api/companies", { cache: "no-store" });
-            if (r.ok) {
-              companies = await r.json();
-              try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(companies)); } catch {}
-            } else {
-              companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
-            }
-          } catch {
-            companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+          const now = Date.now();
+          if (_sbCoCache && now - _sbCoCacheAt < SB_CO_TTL) {
+            companies = _sbCoCache;
+          } else {
+            try {
+              const r = await fetch("/api/companies", { cache: "no-store" });
+              if (r.ok) {
+                companies = await r.json();
+                _sbCoCache = companies; _sbCoCacheAt = Date.now();
+                try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(companies)); } catch {}
+              } else { companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []); }
+            } catch { companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []); }
           }
           if (sess.isSuperAdmin) {
             setMyCompanyName(companies.find(c => c.id === cid)?.name ?? "");

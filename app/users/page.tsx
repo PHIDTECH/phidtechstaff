@@ -932,6 +932,9 @@ export default function UsersPage() {
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="inactive">Inactive</SelectItem>
                     <SelectItem value="suspended">Suspended</SelectItem>
+                    <SelectItem value="resigned">Resigned</SelectItem>
+                    <SelectItem value="terminated">Terminated</SelectItem>
+                    <SelectItem value="retired">Retired</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

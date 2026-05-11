@@ -156,10 +156,11 @@ export default function PayrollPage() {
     // cid === "" means Group HQ / all-companies view — do NOT default to "group"
     setActiveCompanyId(cid);
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_PAYROLL.includes(sess.position ?? sess.role ?? "");
+    const ACTIVE_STATUSES = ["active"];
     setStaffList(
       cid
-        ? allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId))
-        : allStaff   // Group HQ: see all staff (read-only; Run Payroll requires a specific company)
+        ? allStaff.filter(u => u.companyId === cid && ACTIVE_STATUSES.includes(u.status) && (!isBM || u.branchId === sess?.branchId))
+        : allStaff.filter(u => ACTIVE_STATUSES.includes(u.status))  // Group HQ: active staff only
     );
   };
 
