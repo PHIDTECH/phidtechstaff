@@ -63,7 +63,7 @@ interface Customer {
   createdAt: string;
   credentials?: string;
   attachments?: CustomerAttachment[];
-  assignedTo?: string;
+  assignedTo: string;
 }
 
 const MAX_ATTACHMENTS = 15;
@@ -251,6 +251,7 @@ export default function CustomersPage() {
 
   const saveCustomer = async (isEdit: boolean) => {
     if (!form.name.trim()) { setFormError("Customer name is required."); return; }
+    if (!form.assignedTo) { setFormError("Please assign an employee to this customer."); return; }
     const effectiveCid = activeCompanyId || form._companyId;
     if (!effectiveCid) { setFormError("Please select a company first."); return; }
     if (isEdit && editCustomer) {
@@ -689,7 +690,7 @@ export default function CustomersPage() {
                 <Input placeholder="City, Country" value={form.address} onChange={e => setForm(f => ({...f, address: e.target.value}))} />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Assigned Employee (optional)</label>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Assigned Employee <span className="text-red-500">*</span></label>
                 <Select value={form.assignedTo || "none"} onValueChange={v => setForm(f => ({...f, assignedTo: v === "none" ? "" : v}))}>
                   <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
                   <SelectContent className="max-h-56 overflow-y-auto">
