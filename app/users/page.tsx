@@ -428,8 +428,14 @@ export default function UsersPage() {
 
   const doDelete = async () => {
     if (!deleteId) return;
-    await apiDelete(`/api/users?id=${deleteId}`);
+    const idToDelete = deleteId;
     setDeleteId(null);
+    await apiDelete(`/api/users?id=${idToDelete}`);
+    // Purge from localStorage BEFORE reload so the migration step doesn't re-add the deleted user
+    try {
+      const local = lsGet<StaffUser[]>(USERS_KEY, []);
+      localStorage.setItem(USERS_KEY, JSON.stringify(local.filter(u => u.id !== idToDelete)));
+    } catch {}
     await reload();
   };
 
