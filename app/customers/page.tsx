@@ -63,7 +63,7 @@ interface Customer {
   createdAt: string;
   credentials?: string;
   attachments?: CustomerAttachment[];
-  assignedTo: string;
+  assignedTo?: string;
 }
 
 const MAX_ATTACHMENTS = 15;

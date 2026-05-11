@@ -207,18 +207,16 @@ export default function AttendancePage() {
     : cid
       ? staff.filter(u => u.companyId === cid && u.status !== "inactive")
       : staff.filter(u => u.status !== "inactive");
-  // Exclude CEO and system admin from attendance dropdown
-  const attendanceStaff = allCompanyStaff.filter(u => {
+  // Exclude CEO/admin from both table and dialog
+  const trackedStaff = allCompanyStaff.filter(u => {
     const p = (u.position ?? "").toLowerCase();
     const r = (u.role ?? "").toLowerCase();
-    return !p.includes("ceo") && r !== "admin" && !p.includes("group ceo");
+    return !p.includes("ceo") && r !== "admin" && !p.includes("group ceo") && !r.includes("group_ceo");
   });
-
-  // Table view: branch managers only see their own branch; everyone else sees all
-  const companyStaff = (() => {
-    if (isBranchManager && session?.branchId) return allCompanyStaff.filter(u => u.branchId === session.branchId);
-    return allCompanyStaff;
-  })();
+  // Table view: branch managers only see their own branch
+  const companyStaff = isBranchManager && session?.branchId
+    ? trackedStaff.filter(u => u.branchId === session.branchId)
+    : trackedStaff;
   const companyRecs  = cid ? records.filter(r => r.companyId === cid) : records;
   const dayRecords   = companyRecs.filter(r => r.date === dateFilter);
 
@@ -557,7 +555,7 @@ export default function AttendancePage() {
               <Select value={form.userId} onValueChange={v => sf({ userId: v })}>
                 <SelectTrigger className="h-11"><SelectValue placeholder="Select employee…" /></SelectTrigger>
                 <SelectContent className="max-h-72">
-                  {attendanceStaff.map(u => (
+                  {trackedStaff.map(u => (
                     <SelectItem key={u.id} value={u.id}>
                       {u.name}{u.department ? ` — ${u.department}` : ""}
                     </SelectItem>
@@ -566,7 +564,7 @@ export default function AttendancePage() {
               </Select>
               {form.userId && (() => {
                 const existingRec = records.find(r => r.userId === form.userId && r.date === form.date);
-                const emp = attendanceStaff.find(u => u.id === form.userId);
+                const emp = trackedStaff.find(u => u.id === form.userId);
                 if (!existingRec) return null;
                 const suggestedAction = existingRec.clockIn && !existingRec.clockOut ? "out" : "in";
                 return (
