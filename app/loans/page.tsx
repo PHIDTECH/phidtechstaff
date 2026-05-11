@@ -276,8 +276,9 @@ export default function LoansPage() {
 
       {/* Add / Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={v => { if (!v) setShowDialog(false); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg flex flex-col max-h-[90vh]">
           <DialogHeader><DialogTitle>{editItem ? "Edit Loan" : "New Loan Customer"}</DialogTitle></DialogHeader>
+          <div className="overflow-y-auto flex-1 pr-1">
           <div className="space-y-3">
             {formError && (
               <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -366,6 +367,7 @@ export default function LoansPage() {
                 <Textarea placeholder="Additional notes..." rows={2} value={form.notes} onChange={e => sf({ notes: e.target.value })} />
               </div>
             </div>
+          </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>

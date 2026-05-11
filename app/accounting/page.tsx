@@ -25,6 +25,7 @@ const SALES_KEY    = "phidtech_accounting_sales";
 const EXP_KEY      = "phidtech_expenses";
 const OEXP_KEY     = "phidtech_office_expenses";
 const PAYROLL_KEY  = "phidtech_payroll";
+const GROUP_KEY    = "phidtech_group_company";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -57,6 +58,7 @@ export default function AccountingPage() {
   const [advances, setAdvances]         = useState<AdvanceEntry[]>([]);
   const [commissions, setCommissions]   = useState<CommissionEntry[]>([]);
   const [cid, setCid]                   = useState("");
+  const [groupCid, setGroupCid]         = useState("");
   const cidRef                          = useRef("");
   const [period, setPeriod]             = useState<"daily"|"monthly"|"yearly">("monthly");
 
@@ -64,6 +66,7 @@ export default function AccountingPage() {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const c = getActiveCid(sess);
     setCid(c); cidRef.current = c;
+    setGroupCid(lsStr(GROUP_KEY));
     // Load from server APIs, fall back to localStorage
     (async () => {
       try { const r = await fetch("/api/accounting/sales", {cache:"no-store"}); if(r.ok) setSales(await r.json()); else setSales(lsGet<SaleEntry[]>(SALES_KEY,[])); } catch { setSales(lsGet<SaleEntry[]>(SALES_KEY,[])); }
@@ -76,12 +79,15 @@ export default function AccountingPage() {
   }, []);
 
   const co = cidRef.current || cid;
-  const coSales  = co ? sales.filter(s => s.companyId === co) : sales;
-  const coExp    = co ? expenses.filter(e => e.companyId === co) : expenses;
-  const coOE     = co ? officeExp.filter(e => e.companyId === co) : officeExp;
-  const coPay    = co ? payroll.filter(p => p.companyId === co) : payroll;
-  const coAdv    = co ? advances.filter(a => a.companyId === co) : advances;
-  const coCom    = co ? commissions.filter(c => c.companyId === co) : commissions;
+  // When Group HQ is selected, show all-company consolidated data
+  const isGroupView = !co || co === groupCid;
+  const byco = <T extends { companyId: string }>(arr: T[]) => isGroupView ? arr : arr.filter(x => x.companyId === co);
+  const coSales  = byco(sales);
+  const coExp    = byco(expenses);
+  const coOE     = byco(officeExp);
+  const coPay    = byco(payroll);
+  const coAdv    = byco(advances);
+  const coCom    = byco(commissions);
 
   const today     = new Date().toISOString().slice(0,10);
   const thisMonth = today.slice(0,7);
