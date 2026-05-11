@@ -150,8 +150,6 @@ const ALL_NAV: NavGroup[] = [
     title: "System",
     items: [
       { label: "Documents",               href: "/documents",     icon: FileText  },
-      { label: "Messages & Notifications",href: "/notifications", icon: Bell      },
-      { label: "Reports",                 href: "/reports",       icon: BarChart3 },
       { label: "Branches",                href: "/admin#branches",icon: MapPin    },
       { label: "Admin Panel",             href: "/admin",         icon: Settings  },
     ]
