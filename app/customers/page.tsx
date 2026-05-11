@@ -39,6 +39,7 @@ interface Session {
 }
 interface Company { id: string; name: string; parentId?: string; }
 interface Branch { id: string; companyId: string; name: string; location: string; }
+interface StaffUser { id: string; name: string; companyId: string; position?: string; department?: string; status?: string; }
 interface CustomerAttachment {
   name: string;
   size: number;
@@ -61,6 +62,7 @@ interface Customer {
   createdAt: string;
   credentials?: string;
   attachments?: CustomerAttachment[];
+  assignedTo?: string;
 }
 
 const MAX_ATTACHMENTS = 15;
@@ -70,6 +72,7 @@ const emptyForm = () => ({
   serviceProduct: "", date: "", branch: "",
   status: "active",
   credentials: "",
+  assignedTo: "",
   attachments: [] as CustomerAttachment[],
   _companyId: "",
 });
@@ -94,6 +97,7 @@ export default function CustomersPage() {
   const [companies, setCompanies]         = useState<Company[]>([]);
   const [branches, setBranches]           = useState<Branch[]>([]);
   const [customers, setCustomers]         = useState<Customer[]>([]);
+  const [allStaff, setAllStaff]           = useState<StaffUser[]>([]);
   const [search, setSearch]               = useState("");
   const [typeFilter, setTypeFilter]       = useState("all");
   const [branchFilter, setBranchFilter]   = useState("all");
@@ -159,6 +163,16 @@ export default function CustomersPage() {
     }
   };
 
+  const fetchStaff = async () => {
+    try {
+      const res = await fetch("/api/users", { cache: "no-store" });
+      if (res.ok) {
+        const data: StaffUser[] = await res.json();
+        setAllStaff(Array.isArray(data) ? data.filter(u => u.status !== "inactive") : []);
+      }
+    } catch {}
+  };
+
   const reload = () => {
     loadSession();
     fetchCustomers();
@@ -168,6 +182,7 @@ export default function CustomersPage() {
     loadSession();
     fetchCustomers();
     fetchBranches();
+    fetchStaff();
     window.addEventListener("phidtech_companies_updated", reload);
     window.addEventListener("storage", reload);
     return () => {
@@ -221,6 +236,7 @@ export default function CustomersPage() {
       date: c.date, branch: c.branch, status: c.status,
       credentials: c.credentials ?? "",
       attachments: c.attachments ?? [],
+      assignedTo: c.assignedTo ?? "",
       _companyId: "",
     });
     setFormError("");
@@ -251,6 +267,7 @@ export default function CustomersPage() {
         date: form.date, branch: form.branch,
         status: form.status,
         credentials: form.credentials,
+        assignedTo: form.assignedTo || undefined,
         totalRevenue: 0,
         createdAt: new Date().toISOString().slice(0, 10),
       };
@@ -664,6 +681,23 @@ export default function CustomersPage() {
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Address</label>
                 <Input placeholder="City, Country" value={form.address} onChange={e => setForm(f => ({...f, address: e.target.value}))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Assigned Employee (optional)</label>
+                <Select value={form.assignedTo || "none"} onValueChange={v => setForm(f => ({...f, assignedTo: v === "none" ? "" : v}))}>
+                  <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                  <SelectContent className="max-h-56 overflow-y-auto">
+                    <SelectItem value="none">— None —</SelectItem>
+                    {(activeCompanyId
+                      ? allStaff.filter(u => u.companyId === activeCompanyId || u.companyId === "group")
+                      : allStaff
+                    ).map(u => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.name}{u.position ? ` · ${u.position}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               {/* Credentials */}
               <div>

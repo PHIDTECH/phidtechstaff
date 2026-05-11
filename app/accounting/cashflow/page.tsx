@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import PageHeader from "@/components/shared/PageHeader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Activity, TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { getActiveCid } from "@/lib/getActiveCid";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -22,40 +23,70 @@ function lsGet<T>(key: string, fallback: T): T {
 }
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
-interface Session { id: string; isSuperAdmin: boolean; companyId: string; }
-interface Sale    { id: string; companyId: string; date: string; paid: number; amount: number; customerName: string; }
-interface Expense { id: string; companyId: string; amount: number; category: string; status: string; submittedAt: string; title: string; }
-interface PettyCash { id: string; companyId: string; amount: number; type: string; date?: string; description?: string; }
+interface Session     { id: string; isSuperAdmin: boolean; companyId: string; role?: string; position?: string; }
+interface Sale        { id: string; companyId: string; date: string; paid: number; amount: number; customerName: string; }
+interface Expense     { id: string; companyId: string; amount: number; category: string; status: string; submittedAt: string; title: string; }
+interface PettyCash   { id: string; companyId: string; amount: number; type: string; date?: string; description?: string; }
+interface OfficeExpense { id: string; companyId: string; amount: number; category: string; status: string; date: string; title?: string; }
+interface PayrollEntry  { id: string; companyId: string; netSalary: number; status: string; month: string; year: number; generatedAt?: string; }
+interface Advance       { id: string; companyId: string; amount: number; status: string; disbursedAt?: string; requestedAt?: string; }
+interface Commission    { id: string; companyId: string; amount: number; status: string; paidAt?: string; createdAt?: string; description?: string; }
 
 type Period = "daily" | "monthly" | "yearly";
 
 export default function CashFlowPage() {
-  const [sales, setSales]       = useState<Sale[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [petty, setPetty]       = useState<PettyCash[]>([]);
-  const [cid, setCid]           = useState("");
-  const cidRef                  = useRef("");
-  const [period, setPeriod]     = useState<Period>("monthly");
+  const [sales, setSales]               = useState<Sale[]>([]);
+  const [expenses, setExpenses]         = useState<Expense[]>([]);
+  const [petty, setPetty]               = useState<PettyCash[]>([]);
+  const [officeExp, setOfficeExp]       = useState<OfficeExpense[]>([]);
+  const [payroll, setPayroll]           = useState<PayrollEntry[]>([]);
+  const [advances, setAdvances]         = useState<Advance[]>([]);
+  const [commissions, setCommissions]   = useState<Commission[]>([]);
+  const [cid, setCid]                   = useState("");
+  const cidRef                          = useRef("");
+  const [period, setPeriod]             = useState<Period>("monthly");
+
+  const reload = async () => {
+    const sess = lsGet<Session>(SESSION_KEY, null as never);
+    const c = getActiveCid(sess);
+    setCid(c); cidRef.current = c;
+    try { const r = await fetch("/api/accounting/sales", {cache:"no-store"}); if(r.ok) setSales(await r.json()); else setSales(lsGet<Sale[]>(SALES_KEY,[])); } catch { setSales(lsGet<Sale[]>(SALES_KEY,[])); }
+    try { const r = await fetch("/api/expenses",         {cache:"no-store"}); if(r.ok) setExpenses(await r.json()); else setExpenses(lsGet<Expense[]>(EXP_KEY,[])); } catch { setExpenses(lsGet<Expense[]>(EXP_KEY,[])); }
+    try { const r = await fetch("/api/petty-cash",       {cache:"no-store"}); if(r.ok) setPetty(await r.json()); else setPetty(lsGet<PettyCash[]>(PETTY_KEY,[])); } catch { setPetty(lsGet<PettyCash[]>(PETTY_KEY,[])); }
+    try { const r = await fetch("/api/office-expenses",  {cache:"no-store"}); if(r.ok) setOfficeExp(await r.json()); } catch {}
+    try { const r = await fetch("/api/payroll",          {cache:"no-store"}); if(r.ok) setPayroll(await r.json()); } catch {}
+    try { const r = await fetch("/api/advances",         {cache:"no-store"}); if(r.ok) setAdvances(await r.json()); } catch {}
+    try { const r = await fetch("/api/commissions",      {cache:"no-store"}); if(r.ok) setCommissions(await r.json()); } catch {}
+  };
 
   useEffect(() => {
-    const sess = lsGet<Session>(SESSION_KEY, null as never);
-    const c    = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
-    setCid(c); cidRef.current = c;
-    setSales(lsGet<Sale[]>(SALES_KEY, []));
-    setExpenses(lsGet<Expense[]>(EXP_KEY, []));
-    setPetty(lsGet<PettyCash[]>(PETTY_KEY, []));
+    reload();
+    window.addEventListener("storage", reload);
+    window.addEventListener("phidtech_companies_updated", reload);
+    return () => {
+      window.removeEventListener("storage", reload);
+      window.removeEventListener("phidtech_companies_updated", reload);
+    };
   }, []);
 
-  const co  = cidRef.current || cid;
-  const coS = co ? sales.filter(s => s.companyId === co) : sales;
-  const coE = co ? expenses.filter(e => e.companyId === co && (e.status === "paid" || e.status === "approved")) : expenses.filter(e => e.status === "paid" || e.status === "approved");
-  const coP = co ? petty.filter(p => p.companyId === co) : petty;
+  const co     = cidRef.current || cid;
+  const coS    = co ? sales.filter(s => s.companyId === co) : sales;
+  const coE    = (co ? expenses.filter(e => e.companyId === co) : expenses).filter(e => e.status === "disbursed" || e.status === "paid" || e.status === "approved");
+  const coP    = co ? petty.filter(p => p.companyId === co) : petty;
+  const coOE   = (co ? officeExp.filter(e => e.companyId === co) : officeExp).filter(e => e.status === "paid" || e.status === "approved");
+  const coPay  = (co ? payroll.filter(p => p.companyId === co) : payroll).filter(p => p.status === "paid");
+  const coAdv  = (co ? advances.filter(a => a.companyId === co) : advances).filter(a => a.status === "disbursed");
+  const coCom  = (co ? commissions.filter(c => c.companyId === co) : commissions).filter(c => c.status === "paid");
 
   // Totals
   const totalInflows  = coS.reduce((s,e) => s + e.paid, 0)
                       + coP.filter(p => p.type === "income" || p.type === "credit").reduce((s,p) => s + p.amount, 0);
   const totalOutflows = coE.reduce((s,e) => s + e.amount, 0)
-                      + coP.filter(p => p.type === "expense" || p.type === "debit").reduce((s,p) => s + p.amount, 0);
+                      + coP.filter(p => p.type === "expense" || p.type === "debit").reduce((s,p) => s + p.amount, 0)
+                      + coOE.reduce((s,e) => s + e.amount, 0)
+                      + coPay.reduce((s,p) => s + p.netSalary, 0)
+                      + coAdv.reduce((s,a) => s + a.amount, 0)
+                      + coCom.reduce((s,c) => s + c.amount, 0);
   const netCashFlow   = totalInflows - totalOutflows;
 
   // Build chart periods
@@ -94,7 +125,23 @@ export default function CashFlowPage() {
       + coP.filter(p => {
         const pd = (p.date ?? "").slice(0, period === "daily" ? 10 : period === "monthly" ? 7 : 4);
         return pd === key && (p.type === "expense" || p.type === "debit");
-      }).reduce((s,p) => s + p.amount, 0);
+      }).reduce((s,p) => s + p.amount, 0)
+      + coOE.filter(e => {
+        const k = period === "daily" ? (e.date||"").slice(0,10) : period === "monthly" ? (e.date||"").slice(0,7) : (e.date||"").slice(0,4);
+        return k === key;
+      }).reduce((s,e) => s + e.amount, 0)
+      + coPay.filter(p => {
+        const pd = p.generatedAt ? p.generatedAt.slice(0,period==="daily"?10:period==="monthly"?7:4) : `${p.year}`;
+        return pd === key || (period==="monthly" && `${p.year}-${String(new Date(`${p.month} 1`).getMonth()+1).padStart(2,"0")}` === key) || (period==="yearly" && String(p.year) === key);
+      }).reduce((s,p) => s + p.netSalary, 0)
+      + coAdv.filter(a => {
+        const ad = (a.disbursedAt || a.requestedAt || "").slice(0, period==="daily"?10:period==="monthly"?7:4);
+        return ad === key;
+      }).reduce((s,a) => s + a.amount, 0)
+      + coCom.filter(c => {
+        const cd = (c.paidAt || c.createdAt || "").slice(0, period==="daily"?10:period==="monthly"?7:4);
+        return cd === key;
+      }).reduce((s,c) => s + c.amount, 0);
 
       return { label, inflow, outflow, net: inflow - outflow };
     });
@@ -112,10 +159,14 @@ export default function CashFlowPage() {
   // Recent transactions feed
   const allTx = [
     ...coS.map(s => ({ date: s.date, label: s.customerName || "Sale", amount: s.paid, type: "inflow" as const, cat: "Sales Revenue" })),
-    ...coE.map(e => ({ date: (e.submittedAt||"").slice(0,10), label: e.title || e.category, amount: e.amount, type: "outflow" as const, cat: e.category })),
+    ...coE.map(e => ({ date: (e.submittedAt||"").slice(0,10), label: e.title || e.category, amount: e.amount, type: "outflow" as const, cat: "Expense Claim" })),
+    ...coOE.map(e => ({ date: (e.date||"").slice(0,10), label: e.title || e.category, amount: e.amount, type: "outflow" as const, cat: "Office Expense" })),
+    ...coPay.map(p => ({ date: (p.generatedAt||"").slice(0,10), label: `Payroll — ${p.month} ${p.year}`, amount: p.netSalary, type: "outflow" as const, cat: "Salaries" })),
+    ...coAdv.map(a => ({ date: (a.disbursedAt || a.requestedAt || "").slice(0,10), label: "Salary Advance", amount: a.amount, type: "outflow" as const, cat: "Advances" })),
+    ...coCom.map(c => ({ date: (c.paidAt || c.createdAt || "").slice(0,10), label: c.description || "Commission Paid", amount: c.amount, type: "outflow" as const, cat: "Commissions" })),
     ...coP.filter(p => p.type === "income" || p.type === "credit").map(p => ({ date: (p.date||"").slice(0,10), label: p.description || "Petty Cash In", amount: p.amount, type: "inflow" as const, cat: "Petty Cash" })),
     ...coP.filter(p => p.type === "expense" || p.type === "debit").map(p => ({ date: (p.date||"").slice(0,10), label: p.description || "Petty Cash Out", amount: p.amount, type: "outflow" as const, cat: "Petty Cash" })),
-  ].sort((a,b) => b.date.localeCompare(a.date)).slice(0, 20);
+  ].sort((a,b) => b.date.localeCompare(a.date)).slice(0, 30);
 
   const periodLabel = period === "daily" ? "Last 14 Days" : period === "monthly" ? "Last 12 Months" : "Last 5 Years";
 

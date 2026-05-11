@@ -23,6 +23,8 @@ const SESSION_KEY  = "phidtech_session";
 const ACTIVE_KEY   = "phidtech_active_company";
 const SALES_KEY    = "phidtech_accounting_sales";
 const EXP_KEY      = "phidtech_expenses";
+const OEXP_KEY     = "phidtech_office_expenses";
+const PAYROLL_KEY  = "phidtech_payroll";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -30,8 +32,12 @@ function lsGet<T>(key: string, fallback: T): T {
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
 interface Session { id: string; name: string; role: string; isSuperAdmin: boolean; companyId: string; }
-interface SaleEntry { id: string; companyId: string; date: string; customerId: string; customerName: string; amount: number; paid: number; status: "paid"|"partial"|"unpaid"; }
-interface ExpenseEntry { id: string; companyId: string; amount: number; status: string; submittedAt: string; }
+interface SaleEntry    { id: string; companyId: string; date: string; customerId: string; customerName: string; amount: number; paid: number; status: "paid"|"partial"|"unpaid"; }
+interface ExpenseEntry  { id: string; companyId: string; amount: number; status: string; submittedAt: string; }
+interface OfficeExpEntry { id: string; companyId: string; amount: number; status: string; date: string; }
+interface PayrollEntry  { id: string; companyId: string; netSalary: number; status: string; month: string; year: number; generatedAt?: string; }
+interface AdvanceEntry  { id: string; companyId: string; amount: number; status: string; }
+interface CommissionEntry { id: string; companyId: string; amount: number; status: string; }
 
 function monthLabel(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-GB", { month: "short", year: "2-digit" });
@@ -44,11 +50,15 @@ const ACCENT = ["#3b82f6","#10b981","#f97316","#8b5cf6","#ec4899","#06b6d4","#f5
 
 export default function AccountingPage() {
   usePermissionGuard("accounting");
-  const [sales, setSales]           = useState<SaleEntry[]>([]);
-  const [expenses, setExpenses]     = useState<ExpenseEntry[]>([]);
-  const [cid, setCid]               = useState("");
-  const cidRef                      = useRef("");
-  const [period, setPeriod]         = useState<"daily"|"monthly"|"yearly">("monthly");
+  const [sales, setSales]               = useState<SaleEntry[]>([]);
+  const [expenses, setExpenses]         = useState<ExpenseEntry[]>([]);
+  const [officeExp, setOfficeExp]       = useState<OfficeExpEntry[]>([]);
+  const [payroll, setPayroll]           = useState<PayrollEntry[]>([]);
+  const [advances, setAdvances]         = useState<AdvanceEntry[]>([]);
+  const [commissions, setCommissions]   = useState<CommissionEntry[]>([]);
+  const [cid, setCid]                   = useState("");
+  const cidRef                          = useRef("");
+  const [period, setPeriod]             = useState<"daily"|"monthly"|"yearly">("monthly");
 
   useEffect(() => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
@@ -56,22 +66,22 @@ export default function AccountingPage() {
     setCid(c); cidRef.current = c;
     // Load from server APIs, fall back to localStorage
     (async () => {
-      try {
-        const sr = await fetch("/api/accounting/sales", { cache: "no-store" });
-        if (sr.ok) setSales(await sr.json());
-        else setSales(lsGet<SaleEntry[]>(SALES_KEY, []));
-      } catch { setSales(lsGet<SaleEntry[]>(SALES_KEY, [])); }
-      try {
-        const er = await fetch("/api/expenses", { cache: "no-store" });
-        if (er.ok) setExpenses(await er.json());
-        else setExpenses(lsGet<ExpenseEntry[]>(EXP_KEY, []));
-      } catch { setExpenses(lsGet<ExpenseEntry[]>(EXP_KEY, [])); }
+      try { const r = await fetch("/api/accounting/sales", {cache:"no-store"}); if(r.ok) setSales(await r.json()); else setSales(lsGet<SaleEntry[]>(SALES_KEY,[])); } catch { setSales(lsGet<SaleEntry[]>(SALES_KEY,[])); }
+      try { const r = await fetch("/api/expenses",         {cache:"no-store"}); if(r.ok) setExpenses(await r.json()); else setExpenses(lsGet<ExpenseEntry[]>(EXP_KEY,[])); } catch { setExpenses(lsGet<ExpenseEntry[]>(EXP_KEY,[])); }
+      try { const r = await fetch("/api/office-expenses",  {cache:"no-store"}); if(r.ok) setOfficeExp(await r.json()); else setOfficeExp(lsGet<OfficeExpEntry[]>(OEXP_KEY,[])); } catch { setOfficeExp(lsGet<OfficeExpEntry[]>(OEXP_KEY,[])); }
+      try { const r = await fetch("/api/payroll",          {cache:"no-store"}); if(r.ok) setPayroll(await r.json()); else setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY,[])); } catch { setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY,[])); }
+      try { const r = await fetch("/api/advances",         {cache:"no-store"}); if(r.ok) setAdvances(await r.json()); } catch {}
+      try { const r = await fetch("/api/commissions",      {cache:"no-store"}); if(r.ok) setCommissions(await r.json()); } catch {}
     })();
   }, []);
 
   const co = cidRef.current || cid;
-  const coSales = co ? sales.filter(s => s.companyId === co) : sales;
-  const coExp   = co ? expenses.filter(e => e.companyId === co) : expenses;
+  const coSales  = co ? sales.filter(s => s.companyId === co) : sales;
+  const coExp    = co ? expenses.filter(e => e.companyId === co) : expenses;
+  const coOE     = co ? officeExp.filter(e => e.companyId === co) : officeExp;
+  const coPay    = co ? payroll.filter(p => p.companyId === co) : payroll;
+  const coAdv    = co ? advances.filter(a => a.companyId === co) : advances;
+  const coCom    = co ? commissions.filter(c => c.companyId === co) : commissions;
 
   const today     = new Date().toISOString().slice(0,10);
   const thisMonth = today.slice(0,7);
@@ -80,7 +90,12 @@ export default function AccountingPage() {
   const totalRevenue   = coSales.reduce((s,e) => s + e.amount, 0);
   const totalPaid      = coSales.reduce((s,e) => s + e.paid, 0);
   const totalUnpaid    = totalRevenue - totalPaid;
-  const totalExpAmt    = coExp.filter(e => e.status === "paid" || e.status === "approved").reduce((s,e) => s + e.amount, 0);
+  const totalExpClaims = coExp.filter(e => e.status === "paid" || e.status === "approved" || e.status === "disbursed").reduce((s,e) => s + e.amount, 0);
+  const totalOfficeExp = coOE.filter(e => e.status === "paid" || e.status === "approved").reduce((s,e) => s + e.amount, 0);
+  const totalSalaries  = coPay.filter(p => p.status === "paid").reduce((s,p) => s + p.netSalary, 0);
+  const totalAdvances  = coAdv.filter(a => a.status === "disbursed").reduce((s,a) => s + a.amount, 0);
+  const totalComms     = coCom.filter(c => c.status === "paid").reduce((s,c) => s + c.amount, 0);
+  const totalExpAmt    = totalExpClaims + totalOfficeExp + totalSalaries + totalAdvances + totalComms;
   const netProfit      = totalPaid - totalExpAmt;
 
   const dailySales    = coSales.filter(s => s.date === today).reduce((s,e) => s + e.amount, 0);

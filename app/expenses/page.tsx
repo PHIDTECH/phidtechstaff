@@ -309,8 +309,8 @@ export default function ExpensesPage() {
             </TableHeader>
             <TableBody>
               {filtered.map(claim => {
-                const emp      = companyStaff.find(u => u.id === claim.userId);
-                const approver = companyStaff.find(u => u.name === (claim.ceoApprovedBy ?? claim.managerApprovedBy ?? ""));
+                const emp      = allStaff.find(u => u.id === claim.userId);
+                const approver = allStaff.find(u => u.name === (claim.ceoApprovedBy ?? claim.managerApprovedBy ?? ""));
                 return (
                   <TableRow key={claim.id}>
                     <TableCell>
@@ -408,8 +408,8 @@ export default function ExpensesPage() {
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Expense Claim Details</DialogTitle></DialogHeader>
           {viewItem && (() => {
-            const emp      = companyStaff.find(u => u.id === viewItem.userId);
-            const approver = companyStaff.find(u => u.name === (viewItem.ceoApprovedBy ?? viewItem.managerApprovedBy ?? ""));
+            const emp      = allStaff.find(u => u.id === viewItem.userId);
+            const approver = allStaff.find(u => u.name === (viewItem.ceoApprovedBy ?? viewItem.managerApprovedBy ?? ""));
             return (
               <div className="space-y-4">
                 <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">

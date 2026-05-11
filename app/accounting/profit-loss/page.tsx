@@ -31,10 +31,12 @@ interface Sale { id: string; companyId: string; date: string; amount: number; pa
 interface Expense { id: string; companyId: string; amount: number; category: string; status: string; submittedAt: string; }
 interface OfficeExpense { id: string; companyId: string; amount: number; category: string; status: string; date: string; }
 interface PayrollEntry { id: string; staffId: string; companyId: string; month: string; year: number; netSalary: number; grossSalary: number; status: "draft" | "paid"; generatedAt: string; }
+interface Advance    { id: string; companyId: string; amount: number; status: string; disbursedAt?: string; requestedAt?: string; }
+interface Commission { id: string; companyId: string; amount: number; status: string; paidAt?: string; createdAt?: string; }
 
 type Period = "daily" | "weekly" | "monthly" | "yearly";
 
-function buildRows(sales: Sale[], expenses: Expense[], officeExp: OfficeExpense[], payroll: PayrollEntry[], period: Period) {
+function buildRows(sales: Sale[], expenses: Expense[], officeExp: OfficeExpense[], payroll: PayrollEntry[], advances: Advance[], commissions: Commission[], period: Period) {
   const now = new Date();
   let count = 0;
   let getKey: (d: Date) => string;
@@ -105,50 +107,50 @@ function buildRows(sales: Sale[], expenses: Expense[], officeExp: OfficeExpense[
       return ek === k && (e.status === "paid" || e.status === "approved");
     }).reduce((acc, e) => acc + e.amount, 0);
 
-    const totalExp = exp + sal + oexp;
-    return { label: getLabel(k), revenue: rev, expenses: totalExp, salaries: sal, claims: exp, officeExp: oexp, profit: rev - totalExp };
+    const adv = advances.filter(a => {
+      if (a.status !== "disbursed") return false;
+      const ad = (a.disbursedAt || a.requestedAt || "").slice(0, 10);
+      const ak = period === "daily" ? ad : period === "weekly" ? getKey(new Date(ad)) :
+                 period === "monthly" ? ad.slice(0, 7) : ad.slice(0, 4);
+      return ak === k;
+    }).reduce((acc, a) => acc + a.amount, 0);
+
+    const com = commissions.filter(c => {
+      if (c.status !== "paid") return false;
+      const cd = (c.paidAt || c.createdAt || "").slice(0, 10);
+      const ck = period === "daily" ? cd : period === "weekly" ? getKey(new Date(cd)) :
+                 period === "monthly" ? cd.slice(0, 7) : cd.slice(0, 4);
+      return ck === k;
+    }).reduce((acc, c) => acc + c.amount, 0);
+
+    const totalExp = exp + sal + oexp + adv + com;
+    return { label: getLabel(k), revenue: rev, expenses: totalExp, salaries: sal, claims: exp, officeExp: oexp, advances: adv, commissions: com, profit: rev - totalExp };
   });
 }
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 export default function ProfitLossPage() {
-  const [sales, setSales]       = useState<Sale[]>([]);
+  const [sales, setSales]             = useState<Sale[]>([]);
   const [expenses, setExpenses]       = useState<Expense[]>([]);
   const [officeExpenses, setOfficeExp] = useState<OfficeExpense[]>([]);
   const [payroll, setPayroll]         = useState<PayrollEntry[]>([]);
-  const [cid, setCid]           = useState("");
-  const cidRef                  = useRef("");
-  const [period, setPeriod]     = useState<Period>("monthly");
+  const [advances, setAdvances]       = useState<Advance[]>([]);
+  const [commissions, setCommissions] = useState<Commission[]>([]);
+  const [cid, setCid]                 = useState("");
+  const cidRef                        = useRef("");
+  const [period, setPeriod]           = useState<Period>("monthly");
 
   const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const c = getActiveCid(sess);
     setCid(c); cidRef.current = c;
-    // Sales from server API
-    try {
-      const sr = await fetch("/api/accounting/sales", { cache: "no-store" });
-      if (sr.ok) setSales(await sr.json());
-      else setSales(lsGet<Sale[]>(SALES_KEY, []));
-    } catch { setSales(lsGet<Sale[]>(SALES_KEY, [])); }
-    // Expense claims from server API
-    try {
-      const er = await fetch("/api/expenses", { cache: "no-store" });
-      if (er.ok) setExpenses(await er.json());
-      else setExpenses(lsGet<Expense[]>(EXP_KEY, []));
-    } catch { setExpenses(lsGet<Expense[]>(EXP_KEY, [])); }
-    // Office expenses from server API
-    try {
-      const or = await fetch("/api/office-expenses", { cache: "no-store" });
-      if (or.ok) setOfficeExp(await or.json());
-      else setOfficeExp(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, []));
-    } catch { setOfficeExp(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, [])); }
-    // Payroll from server API
-    try {
-      const pr = await fetch("/api/payroll", { cache: "no-store" });
-      if (pr.ok) setPayroll(await pr.json());
-      else setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, []));
-    } catch { setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, [])); }
+    try { const r = await fetch("/api/accounting/sales",  { cache: "no-store" }); if (r.ok) setSales(await r.json());        else setSales(lsGet<Sale[]>(SALES_KEY, [])); }         catch { setSales(lsGet<Sale[]>(SALES_KEY, [])); }
+    try { const r = await fetch("/api/expenses",          { cache: "no-store" }); if (r.ok) setExpenses(await r.json());    else setExpenses(lsGet<Expense[]>(EXP_KEY, [])); }      catch { setExpenses(lsGet<Expense[]>(EXP_KEY, [])); }
+    try { const r = await fetch("/api/office-expenses",   { cache: "no-store" }); if (r.ok) setOfficeExp(await r.json());  else setOfficeExp(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, [])); } catch { setOfficeExp(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, [])); }
+    try { const r = await fetch("/api/payroll",           { cache: "no-store" }); if (r.ok) setPayroll(await r.json());    else setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, [])); } catch { setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, [])); }
+    try { const r = await fetch("/api/advances",          { cache: "no-store" }); if (r.ok) setAdvances(await r.json());   } catch {}
+    try { const r = await fetch("/api/commissions",       { cache: "no-store" }); if (r.ok) setCommissions(await r.json()); } catch {}
   };
 
   useEffect(() => {
@@ -166,14 +168,18 @@ export default function ProfitLossPage() {
   const coE   = co ? expenses.filter(e => e.companyId === co) : expenses;
   const coOE  = co ? officeExpenses.filter(e => e.companyId === co) : officeExpenses;
   const coP   = co ? payroll.filter(p => p.companyId === co) : payroll;
+  const coAdv = co ? advances.filter(a => a.companyId === co) : advances;
+  const coCom = co ? commissions.filter(c => c.companyId === co) : commissions;
 
-  const rows  = buildRows(coS, coE, coOE, coP, period);
+  const rows  = buildRows(coS, coE, coOE, coP, coAdv, coCom, period);
 
   const totalRev        = coS.reduce((s, e) => s + e.paid, 0);
-  const totalExpClaims  = coE.filter(e => e.status === "paid" || e.status === "approved").reduce((s,e) => s + e.amount, 0);
+  const totalExpClaims  = coE.filter(e => e.status === "paid" || e.status === "approved" || e.status === "disbursed").reduce((s,e) => s + e.amount, 0);
   const totalOfficeExp  = coOE.filter(e => e.status === "paid" || e.status === "approved").reduce((s,e) => s + e.amount, 0);
   const totalSalaries   = coP.filter(p => p.status === "paid").reduce((s,p) => s + p.netSalary, 0);
-  const totalExp        = totalExpClaims + totalOfficeExp + totalSalaries;
+  const totalAdvances   = coAdv.filter(a => a.status === "disbursed").reduce((s,a) => s + a.amount, 0);
+  const totalCommissions = coCom.filter(c => c.status === "paid").reduce((s,c) => s + c.amount, 0);
+  const totalExp        = totalExpClaims + totalOfficeExp + totalSalaries + totalAdvances + totalCommissions;
   const grossProfit    = coS.reduce((s, e) => s + (e.subtotal ?? e.paid), 0);
   const netProfit      = totalRev - totalExp;
   const margin         = totalRev > 0 ? ((netProfit / totalRev) * 100).toFixed(1) : "0.0";
