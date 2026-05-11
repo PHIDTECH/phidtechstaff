@@ -242,7 +242,7 @@ export default function CustomersPage() {
       credentials: c.credentials ?? "",
       attachments: c.attachments ?? [],
       assignedTo: c.assignedTo ?? "",
-      _companyId: "",
+      _companyId: c.companyId,
     });
     setFormError("");
     setShowEditDialog(true);
@@ -251,7 +251,7 @@ export default function CustomersPage() {
   const saveCustomer = async (isEdit: boolean) => {
     if (!form.name.trim()) { setFormError("Customer name is required."); return; }
     if (!form.assignedTo) { setFormError("Please assign an employee to this customer."); return; }
-    const effectiveCid = activeCompanyId || form._companyId;
+    const effectiveCid = activeCompanyId || form._companyId || (isEdit ? editCustomer?.companyId : "") || "";
     if (!effectiveCid) { setFormError("Please select a company first."); return; }
     if (isEdit && editCustomer) {
       const payload = { id: editCustomer.id, ...form, credentials: form.credentials, totalRevenue: editCustomer.totalRevenue };
