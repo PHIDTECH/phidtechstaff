@@ -11,6 +11,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
 const COMPANIES_KEY = "phidtech_companies";
+const GROUP_KEY     = "phidtech_group_company";
 
 function lsGet<T>(key: string, fb: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fb; } catch { return fb; }
@@ -89,6 +90,7 @@ export default function ReportsPage() {
   const [session,   setSession]   = useState<Session | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [cid,       setCid]       = useState("");
+  const [groupCid,  setGroupCid]  = useState("");
 
   const [customers,  setCustomers]  = useState<Row[]>([]);
   const [sales,      setSales]      = useState<Row[]>([]);
@@ -107,6 +109,7 @@ export default function ReportsPage() {
       setSession(sess);
       const activeCid = getActiveCid(sess);
       setCid(activeCid);
+      setGroupCid(lsGet<string>(GROUP_KEY, ""));
       setCompanies(lsGet<Company[]>(COMPANIES_KEY, []));
       const results = await Promise.allSettled([
         fetch("/api/customers",        { cache: "no-store" }),
@@ -133,7 +136,8 @@ export default function ReportsPage() {
 
   useEffect(() => { loadData(); }, []);
 
-  const filterByCo = (arr: Row[]) => cid ? arr.filter(x => x.companyId === cid) : arr;
+  const isGroupView = !cid || cid === groupCid;
+  const filterByCo = (arr: Row[]) => isGroupView ? arr : arr.filter(x => x.companyId === cid);
   const [start, end] = getDateRange(preset, from, to);
   const fd = (arr: Row[], ...keys: string[]) =>
     filterByCo(arr).filter(x => inRange(keys.reduce<unknown>((v, k) => v ?? x[k], undefined), start, end));
@@ -142,7 +146,7 @@ export default function ReportsPage() {
   const fSales     = fd(sales,     "date");
   const fMkt       = fd(mktExp,    "submittedAt", "date", "createdAt");
   const fOff       = fd(offExp,    "date");
-  const fLoanInt   = fd(loanInt,   "date");
+  const fLoanInt   = fd(loanInt,   "date", "createdAt");
   const fLoanCust  = fd(loanCust,  "date", "createdAt");
   const fPayroll   = fd(payroll,   "generatedAt");
   const fInvoices  = fd(invoices,  "date", "createdAt", "invoiceDate");
