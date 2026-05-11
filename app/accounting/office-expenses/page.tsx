@@ -209,27 +209,37 @@ export default function OfficeExpensesPage() {
     if (!form.title.trim()) { setFormError("Enter an expense title."); return; }
     if (!form.amount)       { setFormError("Enter an amount."); return; }
     if (!form.date)         { setFormError("Select a date."); return; }
-    if (editItem) {
-      await fetch("/api/office-expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editItem.id, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description, referenceNo: form.referenceNo, date: form.date, recordedBy: form.recordedBy }) });
-    } else {
-      await fetch("/api/office-expenses", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: `oexp-${Date.now()}`,
-          companyId: cidRef.current || activeCompanyId,
-          recordedBy: form.recordedBy || (session?.id ?? ""),
-          title: form.title.trim(),
-          category: form.category,
-          amount: Number(form.amount) || 0,
-          description: form.description,
-          referenceNo: form.referenceNo,
-          status: "pending",
-          date: form.date,
-          createdAt: new Date().toISOString(),
-        }) });
-    }
-    setShowDialog(false);
-    await fetchExpenses();
+    const co = cidRef.current || activeCompanyId;
+    const resolvedCompanyId = co || session?.companyId || groupCompanyId || "group";
+    try {
+      let res: Response;
+      if (editItem) {
+        res = await fetch("/api/office-expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editItem.id, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description, referenceNo: form.referenceNo, date: form.date, recordedBy: form.recordedBy }) });
+      } else {
+        res = await fetch("/api/office-expenses", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: `oexp-${Date.now()}`,
+            companyId: resolvedCompanyId,
+            recordedBy: form.recordedBy || (session?.id ?? ""),
+            title: form.title.trim(),
+            category: form.category,
+            amount: Number(form.amount) || 0,
+            description: form.description,
+            referenceNo: form.referenceNo,
+            status: "pending",
+            date: form.date,
+            createdAt: new Date().toISOString(),
+          }) });
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setFormError(err.error || "Save failed. Please try again.");
+        return;
+      }
+      setShowDialog(false);
+      await fetchExpenses();
+    } catch { setFormError("Network error. Please try again."); }
   };
 
   const updateStatus = async (id: string, newStatus: OfficeExpense["status"]) => {

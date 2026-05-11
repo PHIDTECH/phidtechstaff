@@ -73,7 +73,7 @@ export default function CashFlowPage() {
   const coS    = co ? sales.filter(s => s.companyId === co) : sales;
   const coE    = (co ? expenses.filter(e => e.companyId === co) : expenses).filter(e => e.status === "disbursed" || e.status === "paid" || e.status === "approved");
   const coP    = co ? petty.filter(p => p.companyId === co) : petty;
-  const coOE   = (co ? officeExp.filter(e => e.companyId === co) : officeExp).filter(e => e.status === "paid" || e.status === "approved");
+  const coOE   = (co ? officeExp.filter(e => e.companyId === co) : officeExp).filter(e => ["paid","approved","disbursed","ceo_approved"].includes(e.status));
   const coPay  = (co ? payroll.filter(p => p.companyId === co) : payroll).filter(p => p.status === "paid");
   const coAdv  = (co ? advances.filter(a => a.companyId === co) : advances).filter(a => a.status === "disbursed");
   const coCom  = (co ? commissions.filter(c => c.companyId === co) : commissions).filter(c => c.status === "paid");

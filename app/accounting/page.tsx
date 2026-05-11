@@ -91,7 +91,7 @@ export default function AccountingPage() {
   const totalPaid      = coSales.reduce((s,e) => s + e.paid, 0);
   const totalUnpaid    = totalRevenue - totalPaid;
   const totalExpClaims = coExp.filter(e => e.status === "paid" || e.status === "approved" || e.status === "disbursed").reduce((s,e) => s + e.amount, 0);
-  const totalOfficeExp = coOE.filter(e => e.status === "paid" || e.status === "approved").reduce((s,e) => s + e.amount, 0);
+  const totalOfficeExp = coOE.filter(e => ["paid","approved","disbursed","ceo_approved"].includes(e.status)).reduce((s,e) => s + e.amount, 0);
   const totalSalaries  = coPay.filter(p => p.status === "paid").reduce((s,p) => s + p.netSalary, 0);
   const totalAdvances  = coAdv.filter(a => a.status === "disbursed").reduce((s,a) => s + a.amount, 0);
   const totalComms     = coCom.filter(c => c.status === "paid").reduce((s,c) => s + c.amount, 0);

@@ -104,7 +104,7 @@ function buildRows(sales: Sale[], expenses: Expense[], officeExp: OfficeExpense[
       const ek = period === "daily"   ? (e.date || "").slice(0, 10) :
                  period === "weekly"  ? getKey(new Date((e.date || "").slice(0, 10))) :
                  period === "monthly" ? (e.date || "").slice(0, 7) : (e.date || "").slice(0, 4);
-      return ek === k && (e.status === "paid" || e.status === "approved");
+      return ek === k && ["paid","approved","disbursed","ceo_approved"].includes(e.status);
     }).reduce((acc, e) => acc + e.amount, 0);
 
     const adv = advances.filter(a => {
@@ -175,7 +175,7 @@ export default function ProfitLossPage() {
 
   const totalRev        = coS.reduce((s, e) => s + e.paid, 0);
   const totalExpClaims  = coE.filter(e => e.status === "paid" || e.status === "approved" || e.status === "disbursed").reduce((s,e) => s + e.amount, 0);
-  const totalOfficeExp  = coOE.filter(e => e.status === "paid" || e.status === "approved").reduce((s,e) => s + e.amount, 0);
+  const totalOfficeExp  = coOE.filter(e => ["paid","approved","disbursed","ceo_approved"].includes(e.status)).reduce((s,e) => s + e.amount, 0);
   const totalSalaries   = coP.filter(p => p.status === "paid").reduce((s,p) => s + p.netSalary, 0);
   const totalAdvances   = coAdv.filter(a => a.status === "disbursed").reduce((s,a) => s + a.amount, 0);
   const totalCommissions = coCom.filter(c => c.status === "paid").reduce((s,c) => s + c.amount, 0);
@@ -193,7 +193,7 @@ export default function ProfitLossPage() {
 
   // Category breakdown for office expenses
   const officeByCategory: Record<string, number> = {};
-  coOE.filter(e => e.status === "paid" || e.status === "approved").forEach(e => {
+  coOE.filter(e => ["paid","approved","disbursed","ceo_approved"].includes(e.status)).forEach(e => {
     officeByCategory[e.category] = (officeByCategory[e.category] ?? 0) + e.amount;
   });
   const officeCategories = Object.entries(officeByCategory).sort((a,b) => b[1]-a[1]);
