@@ -50,6 +50,7 @@ const PERM_ROUTES: Record<string, string[]> = {
   admin:           ["/admin", "/notifications"],
   loans:           ["/loans"],
   loan_interest:   ["/accounting/loan-interest"],
+  financial_reports: ["/accounting/financial-reports"],
 };
 
 interface NavItem {
@@ -103,6 +104,7 @@ const ALL_NAV: NavGroup[] = [
       { label: "Invoices",             href: "/invoices",                   icon: FileText     },
       { label: "Petty Cash",           href: "/petty-cash",                 icon: DollarSign   },
       { label: "Interest from Loans",  href: "/accounting/loan-interest",   icon: TrendingUp   },
+      { label: "Financial Reports",     href: "/accounting/financial-reports", icon: BarChart3    },
     ]
   },
   {

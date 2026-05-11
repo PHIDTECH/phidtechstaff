@@ -115,8 +115,9 @@ const ALL_PERMISSIONS = [
   { key: "petty_cash",     label: "Petty Cash" },
   { key: "office_expenses", label: "Office Expenses" },
   { key: "loans",           label: "Loan Customers" },
-  { key: "loan_interest",   label: "Interest from Loans" },
-  { key: "admin",           label: "Admin Panel" },
+  { key: "loan_interest",      label: "Interest from Loans" },
+  { key: "financial_reports",   label: "Financial Reports" },
+  { key: "admin",               label: "Admin Panel" },
 ];
 
 const GROUP_ALL = ALL_PERMISSIONS.map(p => p.key);
