@@ -37,6 +37,9 @@ interface Expense {
   category: string; amount: number; description: string;
   status: "pending" | "manager_approved" | "ceo_approved" | "disbursed" | "rejected" | string;
   submittedAt: string;
+  userName?: string;
+  paymentMode?: "cash" | "bank" | "phone" | string;
+  paymentDetails?: string;
   managerApprovedBy?: string; managerApprovedAt?: string;
   ceoApprovedBy?: string; ceoApprovedAt?: string;
   disbursedBy?: string; disbursedAt?: string;
@@ -48,6 +51,7 @@ const EXPENSE_CATEGORIES = ["Travel","Technology","Marketing","Software","Food",
 const emptyForm = () => ({
   userId: "", title: "", category: "Travel",
   amount: "", description: "",
+  paymentMode: "cash", paymentDetails: "",
 });
 
 const categoryColors: Record<string, string> = {
@@ -189,7 +193,7 @@ export default function ExpensesPage() {
 
   const openEdit = (e: Expense) => {
     setEditItem(e);
-    setForm({ userId: e.userId, title: e.title, category: e.category, amount: String(e.amount), description: e.description });
+    setForm({ userId: e.userId, title: e.title, category: e.category, amount: String(e.amount), description: e.description, paymentMode: e.paymentMode || "cash", paymentDetails: e.paymentDetails || "" });
     setFormError("");
     setShowDialog(true);
   };
@@ -199,12 +203,13 @@ export default function ExpensesPage() {
     if (!form.title.trim())  { setFormError("Enter a claim title."); return; }
     if (!form.amount)        { setFormError("Enter an amount."); return; }
 
+    const selectedStaff = allStaff.find(u => u.id === form.userId);
+    const resolvedName = selectedStaff?.name ?? session?.name ?? "";
     if (editItem) {
       await fetch("/api/expenses", { method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editItem.id, userId: form.userId, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description }) });
+        body: JSON.stringify({ id: editItem.id, userId: form.userId, userName: resolvedName, title: form.title.trim(), category: form.category, amount: Number(form.amount) || 0, description: form.description, paymentMode: form.paymentMode, paymentDetails: form.paymentDetails }) });
     } else {
       // Resolve companyId: prefer selected staff's real company, then active-switched company, then session company
-      const selectedStaff = allStaff.find(u => u.id === form.userId);
       const co = cidRef.current || activeCompanyId;
       const expCompanyId =
         (selectedStaff?.companyId && selectedStaff.companyId !== "group" ? selectedStaff.companyId : null) ||
@@ -215,9 +220,11 @@ export default function ExpensesPage() {
       const newExp: Expense = {
         id: `exp-${Date.now()}`,
         companyId: expCompanyId,
-        userId: form.userId, title: form.title.trim(),
+        userId: form.userId, userName: resolvedName,
+        title: form.title.trim(),
         category: form.category, amount: Number(form.amount) || 0,
         description: form.description, status: "pending",
+        paymentMode: form.paymentMode, paymentDetails: form.paymentDetails,
         submittedAt: new Date().toISOString(),
       };
       await fetch("/api/expenses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newExp) });
@@ -324,7 +331,7 @@ export default function ExpensesPage() {
                           <AvatarFallback className="text-xs">{getInitials(emp?.name ?? "?")}</AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="font-medium text-gray-900 text-sm">{emp?.name ?? <span className="text-gray-400">Unknown</span>}</p>
+                          <p className="font-medium text-gray-900 text-sm">{emp?.name ?? claim.userName ?? <span className="text-gray-400">Unknown</span>}</p>
                           <p className="text-xs text-gray-400">{emp?.department ?? emp?.position ?? ""}</p>
                         </div>
                       </div>
@@ -415,9 +422,9 @@ export default function ExpensesPage() {
             return (
               <div className="space-y-4">
                 <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                  <Avatar className="w-10 h-10"><AvatarFallback>{getInitials(emp?.name ?? "?")}</AvatarFallback></Avatar>
+                  <Avatar className="w-10 h-10"><AvatarFallback>{getInitials(emp?.name ?? viewItem.userName ?? "?")}</AvatarFallback></Avatar>
                   <div>
-                    <p className="font-semibold text-gray-900">{emp?.name ?? "Unknown"}</p>
+                    <p className="font-semibold text-gray-900">{emp?.name ?? viewItem.userName ?? "Unknown"}</p>
                     <p className="text-xs text-gray-500">{emp?.position ?? emp?.department ?? ""}</p>
                   </div>
                 </div>
@@ -440,6 +447,20 @@ export default function ExpensesPage() {
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-gray-400 mb-1">Description</p>
                     <p className="text-sm text-gray-700">{viewItem.description}</p>
+                  </div>
+                )}
+                {viewItem.paymentMode && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <p className="text-xs text-gray-400 mb-1">Payment Mode</p>
+                      <p className="font-semibold text-blue-800 text-sm capitalize">{viewItem.paymentMode}</p>
+                    </div>
+                    {viewItem.paymentDetails && (
+                      <div className="p-3 bg-blue-50 rounded-lg">
+                        <p className="text-xs text-gray-400 mb-1">{viewItem.paymentMode === "bank" ? "Bank Account" : viewItem.paymentMode === "phone" ? "Phone Number" : "Details"}</p>
+                        <p className="font-semibold text-blue-800 text-sm">{viewItem.paymentDetails}</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -534,6 +555,30 @@ export default function ExpensesPage() {
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Description</label>
               <Textarea placeholder="Describe the expense..." rows={3} value={form.description} onChange={e => sf({ description: e.target.value })} />
             </div>
+            {/* Payment Mode */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Payment Mode</label>
+              <Select value={form.paymentMode} onValueChange={v => sf({ paymentMode: v, paymentDetails: "" })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">💵 Cash</SelectItem>
+                  <SelectItem value="bank">🏦 Bank Transfer</SelectItem>
+                  <SelectItem value="phone">📱 Mobile Money (Phone)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {(form.paymentMode === "bank" || form.paymentMode === "phone") && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                  {form.paymentMode === "bank" ? "Bank Account Number / Details" : "Phone Number (e.g. M-Pesa / Tigo Pesa)"}
+                </label>
+                <Input
+                  placeholder={form.paymentMode === "bank" ? "e.g. CRDB 0123456789" : "e.g. +255 712 345 678"}
+                  value={form.paymentDetails}
+                  onChange={e => sf({ paymentDetails: e.target.value })}
+                />
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
