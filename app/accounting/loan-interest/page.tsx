@@ -28,12 +28,18 @@ interface Session { id: string; name: string; role: string; position?: string; i
 interface Company { id: string; name: string; }
 interface LoanCustomer {
   id: string; companyId: string; customerName: string; contactPhone?: string;
-  date: string; amountOfLoan: number; interestPerMonth: number; loanPeriod: number; status: string;
+  date: string; amountOfLoan: number; interestPerMonth: number; loanPeriod: number;
+  processingFeeType?: string; processingFee?: number;
+  penaltyFeeType?: string; penaltyFee?: number;
+  status: string;
 }
 interface LoanInterest {
   id: string; loanId?: string; companyId: string; customerName: string;
   date: string; amountOfLoan: number; interestPerMonth: number; loanPeriod: number;
-  interestRevenue: number; status: string; notes?: string; createdAt: string;
+  interestRevenue: number;
+  processingFeeType?: string; processingFee?: number;
+  penaltyFeeType?: string; penaltyFee?: number;
+  status: string; notes?: string; createdAt: string;
 }
 
 const calcInterest = (amount: number, rate: number, period: number) =>
@@ -42,7 +48,9 @@ const calcInterest = (amount: number, rate: number, period: number) =>
 const emptyForm = () => ({
   loanId: "", customerName: "", date: new Date().toISOString().slice(0, 10),
   amountOfLoan: "", interestPerMonth: "", loanPeriod: "", interestRevenue: "",
-  notes: "", status: "pending",
+  processingFeeType: "fixed", processingFee: "",
+  penaltyFeeType: "percent", penaltyFee: "",
+  notes: "", status: "active",
 });
 
 export default function LoanInterestPage() {
@@ -109,16 +117,18 @@ export default function LoanInterestPage() {
     return r.customerName.toLowerCase().includes(q) && (statusFilter === "all" || r.status === statusFilter);
   });
 
-  const totalRevenue  = companyRecords.reduce((s, r) => s + r.interestRevenue, 0);
-  const paidRevenue   = companyRecords.filter(r => r.status === "paid").reduce((s, r) => s + r.interestRevenue, 0);
-  const pendingRevenue= companyRecords.filter(r => r.status === "pending").reduce((s, r) => s + r.interestRevenue, 0);
+  const totalRevenue   = companyRecords.reduce((s, r) => s + r.interestRevenue, 0);
+  const activeRevenue  = companyRecords.filter(r => r.status === "active").reduce((s, r) => s + r.interestRevenue, 0);
+  const paidRevenue    = companyRecords.filter(r => r.status === "paid").reduce((s, r) => s + r.interestRevenue, 0);
+  const pendingRevenue = companyRecords.filter(r => r.status === "pending").reduce((s, r) => s + r.interestRevenue, 0);
 
-  // When a loan is selected from dropdown, auto-fill form fields
+  // When a loan customer is selected from dropdown, auto-fill all fields
   const handleLoanSelect = (loanId: string) => {
+    if (loanId === "none") { sf({ loanId: "", customerName: "", amountOfLoan: "", interestPerMonth: "", loanPeriod: "", interestRevenue: "", processingFeeType: "fixed", processingFee: "", penaltyFeeType: "percent", penaltyFee: "" }); return; }
     const loan = companyLoans.find(l => l.id === loanId);
-    if (!loan) { sf({ loanId: "", customerName: "", amountOfLoan: "", interestPerMonth: "", loanPeriod: "", interestRevenue: "" }); return; }
+    if (!loan) return;
     const rev = calcInterest(loan.amountOfLoan, loan.interestPerMonth, loan.loanPeriod);
-    sf({ loanId, customerName: loan.customerName, amountOfLoan: String(loan.amountOfLoan), interestPerMonth: String(loan.interestPerMonth), loanPeriod: String(loan.loanPeriod), interestRevenue: String(rev) });
+    sf({ loanId, customerName: loan.customerName, amountOfLoan: String(loan.amountOfLoan), interestPerMonth: String(loan.interestPerMonth), loanPeriod: String(loan.loanPeriod), interestRevenue: String(rev), processingFeeType: loan.processingFeeType || "fixed", processingFee: String(loan.processingFee ?? ""), penaltyFeeType: loan.penaltyFeeType || "percent", penaltyFee: String(loan.penaltyFee ?? "") });
   };
 
   // Auto-recalculate when amount/rate/period change
@@ -131,7 +141,7 @@ export default function LoanInterestPage() {
   const openAdd = () => { setEditItem(null); setForm(emptyForm()); setFormError(""); setShowDialog(true); };
   const openEdit = (r: LoanInterest) => {
     setEditItem(r);
-    setForm({ loanId: r.loanId ?? "", customerName: r.customerName, date: r.date, amountOfLoan: String(r.amountOfLoan), interestPerMonth: String(r.interestPerMonth), loanPeriod: String(r.loanPeriod), interestRevenue: String(r.interestRevenue), notes: r.notes ?? "", status: r.status });
+    setForm({ loanId: r.loanId ?? "", customerName: r.customerName, date: r.date, amountOfLoan: String(r.amountOfLoan), interestPerMonth: String(r.interestPerMonth), loanPeriod: String(r.loanPeriod), interestRevenue: String(r.interestRevenue), processingFeeType: r.processingFeeType || "fixed", processingFee: String(r.processingFee ?? ""), penaltyFeeType: r.penaltyFeeType || "percent", penaltyFee: String(r.penaltyFee ?? ""), notes: r.notes ?? "", status: r.status });
     setFormError(""); setShowDialog(true);
   };
 
@@ -147,6 +157,8 @@ export default function LoanInterestPage() {
       amountOfLoan: Number(form.amountOfLoan), interestPerMonth: Number(form.interestPerMonth),
       loanPeriod: Number(form.loanPeriod),
       interestRevenue: Number(form.interestRevenue) || calcInterest(Number(form.amountOfLoan), Number(form.interestPerMonth), Number(form.loanPeriod)),
+      processingFeeType: form.processingFeeType, processingFee: form.processingFee ? Number(form.processingFee) : 0,
+      penaltyFeeType: form.penaltyFeeType, penaltyFee: form.penaltyFee ? Number(form.penaltyFee) : 0,
       loanId: form.loanId || undefined, notes: form.notes, status: form.status,
     };
     try {
@@ -164,9 +176,9 @@ export default function LoanInterestPage() {
     } catch { setFormError("Network error."); }
   };
 
-  const markPaid = async (id: string) => {
-    await fetch("/api/loan-interest", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status: "paid" }) });
-    setRecords(prev => prev.map(r => r.id === id ? { ...r, status: "paid" } : r));
+  const markStatus = async (id: string, status: string) => {
+    await fetch("/api/loan-interest", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status }) });
+    setRecords(prev => prev.map(r => r.id === id ? { ...r, status } : r));
   };
 
   const deleteRecord = async (id: string) => {
@@ -176,7 +188,7 @@ export default function LoanInterestPage() {
   };
 
   const statusBadge = (s: string) => {
-    const m: Record<string,string> = { pending: "bg-yellow-100 text-yellow-800", paid: "bg-green-100 text-green-800" };
+    const m: Record<string,string> = { pending: "bg-yellow-100 text-yellow-800", active: "bg-blue-100 text-blue-800", paid: "bg-green-100 text-green-800" };
     return <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${m[s] ?? "bg-gray-100 text-gray-700"}`}>{s}</span>;
   };
 
@@ -193,9 +205,10 @@ export default function LoanInterestPage() {
         ) : undefined}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard title="Total Interest Revenue" value={formatCurrency(totalRevenue)}   icon={TrendingUp}   iconBg="bg-green-50"  iconColor="text-green-600"  subtitle="All records" />
-        <StatCard title="Paid"                    value={formatCurrency(paidRevenue)}    icon={CheckCircle}  iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle="Collected" />
+        <StatCard title="Active (In Books)"       value={formatCurrency(activeRevenue)}  icon={DollarSign}   iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle="In books of accounts" />
+        <StatCard title="Paid"                    value={formatCurrency(paidRevenue)}    icon={CheckCircle}  iconBg="bg-emerald-50" iconColor="text-emerald-600" subtitle="Collected" />
         <StatCard title="Pending"                 value={formatCurrency(pendingRevenue)} icon={Clock}        iconBg="bg-yellow-50" iconColor="text-yellow-600" subtitle="Outstanding" />
       </div>
 
@@ -210,6 +223,7 @@ export default function LoanInterestPage() {
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
             <SelectItem value="paid">Paid</SelectItem>
           </SelectContent>
         </Select>
@@ -245,7 +259,12 @@ export default function LoanInterestPage() {
                   <div className="flex items-center justify-end gap-1">
                     <Button variant="ghost" size="icon" onClick={() => setViewItem(rec)}><Eye className="w-4 h-4 text-gray-400" /></Button>
                     {canManage && rec.status === "pending" && (
-                      <Button variant="ghost" size="sm" className="text-green-600 text-xs px-2" onClick={() => markPaid(rec.id)}>
+                      <Button variant="ghost" size="sm" className="text-blue-600 text-xs px-2" onClick={() => markStatus(rec.id, "active")}>
+                        <CheckCircle className="w-3.5 h-3.5 mr-1" /> Activate
+                      </Button>
+                    )}
+                    {canManage && rec.status === "active" && (
+                      <Button variant="ghost" size="sm" className="text-green-600 text-xs px-2" onClick={() => markStatus(rec.id, "paid")}>
                         <CheckCircle className="w-3.5 h-3.5 mr-1" /> Mark Paid
                       </Button>
                     )}
@@ -279,6 +298,8 @@ export default function LoanInterestPage() {
                   { label: "Interest/Month",   value: `${viewItem.interestPerMonth}%` },
                   { label: "Loan Period",      value: `${viewItem.loanPeriod} months` },
                   { label: "Interest Revenue", value: formatCurrency(viewItem.interestRevenue) },
+                  { label: "Processing Fee",  value: viewItem.processingFee ? (viewItem.processingFeeType === "percent" ? `${viewItem.processingFee}%` : formatCurrency(viewItem.processingFee)) : "—" },
+                  { label: "Penalty Fee",     value: viewItem.penaltyFee ? (viewItem.penaltyFeeType === "percent" ? `${viewItem.penaltyFee}%` : formatCurrency(viewItem.penaltyFee)) : "—" },
                 ].map(r => (
                   <div key={r.label} className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-gray-400 mb-1">{r.label}</p>
@@ -313,24 +334,21 @@ export default function LoanInterestPage() {
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
-              {/* Loan picker — auto-fills fields */}
-              {!editItem && companyLoans.length > 0 && (
-                <div className="col-span-2">
-                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">Select from Loan Customers (optional)</label>
-                  <Select value={form.loanId || "none"} onValueChange={v => v === "none" ? sf({ loanId: "" }) : handleLoanSelect(v)}>
-                    <SelectTrigger><SelectValue placeholder="Choose a loan to auto-fill..." /></SelectTrigger>
+              <div className="col-span-2">
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Customer Name <span className="text-red-500">*</span></label>
+                {companyLoans.length > 0 ? (
+                  <Select value={form.loanId || "none"} onValueChange={handleLoanSelect}>
+                    <SelectTrigger><SelectValue placeholder="Select loan customer..." /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">— Enter manually —</SelectItem>
-                      {companyLoans.filter(l => l.status === "active").map(l => (
+                      <SelectItem value="none">— Select customer —</SelectItem>
+                      {companyLoans.map(l => (
                         <SelectItem key={l.id} value={l.id}>{l.customerName} — {formatCurrency(l.amountOfLoan)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-              )}
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Customer Name <span className="text-red-500">*</span></label>
-                <Input placeholder="e.g. John Mwalimu" value={form.customerName} onChange={e => sf({ customerName: e.target.value })} />
+                ) : (
+                  <Input placeholder="e.g. John Mwalimu" value={form.customerName} onChange={e => sf({ customerName: e.target.value })} />
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Date <span className="text-red-500">*</span></label>
@@ -358,9 +376,40 @@ export default function LoanInterestPage() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="active">Active (In Books)</SelectItem>
                     <SelectItem value="paid">Paid</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              {/* Processing Fee */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Processing Fee Type</label>
+                <Select value={form.processingFeeType} onValueChange={v => sf({ processingFeeType: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">Fixed Amount (TZS)</SelectItem>
+                    <SelectItem value="percent">Percentage (%)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Processing Fee {form.processingFeeType === "percent" ? "(%)" : "(TZS)"}</label>
+                <Input type="number" step="0.01" placeholder="0" value={form.processingFee} onChange={e => sf({ processingFee: e.target.value })} />
+              </div>
+              {/* Penalty Fee */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Penalty Fee Type</label>
+                <Select value={form.penaltyFeeType} onValueChange={v => sf({ penaltyFeeType: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">Fixed Amount (TZS)</SelectItem>
+                    <SelectItem value="percent">Percentage (%)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Penalty Fee {form.penaltyFeeType === "percent" ? "(%)" : "(TZS)"}</label>
+                <Input type="number" step="0.01" placeholder="0" value={form.penaltyFee} onChange={e => sf({ penaltyFee: e.target.value })} />
               </div>
               {form.interestRevenue && Number(form.interestRevenue) > 0 && (
                 <div className="col-span-2 p-3 bg-green-50 border border-green-200 rounded-lg">

@@ -30,12 +30,16 @@ interface Company { id: string; name: string; }
 interface LoanCustomer {
   id: string; companyId: string; customerName: string; contactPhone?: string;
   date: string; amountOfLoan: number; interestPerMonth: number; loanPeriod: number;
+  processingFeeType?: string; processingFee?: number;
+  penaltyFeeType?: string; penaltyFee?: number;
   status: string; notes?: string; createdAt: string; createdBy?: string;
 }
 
 const emptyForm = () => ({
   customerName: "", contactPhone: "", date: new Date().toISOString().slice(0, 10),
   amountOfLoan: "", interestPerMonth: "", loanPeriod: "", notes: "", status: "active",
+  processingFeeType: "fixed", processingFee: "",
+  penaltyFeeType: "percent", penaltyFee: "",
 });
 
 const calcTotalInterest = (amount: number, rate: number, period: number) =>
@@ -107,7 +111,7 @@ export default function LoansPage() {
   const openAdd = () => { setEditItem(null); setForm(emptyForm()); setFormError(""); setShowDialog(true); };
   const openEdit = (l: LoanCustomer) => {
     setEditItem(l);
-    setForm({ customerName: l.customerName, contactPhone: l.contactPhone ?? "", date: l.date, amountOfLoan: String(l.amountOfLoan), interestPerMonth: String(l.interestPerMonth), loanPeriod: String(l.loanPeriod), notes: l.notes ?? "", status: l.status });
+    setForm({ customerName: l.customerName, contactPhone: l.contactPhone ?? "", date: l.date, amountOfLoan: String(l.amountOfLoan), interestPerMonth: String(l.interestPerMonth), loanPeriod: String(l.loanPeriod), notes: l.notes ?? "", status: l.status, processingFeeType: l.processingFeeType || "fixed", processingFee: String(l.processingFee ?? ""), penaltyFeeType: l.penaltyFeeType || "percent", penaltyFee: String(l.penaltyFee ?? "") });
     setFormError(""); setShowDialog(true);
   };
 
@@ -122,10 +126,10 @@ export default function LoansPage() {
       let res: Response;
       if (editItem) {
         res = await fetch("/api/loans", { method: "PUT", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: editItem.id, customerName: form.customerName.trim(), contactPhone: form.contactPhone, date: form.date, amountOfLoan: Number(form.amountOfLoan), interestPerMonth: Number(form.interestPerMonth), loanPeriod: Number(form.loanPeriod), notes: form.notes, status: form.status }) });
+          body: JSON.stringify({ id: editItem.id, customerName: form.customerName.trim(), contactPhone: form.contactPhone, date: form.date, amountOfLoan: Number(form.amountOfLoan), interestPerMonth: Number(form.interestPerMonth), loanPeriod: Number(form.loanPeriod), notes: form.notes, status: form.status, processingFeeType: form.processingFeeType, processingFee: form.processingFee ? Number(form.processingFee) : 0, penaltyFeeType: form.penaltyFeeType, penaltyFee: form.penaltyFee ? Number(form.penaltyFee) : 0 }) });
       } else {
         res = await fetch("/api/loans", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: `loan-${Date.now()}`, companyId: resolvedCid, customerName: form.customerName.trim(), contactPhone: form.contactPhone, date: form.date, amountOfLoan: Number(form.amountOfLoan), interestPerMonth: Number(form.interestPerMonth), loanPeriod: Number(form.loanPeriod), notes: form.notes, status: form.status, createdAt: new Date().toISOString(), createdBy: session?.id ?? "" }) });
+          body: JSON.stringify({ id: `loan-${Date.now()}`, companyId: resolvedCid, customerName: form.customerName.trim(), contactPhone: form.contactPhone, date: form.date, amountOfLoan: Number(form.amountOfLoan), interestPerMonth: Number(form.interestPerMonth), loanPeriod: Number(form.loanPeriod), notes: form.notes, status: form.status, processingFeeType: form.processingFeeType, processingFee: form.processingFee ? Number(form.processingFee) : 0, penaltyFeeType: form.penaltyFeeType, penaltyFee: form.penaltyFee ? Number(form.penaltyFee) : 0, createdAt: new Date().toISOString(), createdBy: session?.id ?? "" }) });
       }
       if (!res.ok) { const e = await res.json().catch(() => ({})); setFormError(e.error || "Save failed."); return; }
       const saved = await res.json().catch(() => null);
@@ -244,6 +248,8 @@ export default function LoansPage() {
                   { label: "Rate / Month",   value: `${viewItem.interestPerMonth}%` },
                   { label: "Loan Period",    value: `${viewItem.loanPeriod} months` },
                   { label: "Interest Revenue", value: formatCurrency(calcTotalInterest(viewItem.amountOfLoan, viewItem.interestPerMonth, viewItem.loanPeriod)) },
+                  { label: "Processing Fee",  value: viewItem.processingFee ? `${viewItem.processingFeeType === "percent" ? viewItem.processingFee + "%" : formatCurrency(viewItem.processingFee)}` : "—" },
+                  { label: "Penalty Fee",     value: viewItem.penaltyFee ? `${viewItem.penaltyFeeType === "percent" ? viewItem.penaltyFee + "%" : formatCurrency(viewItem.penaltyFee)}` : "—" },
                 ].map(r => (
                   <div key={r.label} className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-gray-400 mb-1">{r.label}</p>
@@ -312,6 +318,36 @@ export default function LoansPage() {
                     <SelectItem value="defaulted">Defaulted</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              {/* Processing Fee */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Processing Fee Type</label>
+                <Select value={form.processingFeeType} onValueChange={v => sf({ processingFeeType: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">Fixed Amount (TZS)</SelectItem>
+                    <SelectItem value="percent">Percentage (%)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Processing Fee {form.processingFeeType === "percent" ? "(%)" : "(TZS)"}</label>
+                <Input type="number" step="0.01" placeholder="0" value={form.processingFee} onChange={e => sf({ processingFee: e.target.value })} />
+              </div>
+              {/* Penalty Fee */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Penalty Fee Type</label>
+                <Select value={form.penaltyFeeType} onValueChange={v => sf({ penaltyFeeType: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">Fixed Amount (TZS)</SelectItem>
+                    <SelectItem value="percent">Percentage (%)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Penalty Fee {form.penaltyFeeType === "percent" ? "(%)" : "(TZS)"}</label>
+                <Input type="number" step="0.01" placeholder="0" value={form.penaltyFee} onChange={e => sf({ penaltyFee: e.target.value })} />
               </div>
               {form.amountOfLoan && form.interestPerMonth && form.loanPeriod && (
                 <div className="col-span-2 p-3 bg-green-50 border border-green-200 rounded-lg">
