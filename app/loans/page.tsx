@@ -92,8 +92,9 @@ export default function LoansPage() {
   const _or = (session?.role ?? "").toLowerCase();
   const _op = (session?.position ?? "").toLowerCase();
   const GRP = ["group_ceo","group_cfo","group_manager","group_accountant","group_controller"];
-  const isGroupUser = session?.companyId === "group" || GRP.includes(_or) || GRP.includes(_op);
-  const canManage   = session?.isSuperAdmin || isGroupUser || ["admin","manager","accountant"].includes(_or) || ["admin","manager","accountant"].includes(_op);
+  const isGroupUser      = session?.companyId === "group" || GRP.includes(_or) || GRP.includes(_op);
+  const canManage         = session?.isSuperAdmin || isGroupUser || ["admin","manager","accountant"].includes(_or) || ["admin","manager","accountant"].includes(_op);
+  const canViewFinancials = session?.isSuperAdmin || isGroupUser;
 
   const companyLoans = (session?.isSuperAdmin && !cid) ? loans : (cid ? loans.filter(l => l.companyId === cid) : loans);
   const getCompanyName = (id: string) => companies.find(c => c.id === id)?.name ?? id;
@@ -146,7 +147,7 @@ export default function LoansPage() {
   };
 
   const statusBadge = (s: string) => {
-    const m: Record<string, string> = { active: "bg-green-100 text-green-800", completed: "bg-blue-100 text-blue-800", defaulted: "bg-red-100 text-red-800" };
+    const m: Record<string, string> = { pending: "bg-yellow-100 text-yellow-800", active: "bg-green-100 text-green-800", completed: "bg-blue-100 text-blue-800", defaulted: "bg-red-100 text-red-800" };
     return <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${m[s] ?? "bg-gray-100 text-gray-700"}`}>{s}</span>;
   };
 
@@ -163,11 +164,11 @@ export default function LoansPage() {
         ) : undefined}
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Total Loans"       value={companyLoans.length}         icon={Users}     iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle="All records" />
-        <StatCard title="Active Loans"      value={activeCount}                  icon={CheckCircle} iconBg="bg-green-50" iconColor="text-green-600" subtitle="Currently active" />
-        <StatCard title="Total Capital"     value={formatCurrency(totalCapital)} icon={DollarSign} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="Total loaned out" />
-        <StatCard title="Expected Interest" value={formatCurrency(totalInterest)} icon={TrendingUp} iconBg="bg-orange-50" iconColor="text-orange-600" subtitle="Total interest revenue" />
+      <div className={`grid gap-4 mb-6 ${canViewFinancials ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2"}`}>
+        <StatCard title="Total Loans"  value={companyLoans.length} icon={Users}     iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle="All records" />
+        <StatCard title="Active Loans" value={activeCount}          icon={CheckCircle} iconBg="bg-green-50" iconColor="text-green-600" subtitle="Currently active" />
+        {canViewFinancials && <StatCard title="Total Capital"     value={formatCurrency(totalCapital)}  icon={DollarSign} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="Total loaned out" />}
+        {canViewFinancials && <StatCard title="Expected Interest" value={formatCurrency(totalInterest)} icon={TrendingUp}  iconBg="bg-orange-50" iconColor="text-orange-600" subtitle="Total interest revenue" />}
       </div>
 
       {/* Filters */}
@@ -180,6 +181,7 @@ export default function LoansPage() {
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="completed">Completed</SelectItem>
             <SelectItem value="defaulted">Defaulted</SelectItem>
@@ -193,17 +195,17 @@ export default function LoansPage() {
             <TableRow className="bg-gray-50">
               <TableHead>Customer Name</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead>Loan Amount</TableHead>
-              <TableHead>Rate/Month</TableHead>
-              <TableHead>Period</TableHead>
-              <TableHead>Total Interest</TableHead>
+              {canViewFinancials && <TableHead>Loan Amount</TableHead>}
+              {canViewFinancials && <TableHead>Rate/Month</TableHead>}
+              {canViewFinancials && <TableHead>Period</TableHead>}
+              {canViewFinancials && <TableHead>Total Interest</TableHead>}
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-10 text-gray-400">No loan records found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={canViewFinancials ? 8 : 4} className="text-center py-10 text-gray-400">No loan records found.</TableCell></TableRow>
             ) : filtered.map(loan => (
               <TableRow key={loan.id} className="hover:bg-gray-50">
                 <TableCell>
@@ -211,10 +213,10 @@ export default function LoansPage() {
                   {loan.contactPhone && <p className="text-xs text-gray-400">{loan.contactPhone}</p>}
                 </TableCell>
                 <TableCell className="text-gray-600 text-sm">{formatDate(loan.date)}</TableCell>
-                <TableCell className="font-semibold text-gray-900">{formatCurrency(loan.amountOfLoan)}</TableCell>
-                <TableCell className="text-gray-600">{loan.interestPerMonth}%</TableCell>
-                <TableCell className="text-gray-600">{loan.loanPeriod} mo.</TableCell>
-                <TableCell className="font-semibold text-green-700">{formatCurrency(calcTotalInterest(loan.amountOfLoan, loan.interestPerMonth, loan.loanPeriod))}</TableCell>
+                {canViewFinancials && <TableCell className="font-semibold text-gray-900">{formatCurrency(loan.amountOfLoan)}</TableCell>}
+                {canViewFinancials && <TableCell className="text-gray-600">{loan.interestPerMonth}%</TableCell>}
+                {canViewFinancials && <TableCell className="text-gray-600">{loan.loanPeriod} mo.</TableCell>}
+                {canViewFinancials && <TableCell className="font-semibold text-green-700">{formatCurrency(calcTotalInterest(loan.amountOfLoan, loan.interestPerMonth, loan.loanPeriod))}</TableCell>}
                 <TableCell>{statusBadge(loan.status)}</TableCell>
                 <TableCell>
                   <div className="flex items-center justify-end gap-1">
@@ -242,15 +244,15 @@ export default function LoansPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: "Date",           value: formatDate(viewItem.date) },
-                  { label: "Status",         value: viewItem.status },
-                  { label: "Loan Amount",    value: formatCurrency(viewItem.amountOfLoan) },
-                  { label: "Rate / Month",   value: `${viewItem.interestPerMonth}%` },
-                  { label: "Loan Period",    value: `${viewItem.loanPeriod} months` },
-                  { label: "Interest Revenue", value: formatCurrency(calcTotalInterest(viewItem.amountOfLoan, viewItem.interestPerMonth, viewItem.loanPeriod)) },
-                  { label: "Processing Fee",  value: viewItem.processingFee ? `${viewItem.processingFeeType === "percent" ? viewItem.processingFee + "%" : formatCurrency(viewItem.processingFee)}` : "—" },
-                  { label: "Penalty Fee",     value: viewItem.penaltyFee ? `${viewItem.penaltyFeeType === "percent" ? viewItem.penaltyFee + "%" : formatCurrency(viewItem.penaltyFee)}` : "—" },
-                ].map(r => (
+                  { label: "Date",   value: formatDate(viewItem.date), restricted: false },
+                  { label: "Status", value: viewItem.status,           restricted: false },
+                  { label: "Loan Amount",      value: formatCurrency(viewItem.amountOfLoan),                                                                                                        restricted: true  },
+                  { label: "Rate / Month",     value: `${viewItem.interestPerMonth}%`,                                                                                                              restricted: true  },
+                  { label: "Loan Period",      value: `${viewItem.loanPeriod} months`,                                                                                                             restricted: true  },
+                  { label: "Interest Revenue", value: formatCurrency(calcTotalInterest(viewItem.amountOfLoan, viewItem.interestPerMonth, viewItem.loanPeriod)),                                    restricted: true  },
+                  { label: "Processing Fee",   value: viewItem.processingFee ? `${viewItem.processingFeeType === "percent" ? viewItem.processingFee + "%" : formatCurrency(viewItem.processingFee)}` : "—", restricted: true },
+                  { label: "Penalty Fee",      value: viewItem.penaltyFee    ? `${viewItem.penaltyFeeType    === "percent" ? viewItem.penaltyFee    + "%" : formatCurrency(viewItem.penaltyFee)}`    : "—", restricted: true },
+                ].filter(r => !r.restricted || canViewFinancials).map(r => (
                   <div key={r.label} className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-gray-400 mb-1">{r.label}</p>
                     <p className="font-semibold text-gray-900 text-sm">{r.value}</p>
@@ -313,6 +315,7 @@ export default function LoansPage() {
                 <Select value={form.status} onValueChange={v => sf({ status: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
                     <SelectItem value="defaulted">Defaulted</SelectItem>
