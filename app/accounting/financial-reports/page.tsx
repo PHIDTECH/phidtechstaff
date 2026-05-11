@@ -118,11 +118,15 @@ export default function ReportsPage() {
         fetch("/api/payroll",          { cache: "no-store" }),
         fetch("/api/invoices",         { cache: "no-store" }),
         fetch("/api/petty-cash",       { cache: "no-store" }),
+        fetch("/api/users",            { cache: "no-store" }),
       ]);
       const parse = async (r: PromiseSettledResult<Response>) => r.status === "fulfilled" && r.value.ok ? r.value.json().catch(() => []) : [];
-      const [d1,d2,d3,d4,d5,d6,d7,d8,d9] = await Promise.all(results.map(parse));
-      setCustomers(d1); setSales(d2);   setMktExp(d3);  setOffExp(d4);
-      setLoanInt(d5);   setLoanCust(d6); setPayroll(d7); setInvoices(d8); setPettyCash(d9);
+      const [d1,d2,d3,d4,d5,d6,d7,d8,d9,d10] = await Promise.all(results.map(parse));
+      setCustomers(d1); setSales(d2); setMktExp(d3); setOffExp(d4);
+      setLoanInt(d5);   setLoanCust(d6); setInvoices(d8); setPettyCash(d9);
+      // Enrich payroll rows with staff name from users list
+      const userMap = new Map<string, string>((d10 as Row[]).map(u => [String(u.id), String(u.name)]));
+      setPayroll((d7 as Row[]).map(p => ({ ...p, staffName: userMap.get(String(p.staffId)) || String(p.staffId) })));
     } catch {}
     setLoading(false);
   };
@@ -136,7 +140,7 @@ export default function ReportsPage() {
 
   const fCustomers = fd(customers, "date", "createdAt");
   const fSales     = fd(sales,     "date");
-  const fMkt       = fd(mktExp,    "date", "createdAt");
+  const fMkt       = fd(mktExp,    "submittedAt", "date", "createdAt");
   const fOff       = fd(offExp,    "date");
   const fLoanInt   = fd(loanInt,   "date");
   const fLoanCust  = fd(loanCust,  "date", "createdAt");
@@ -207,7 +211,7 @@ export default function ReportsPage() {
       { key: "description", label: "Description"                                                            },
     ],
     payroll: [
-      { key: "staffId",     label: "Staff ID"                                                                },
+      { key: "staffName",   label: "Staff Name"                                                              },
       { key: "month",       label: "Month"                                                                   },
       { key: "year",        label: "Year"                                                                    },
       { key: "basicSalary", label: "Basic Salary",  render: r => formatCurrency(Number(r.basicSalary || 0))},
