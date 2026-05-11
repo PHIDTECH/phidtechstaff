@@ -164,11 +164,18 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
+function readSessionSync(): {id:string;name:string;role:string;position:string;isSuperAdmin:boolean;companyId?:string;permissions?:string[]} | null {
+  try { const s = localStorage.getItem(SESSION_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
+}
+function readActiveCidSync(): string {
+  try { const raw = localStorage.getItem("phidtech_active_company") ?? ""; return raw && raw !== '""' ? raw.replace(/^"|"$/g, "") : ""; } catch { return ""; }
+}
+
 export default function Sidebar({ collapsed, onToggle, mobile, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const [session, setSession] = useState<{id:string;name:string;role:string;position:string;isSuperAdmin:boolean;companyId?:string;permissions?:string[]} | null>(null);
+  const [session, setSession] = useState<{id:string;name:string;role:string;position:string;isSuperAdmin:boolean;companyId?:string;permissions?:string[]} | null>(readSessionSync);
   const [myCompanyName, setMyCompanyName] = useState("");
-  const [activeCompanyId, setActiveCompanyId] = useState("");
+  const [activeCompanyId, setActiveCompanyId] = useState(readActiveCidSync);
 
   useEffect(() => {
     const load = async () => {

@@ -237,8 +237,12 @@ export default function OfficeExpensesPage() {
         setFormError(err.error || "Save failed. Please try again.");
         return;
       }
+      const saved = await res.json().catch(() => null);
       setShowDialog(false);
-      await fetchExpenses();
+      if (saved && !editItem) {
+        setExpenses(prev => [...prev, saved as OfficeExpense]);
+      }
+      fetchExpenses();
     } catch { setFormError("Network error. Please try again."); }
   };
 
