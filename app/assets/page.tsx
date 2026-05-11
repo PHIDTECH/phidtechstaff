@@ -21,6 +21,7 @@ const SESSION_KEY   = "phidtech_session";
 const ACTIVE_KEY    = "phidtech_active_company";
 const USERS_KEY     = "phidtech_users";
 const BRANCHES_KEY  = "phidtech_branches";
+const GROUP_KEY     = "phidtech_group_company";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -63,6 +64,8 @@ export default function AssetsPage() {
   const [branches, setBranches]     = useState<Branch[]>([]);
   const [cid, setCid]               = useState("");
   const cidRef                      = useRef("");
+  const [groupCid, setGroupCid]     = useState("");
+  const groupCidRef                 = useRef("");
   const [search, setSearch]         = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [showAddDialog, setShowAddDialog]   = useState(false);
@@ -79,6 +82,8 @@ export default function AssetsPage() {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const c = getActiveCid(sess);
     setCid(c); cidRef.current = c;
+    const gc = lsStr(GROUP_KEY).replace(/^"|"$/g, "");
+    setGroupCid(gc); groupCidRef.current = gc;
     // Load staff
     try {
       const ur = await fetch("/api/users", { cache: "no-store" });
@@ -103,7 +108,9 @@ export default function AssetsPage() {
   useEffect(() => { reload(); }, []); // eslint-disable-line
 
   const co = cidRef.current || cid;
-  const companyAssets = (co ? assetList.filter(a => a.companyId === co) : assetList)
+  const _gc = groupCidRef.current || groupCid;
+  const isGroupView = !co || co === "group" || (!!_gc && co === _gc);
+  const companyAssets = (isGroupView ? assetList : assetList.filter(a => a.companyId === co))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const coStaff = co ? staffList.filter(u => u.companyId === co) : staffList;
   const categories = [...new Set(companyAssets.map(a => a.category))];
@@ -149,7 +156,8 @@ export default function AssetsPage() {
         const updated = { ...editItem, ...form };
         await fetch("/api/assets", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updated) });
       } else {
-        const newAsset = { ...form, id: `AST-${Date.now().toString().slice(-6)}`, companyId: cidRef.current || cid, createdAt: new Date().toISOString() };
+        const effectiveCid = cidRef.current || cid || groupCidRef.current || groupCid || "group";
+        const newAsset = { ...form, id: `AST-${Date.now().toString().slice(-6)}`, companyId: effectiveCid, createdAt: new Date().toISOString() };
         await fetch("/api/assets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newAsset) });
       }
     } finally {
