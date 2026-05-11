@@ -144,15 +144,19 @@ export default function AssetsPage() {
   const saveForm = async () => {
     if (!form.name.trim()) { setFormError("Asset name is required."); return; }
     if (!form.purchaseDate) { setFormError("Purchase date is required."); return; }
-    if (editItem) {
-      const updated = { ...editItem, ...form };
-      await fetch("/api/assets", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updated) });
-    } else {
-      const newAsset = { ...form, id: `AST-${Date.now().toString().slice(-6)}`, companyId: cidRef.current || cid, createdAt: new Date().toISOString() };
-      await fetch("/api/assets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newAsset) });
+    try {
+      if (editItem) {
+        const updated = { ...editItem, ...form };
+        await fetch("/api/assets", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updated) });
+      } else {
+        const newAsset = { ...form, id: `AST-${Date.now().toString().slice(-6)}`, companyId: cidRef.current || cid, createdAt: new Date().toISOString() };
+        await fetch("/api/assets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newAsset) });
+      }
+    } finally {
+      setShowAddDialog(false);
+      setEditItem(null);
+      await reload();
     }
-    setShowAddDialog(false);
-    await reload();
   };
 
   return (
