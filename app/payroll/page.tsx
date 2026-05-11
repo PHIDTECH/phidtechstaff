@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DollarSign, Plus, Search, CheckCircle, Download, Eye, FileText, AlertCircle, Building2, Edit, Trash2, Printer, Sheet } from "lucide-react";
+import { DollarSign, Plus, Search, CheckCircle, Download, Eye, FileText, AlertCircle, Building2, Edit, Trash2, Printer, FileSpreadsheet } from "lucide-react";
 import { formatCurrency, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -821,7 +821,7 @@ export default function PayrollPage() {
             {alreadyRun && (
               <>
                 <Button variant="outline" size="sm" onClick={exportCSV} title="Export to CSV/Excel">
-                  <Sheet className="w-4 h-4 mr-2" /> Export CSV
+                  <FileSpreadsheet className="w-4 h-4 mr-2" /> Export CSV
                 </Button>
                 <Button variant="outline" size="sm" onClick={printReport} title="Print / Save as PDF">
                   <Printer className="w-4 h-4 mr-2" /> Print PDF

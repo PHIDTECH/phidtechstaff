@@ -20,6 +20,7 @@ const EXP_KEY        = "phidtech_expenses";
 const OFFICE_EXP_KEY = "phidtech_office_expenses";
 const PAYROLL_KEY    = "phidtech_payroll";
 const COMPANIES_KEY  = "phidtech_companies";
+const GROUP_KEY      = "phidtech_group_company";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -138,6 +139,7 @@ export default function ProfitLossPage() {
   const [advances, setAdvances]       = useState<Advance[]>([]);
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [cid, setCid]                 = useState("");
+  const [groupCid, setGroupCid]       = useState("");
   const cidRef                        = useRef("");
   const [period, setPeriod]           = useState<Period>("monthly");
 
@@ -145,6 +147,7 @@ export default function ProfitLossPage() {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
     const c = getActiveCid(sess);
     setCid(c); cidRef.current = c;
+    setGroupCid(lsStr(GROUP_KEY));
     try { const r = await fetch("/api/accounting/sales",  { cache: "no-store" }); if (r.ok) setSales(await r.json());        else setSales(lsGet<Sale[]>(SALES_KEY, [])); }         catch { setSales(lsGet<Sale[]>(SALES_KEY, [])); }
     try { const r = await fetch("/api/expenses",          { cache: "no-store" }); if (r.ok) setExpenses(await r.json());    else setExpenses(lsGet<Expense[]>(EXP_KEY, [])); }      catch { setExpenses(lsGet<Expense[]>(EXP_KEY, [])); }
     try { const r = await fetch("/api/office-expenses",   { cache: "no-store" }); if (r.ok) setOfficeExp(await r.json());  else setOfficeExp(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, [])); } catch { setOfficeExp(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, [])); }
@@ -163,13 +166,15 @@ export default function ProfitLossPage() {
     };
   }, []);  // eslint-disable-line
 
-  const co    = cidRef.current || cid;
-  const coS   = co ? sales.filter(s => s.companyId === co) : sales;
-  const coE   = co ? expenses.filter(e => e.companyId === co) : expenses;
-  const coOE  = co ? officeExpenses.filter(e => e.companyId === co) : officeExpenses;
-  const coP   = co ? payroll.filter(p => p.companyId === co) : payroll;
-  const coAdv = co ? advances.filter(a => a.companyId === co) : advances;
-  const coCom = co ? commissions.filter(c => c.companyId === co) : commissions;
+  const co       = cidRef.current || cid;
+  const isGroupV = !co || co === groupCid;
+  const byco     = <T extends { companyId: string }>(arr: T[]) => isGroupV ? arr : arr.filter(x => x.companyId === co);
+  const coS   = byco(sales);
+  const coE   = byco(expenses);
+  const coOE  = byco(officeExpenses);
+  const coP   = byco(payroll);
+  const coAdv = byco(advances);
+  const coCom = byco(commissions);
 
   const rows  = buildRows(coS, coE, coOE, coP, coAdv, coCom, period);
 
