@@ -98,6 +98,7 @@ export default function TasksPage() {
   const [allStaffList, setAllStaffList] = useState<StaffUser[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [custSearch, setCustSearch] = useState("");
   const [companiesList, setCompaniesList] = useState<{id:string;name:string}[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -793,18 +794,34 @@ export default function TasksPage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Customer (optional)</label>
-                <Select value={form.customerId || undefined} onValueChange={v => setForm(f => ({...f, customerId: v}))}>
+                <Select value={form.customerId || undefined} onValueChange={v => { setForm(f => ({...f, customerId: v})); setCustSearch(""); }}>
                   <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
-                  <SelectContent className="max-h-52">
-                    <SelectItem value="__none">None</SelectItem>
-                    {formCustomers.map(c => (
-                      <SelectItem key={c.id} value={c.id}>
-                        <div className="flex items-center gap-2">
-                          <span>{c.name}</span>
-                          {c.company && <span className="text-gray-400 text-xs">· {c.company}</span>}
-                        </div>
-                      </SelectItem>
-                    ))}
+                  <SelectContent className="max-h-72 p-0">
+                    {/* Search box — stopPropagation prevents Select from hijacking keystrokes */}
+                    <div className="px-2 pt-2 pb-1 border-b border-gray-100" onKeyDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+                      <Input
+                        placeholder="Search customer..."
+                        value={custSearch}
+                        onChange={e => setCustSearch(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="overflow-y-auto max-h-48">
+                      <SelectItem value="__none">None</SelectItem>
+                      {formCustomers.filter(c =>
+                        !custSearch ||
+                        c.name.toLowerCase().includes(custSearch.toLowerCase()) ||
+                        (c.company ?? "").toLowerCase().includes(custSearch.toLowerCase()) ||
+                        (c.phone ?? "").includes(custSearch)
+                      ).map(c => (
+                        <SelectItem key={c.id} value={c.id}>
+                          <div className="flex items-center gap-2">
+                            <span>{c.name}</span>
+                            {c.company && <span className="text-gray-400 text-xs">· {c.company}</span>}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </div>
                   </SelectContent>
                 </Select>
               </div>
