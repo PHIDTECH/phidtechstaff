@@ -167,11 +167,36 @@ export default function ReportsPage() {
     ...fLoanInt.map(l => ({ source: "Loan Interest", customerName: l.customerName, date: l.date, amount: l.interestRevenue, status: l.status })),
   ];
 
+  // ── Merge regular customers + loan customers for All Customers report ──
+  const loanCustNorm: Row[] = filterByCo(loanCust)
+    .filter(l => inRange(l.date || l.createdAt, start, end))
+    .map(l => ({
+      id:             l.id,
+      companyId:      l.companyId,
+      name:           l.customerName,
+      company:        "",
+      type:           l.type ?? "loan",
+      customerType:   "Loan Customer",
+      phone:          l.contactPhone ?? "",
+      email:          "",
+      serviceProduct: `Loan — ${l.loanPeriod ?? ""} mo.`,
+      status:         l.status,
+      date:           l.date || l.createdAt || "",
+      createdAt:      l.createdAt,
+    }));
+
+  const existingNames = new Set(fCustomers.map(c => String(c.name ?? "").toLowerCase().trim()));
+  const newLoanRows   = loanCustNorm.filter(l => !existingNames.has(String(l.name).toLowerCase().trim()));
+  const fAllCustomers = [
+    ...fCustomers.map(c => ({ ...c, customerType: c.customerType ?? "Sales Customer" })),
+    ...newLoanRows,
+  ];
+
   const COLUMNS: Record<ReportType, Col[]> = {
     customers: [
       { key: "name",           label: "Customer Name"                                                        },
       { key: "company",        label: "Company"                                                              },
-      { key: "type",           label: "Type"                                                                 },
+      { key: "customerType",   label: "Customer Type"                                                        },
       { key: "phone",          label: "Phone"                                                                },
       { key: "email",          label: "Email"                                                                },
       { key: "serviceProduct", label: "Service / Product"                                                    },
@@ -268,7 +293,7 @@ export default function ReportsPage() {
   };
 
   const DATA: Record<ReportType, Row[]> = {
-    customers:          fCustomers,
+    customers:          fAllCustomers,
     sales:              fSales,
     marketing_expenses: fMkt,
     office_expenses:    fOff,
