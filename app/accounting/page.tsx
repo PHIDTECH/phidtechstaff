@@ -12,7 +12,7 @@ import {
   BookOpen, TrendingUp, TrendingDown, DollarSign, BarChart3,
   ShoppingCart, ArrowRight, CreditCard, Activity,
 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatCompact } from "@/lib/utils";
 import { getActiveCid } from "@/lib/getActiveCid";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -193,10 +193,10 @@ export default function AccountingPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Today&apos;s Sales"  value={formatCurrency(dailySales)}   icon={DollarSign}   iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle="Revenue" />
-        <StatCard title="Monthly Revenue" value={formatCurrency(monthlySales)} icon={TrendingUp}   iconBg="bg-green-50"  iconColor="text-green-600"  subtitle="This month" />
-        <StatCard title="Yearly Revenue"  value={formatCurrency(yearlySales)}  icon={BarChart3}    iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="This year" />
-        <StatCard title="Net Profit (All)" value={formatCurrency(netProfit)}   icon={CreditCard}   iconBg={netProfit >= 0 ? "bg-emerald-50" : "bg-red-50"} iconColor={netProfit >= 0 ? "text-emerald-600" : "text-red-600"} subtitle="Collected − Expenses" />
+        <StatCard title="Today&apos;s Sales"  value={formatCompact(dailySales)}   icon={DollarSign}   iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle="Revenue" />
+        <StatCard title="Monthly Revenue" value={formatCompact(monthlySales)} icon={TrendingUp}   iconBg="bg-green-50"  iconColor="text-green-600"  subtitle="This month" />
+        <StatCard title="Yearly Revenue"  value={formatCompact(yearlySales)}  icon={BarChart3}    iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="This year" />
+        <StatCard title="Net Profit (All)" value={formatCompact(netProfit)}   icon={CreditCard}   iconBg={netProfit >= 0 ? "bg-emerald-50" : "bg-red-50"} iconColor={netProfit >= 0 ? "text-emerald-600" : "text-red-600"} subtitle="Collected − Expenses" />
       </div>
 
       {/* Revenue vs Expenses chart */}
@@ -275,7 +275,7 @@ export default function AccountingPage() {
           ].map(r => (
             <div key={r.label} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
               <span className="text-sm text-gray-600">{r.label}</span>
-              <span className={`font-bold text-sm ${r.color}`}>{formatCurrency(r.value)}</span>
+              <span className={`font-bold text-sm ${r.color}`}>{formatCompact(r.value)}</span>
             </div>
           ))}
           <div className="flex gap-2 mt-2">

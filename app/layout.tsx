@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   title: "PHIDTECH MS – Management System",
   description: "Unified Business Operations Management System by Phid Technologies",
   verification: {
-    google: "-X1kmL0billTN7GLypZVnk33a9FUuq-p92AUUpt2ypA",
+    google: "eHvM752gDIKQSJaNz4yW4xNQFFcSKLU3JEyXW-XGgC4",
   },
 };
 
