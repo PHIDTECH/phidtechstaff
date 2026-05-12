@@ -40,6 +40,7 @@ const emptyForm = () => ({
   amountOfLoan: "", interestPerMonth: "", loanPeriod: "", notes: "", status: "active",
   processingFeeType: "fixed", processingFee: "",
   penaltyFeeType: "percent", penaltyFee: "",
+  formCompanyId: "",
 });
 
 const calcTotalInterest = (amount: number, rate: number, period: number) =>
@@ -112,7 +113,7 @@ export default function LoansPage() {
   const openAdd = () => { setEditItem(null); setForm(emptyForm()); setFormError(""); setShowDialog(true); };
   const openEdit = (l: LoanCustomer) => {
     setEditItem(l);
-    setForm({ customerName: l.customerName, contactPhone: l.contactPhone ?? "", date: l.date, amountOfLoan: String(l.amountOfLoan), interestPerMonth: String(l.interestPerMonth), loanPeriod: String(l.loanPeriod), notes: l.notes ?? "", status: l.status, processingFeeType: l.processingFeeType || "fixed", processingFee: String(l.processingFee ?? ""), penaltyFeeType: l.penaltyFeeType || "percent", penaltyFee: String(l.penaltyFee ?? "") });
+    setForm({ customerName: l.customerName, contactPhone: l.contactPhone ?? "", date: l.date, amountOfLoan: String(l.amountOfLoan), interestPerMonth: String(l.interestPerMonth), loanPeriod: String(l.loanPeriod), notes: l.notes ?? "", status: l.status, processingFeeType: l.processingFeeType || "fixed", processingFee: String(l.processingFee ?? ""), penaltyFeeType: l.penaltyFeeType || "percent", penaltyFee: String(l.penaltyFee ?? ""), formCompanyId: l.companyId });
     setFormError(""); setShowDialog(true);
   };
 
@@ -122,7 +123,7 @@ export default function LoansPage() {
     if (!form.interestPerMonth)    { setFormError("Enter interest rate per month."); return; }
     if (!form.loanPeriod)          { setFormError("Enter loan period."); return; }
     const co = cidRef.current || activeCompanyId;
-    const resolvedCid = co || session?.companyId || groupCompanyId || "group";
+    const resolvedCid = form.formCompanyId || co || session?.companyId || groupCompanyId || "group";
     try {
       let res: Response;
       if (editItem) {
@@ -287,6 +288,19 @@ export default function LoansPage() {
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
+              {(!cid || session?.isSuperAdmin) && !editItem && (
+                <div className="col-span-2">
+                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">Company <span className="text-red-500">*</span></label>
+                  <Select value={form.formCompanyId || cid} onValueChange={v => sf({ formCompanyId: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+                    <SelectContent>
+                      {companies.filter(c => c.id !== groupCompanyId).map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="col-span-2">
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Customer Name <span className="text-red-500">*</span></label>
                 <Input placeholder="e.g. John Mwalimu" value={form.customerName} onChange={e => sf({ customerName: e.target.value })} />

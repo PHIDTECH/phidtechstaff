@@ -168,8 +168,13 @@ export default function DashboardPage() {
     const coPay     = payroll.filter(p => p.companyId === co.id && p.status === "paid");
     const coLInt    = loanInt.filter(l => l.companyId === co.id && LINT_PAID.includes(l.status));
     const coLoans   = loans.filter(l => l.companyId === co.id);
+    // Also count active loans linked via loanId to loanInt records of this company
+    const linkedLoanIds = new Set(coLInt.map(l => l.loanId).filter(Boolean));
+    const linkedLoans   = loans.filter(l => linkedLoanIds.has(l.id) && !coLoans.find(cl => cl.id === l.id));
     const salesRev  = coSales.reduce((s, e) => s + e.paid, 0);
-    const lintRev   = coLInt.reduce((s, l) => s + l.interestRevenue, 0) + loanInterestCalc(coLoans);
+    const lintRev   = coLInt.reduce((s, l) => s + l.interestRevenue, 0)
+                    + loanInterestCalc(coLoans)
+                    + loanInterestCalc(linkedLoans);
     const revenue   = salesRev + lintRev;
     const expAmt    = coExp.reduce((s, e) => s + e.amount, 0)
                     + coOE.reduce((s, e) => s + e.amount, 0)
