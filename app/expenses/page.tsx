@@ -178,7 +178,9 @@ export default function ExpensesPage() {
   const approved      = companyExpenses.filter(e => e.status === "approved" || e.status === "paid").length;
   const totalApproved = companyExpenses.filter(e => e.status === "approved" || e.status === "paid").reduce((s,e) => s + e.amount, 0);
   const totalPending  = companyExpenses.filter(e => e.status === "pending").reduce((s,e) => s + e.amount, 0);
-  const totalReimbursed = companyExpenses.filter(e => e.status === "paid").reduce((s,e) => s + e.amount, 0);
+  const totalDisbursed    = companyExpenses.filter(e => e.status === "disbursed").length;
+  const totalDisbursedAmt = companyExpenses.filter(e => e.status === "disbursed").reduce((s,e) => s + e.amount, 0);
+  const totalReimbursed   = companyExpenses.filter(e => e.status === "paid" || e.status === "disbursed").reduce((s,e) => s + e.amount, 0);
 
   const openAdd = () => {
     setEditItem(null);
@@ -267,11 +269,12 @@ export default function ExpensesPage() {
         }
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Total Claims"     value={companyExpenses.length} icon={Receipt}      iconBg="bg-blue-50"   iconColor="text-blue-600" />
-        <StatCard title="Pending Approval" value={pending}                icon={Clock}        iconBg="bg-yellow-50" iconColor="text-yellow-600" subtitle={formatCurrency(totalPending)} />
-        <StatCard title="Approved"         value={approved}               icon={CheckCircle}  iconBg="bg-green-50"  iconColor="text-green-600" subtitle={formatCurrency(totalApproved)} />
-        <StatCard title="Total Reimbursed" value={formatCurrency(totalReimbursed)} icon={DollarSign} iconBg="bg-purple-50" iconColor="text-purple-600" />
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
+        <StatCard title="Total Claims"     value={companyExpenses.length}          icon={Receipt}      iconBg="bg-blue-50"   iconColor="text-blue-600" />
+        <StatCard title="Pending Approval" value={pending}                          icon={Clock}        iconBg="bg-yellow-50" iconColor="text-yellow-600" subtitle={formatCurrency(totalPending)} />
+        <StatCard title="Approved"         value={approved}                         icon={CheckCircle}  iconBg="bg-green-50"  iconColor="text-green-600" subtitle={formatCurrency(totalApproved)} />
+        <StatCard title="Total Disbursed"  value={totalDisbursed}                   icon={DollarSign}   iconBg="bg-emerald-50" iconColor="text-emerald-600" subtitle={formatCurrency(totalDisbursedAmt)} />
+        <StatCard title="Total Reimbursed" value={formatCurrency(totalReimbursed)}  icon={DollarSign}   iconBg="bg-purple-50" iconColor="text-purple-600" />
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
