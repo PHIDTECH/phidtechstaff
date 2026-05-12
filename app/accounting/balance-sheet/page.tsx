@@ -7,83 +7,162 @@ import { BarChart3, TrendingUp, TrendingDown, Scale } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
-const SESSION_KEY = "phidtech_session";
-const ACTIVE_KEY  = "phidtech_active_company";
-const SALES_KEY   = "phidtech_accounting_sales";
-const EXP_KEY     = "phidtech_expenses";
-const INV_KEY     = "phidtech_invoices";
-const PETTY_KEY   = "phidtech_petty_cash";
+const SESSION_KEY  = "phidtech_session";
+const ACTIVE_KEY   = "phidtech_active_company";
+const GROUP_KEY    = "phidtech_group_company";
+const SALES_KEY    = "phidtech_accounting_sales";
+const EXP_KEY      = "phidtech_expenses";
+const INV_KEY      = "phidtech_invoices";
+const PETTY_KEY    = "phidtech_petty_cash";
+const PAYROLL_KEY  = "phidtech_payroll";
+const OFFICE_KEY   = "phidtech_office_expenses";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
 }
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
-interface Session { id: string; isSuperAdmin: boolean; companyId: string; }
-interface Sale    { id: string; companyId: string; paid: number; balance: number; amount: number; }
-interface Expense { id: string; companyId: string; amount: number; status: string; }
-interface Invoice { id: string; companyId: string; total: number; status: string; }
-interface PettyCash { id: string; companyId: string; amount: number; type: string; }
+interface Session      { id: string; isSuperAdmin: boolean; companyId: string; }
+interface Sale         { id: string; companyId: string; paid: number; balance: number; amount: number; }
+interface Expense      { id: string; companyId: string; amount: number; status: string; }
+interface OfficeExp    { id: string; companyId: string; amount: number; status: string; }
+interface Invoice      { id: string; companyId: string; total: number; status: string; }
+interface PettyCash    { id: string; companyId: string; amount: number; type: string; }
+interface PayrollEntry { id: string; companyId: string; netSalary: number; status: string; }
+interface Loan         { id: string; companyId: string; amountOfLoan: number; status: string; }
+interface Asset        { id: string; companyId: string; purchaseCost: number; currentValue?: number; status: string; }
 
 const COLORS = ["#3b82f6","#10b981","#f97316","#8b5cf6","#ec4899","#06b6d4","#f59e0b"];
 
 export default function BalanceSheetPage() {
-  const [sales, setSales]       = useState<Sale[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [petty, setPetty]       = useState<PettyCash[]>([]);
-  const [cid, setCid]           = useState("");
-  const cidRef                  = useRef("");
+  const [sales,     setSales]     = useState<Sale[]>([]);
+  const [expenses,  setExpenses]  = useState<Expense[]>([]);
+  const [officeExp, setOfficeExp] = useState<OfficeExp[]>([]);
+  const [invoices,  setInvoices]  = useState<Invoice[]>([]);
+  const [petty,     setPetty]     = useState<PettyCash[]>([]);
+  const [payroll,   setPayroll]   = useState<PayrollEntry[]>([]);
+  const [loans,     setLoans]     = useState<Loan[]>([]);
+  const [assets,    setAssets]    = useState<Asset[]>([]);
+  const [cid,       setCid]       = useState("");
+  const cidRef                    = useRef("");
+  const [groupCid,  setGroupCid]  = useState("");
+  const groupCidRef               = useRef("");
 
-  useEffect(() => {
+  const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
-    const c    = sess?.isSuperAdmin ? lsStr(ACTIVE_KEY) : (sess?.companyId ?? lsStr(ACTIVE_KEY));
+    const raw  = lsStr(ACTIVE_KEY).replace(/^"|"$/g, "");
+    const c    = sess?.isSuperAdmin ? (raw === "group" ? "" : raw) : (sess?.companyId ?? raw);
     setCid(c); cidRef.current = c;
+    const gc = lsStr(GROUP_KEY).replace(/^"|"$/g, "");
+    setGroupCid(gc); groupCidRef.current = gc;
+    // Show cached data immediately
     setSales(lsGet<Sale[]>(SALES_KEY, []));
     setExpenses(lsGet<Expense[]>(EXP_KEY, []));
     setInvoices(lsGet<Invoice[]>(INV_KEY, []));
     setPetty(lsGet<PettyCash[]>(PETTY_KEY, []));
-  }, []);
+    setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, []));
+    setOfficeExp(lsGet<OfficeExp[]>(OFFICE_KEY, []));
+    // Fetch fresh data in parallel
+    const go = <T,>(url: string, setter: (d: T) => void, ck?: string) =>
+      fetch(url, { cache: "no-store" })
+        .then(r => r.ok ? r.json() : null)
+        .then((d: T | null) => {
+          if (!d) return;
+          setter(d);
+          if (ck) try { localStorage.setItem(ck, JSON.stringify(d)); } catch {}
+        })
+        .catch(() => {});
+    await Promise.all([
+      go<Sale[]>        ("/api/accounting/sales", setSales,     SALES_KEY),
+      go<Expense[]>     ("/api/expenses",         setExpenses,  EXP_KEY),
+      go<OfficeExp[]>   ("/api/office-expenses",  setOfficeExp, OFFICE_KEY),
+      go<Invoice[]>     ("/api/invoices",         setInvoices,  INV_KEY),
+      go<PettyCash[]>   ("/api/petty-cash",       setPetty,     PETTY_KEY),
+      go<PayrollEntry[]>("/api/payroll",          setPayroll,   PAYROLL_KEY),
+      go<Loan[]>        ("/api/loans",            setLoans),
+      go<Asset[]>       ("/api/assets",           setAssets),
+    ]);
+  };
+
+  useEffect(() => {
+    reload();
+    window.addEventListener("phidtech_companies_updated", reload);
+    window.addEventListener("storage", reload);
+    return () => {
+      window.removeEventListener("phidtech_companies_updated", reload);
+      window.removeEventListener("storage", reload);
+    };
+  }, []); // eslint-disable-line
 
   const co = cidRef.current || cid;
-  const coS = co ? sales.filter(s => s.companyId === co) : sales;
-  const coE = co ? expenses.filter(e => e.companyId === co) : expenses;
-  const coI = co ? invoices.filter(i => i.companyId === co) : invoices;
-  const coP = co ? petty.filter(p => p.companyId === co) : petty;
+  const _gc = groupCidRef.current || groupCid;
+  const isGroupView = !co || co === "group" || (!!_gc && co === _gc);
+  const byco = <T extends { companyId: string }>(arr: T[]) => isGroupView ? arr : arr.filter(x => x.companyId === co);
+  const coS   = byco(sales);
+  const coE   = byco(expenses);
+  const coOE  = byco(officeExp);
+  const coI   = byco(invoices);
+  const coP   = byco(petty);
+  const coPayroll = byco(payroll);
+  const coLoans   = byco(loans);
+  const coAssets  = byco(assets);
 
-  // ── ASSETS ──
-  const cashFromSales     = coS.reduce((s,e) => s + e.paid, 0);
-  const pettyCashIn       = coP.filter(p => p.type === "income" || p.type === "credit").reduce((s,p) => s + p.amount, 0);
-  const totalCash         = cashFromSales + pettyCashIn;
-
+  // ── CURRENT ASSETS ──
+  const cashFromSales      = coS.reduce((s,e) => s + e.paid, 0);
+  const pettyCashIn        = coP.filter(p => p.type === "income" || p.type === "credit").reduce((s,p) => s + p.amount, 0);
+  const totalCash          = cashFromSales + pettyCashIn;
   const accountsReceivable = coS.reduce((s,e) => s + e.balance, 0)
                            + coI.filter(i => i.status !== "paid").reduce((s,i) => s + i.total, 0);
-
   const totalCurrentAssets = totalCash + accountsReceivable;
 
-  // ── LIABILITIES ──
-  const accountsPayable    = coE.filter(e => e.status === "pending" || e.status === "approved").reduce((s,e) => s + e.amount, 0);
-  const pettyCashOut       = coP.filter(p => p.type === "expense" || p.type === "debit").reduce((s,p) => s + p.amount, 0);
-  const totalCurrentLiab   = accountsPayable + pettyCashOut;
+  // ── FIXED / NON-CURRENT ASSETS ──
+  const fixedAssets = coAssets.filter(a => a.status !== "disposed")
+    .reduce((s,a) => s + (a.currentValue ?? a.purchaseCost ?? 0), 0);
+  const loansReceivable = coLoans.filter(l => l.status === "active")
+    .reduce((s,l) => s + l.amountOfLoan, 0);
+  const totalNonCurrentAssets = fixedAssets + loansReceivable;
+
+  const totalAssets = totalCurrentAssets + totalNonCurrentAssets;
+
+  // ── CURRENT LIABILITIES ──
+  const PENDING_STATUSES = ["pending","approved","submitted"];
+  const accountsPayable  = coE.filter(e => PENDING_STATUSES.includes(e.status)).reduce((s,e) => s + e.amount, 0);
+  const officePayable    = coOE.filter(e => PENDING_STATUSES.includes(e.status)).reduce((s,e) => s + e.amount, 0);
+  const pettyCashOut     = coP.filter(p => p.type === "expense" || p.type === "debit").reduce((s,p) => s + p.amount, 0);
+  const payrollPayable   = coPayroll.filter(p => p.status === "draft").reduce((s,p) => s + p.netSalary, 0);
+  const totalCurrentLiab = accountsPayable + officePayable + pettyCashOut + payrollPayable;
+
+  // ── NON-CURRENT LIABILITIES ──
+  const loanLiab         = coLoans.filter(l => l.status === "active").reduce((s,l) => s + l.amountOfLoan, 0);
+  const totalNonCurrLiab = loanLiab;
+
+  const totalLiab = totalCurrentLiab + totalNonCurrLiab;
 
   // ── EQUITY ──
-  const totalExpPaid       = coE.filter(e => e.status === "paid").reduce((s,e) => s + e.amount, 0);
-  const retainedEarnings   = cashFromSales - totalExpPaid;
-  const totalEquity        = retainedEarnings;
+  const totalRevenue      = coS.reduce((s,e) => s + e.paid, 0);
+  const totalExpPaid      = coE.filter(e => e.status === "paid" || e.status === "disbursed").reduce((s,e) => s + e.amount, 0)
+                          + coOE.filter(e => e.status === "paid" || e.status === "disbursed").reduce((s,e) => s + e.amount, 0)
+                          + coPayroll.filter(p => p.status === "paid").reduce((s,p) => s + p.netSalary, 0);
+  const retainedEarnings  = totalRevenue - totalExpPaid;
+  const totalEquity       = retainedEarnings;
 
-  const totalAssets = totalCurrentAssets;
-  const totalLiabEquity = totalCurrentLiab + totalEquity;
+  const totalLiabEquity = totalLiab + totalEquity;
   const balanced = Math.abs(totalAssets - totalLiabEquity) < 1;
 
   const assetPie = [
-    { name: "Cash (Collected)",        value: totalCash },
-    { name: "Accounts Receivable",     value: accountsReceivable },
+    { name: "Cash (Collected)",     value: totalCash },
+    { name: "Accounts Receivable",  value: accountsReceivable },
+    { name: "Fixed Assets",         value: fixedAssets },
+    { name: "Loans Receivable",     value: loansReceivable },
   ].filter(d => d.value > 0);
 
   const liabPie = [
-    { name: "Accounts Payable",    value: accountsPayable },
-    { name: "Petty Cash Outflow",  value: pettyCashOut },
-    { name: "Retained Earnings",   value: Math.max(0, retainedEarnings) },
+    { name: "Staff Claims Payable",  value: accountsPayable },
+    { name: "Office Exp Payable",    value: officePayable },
+    { name: "Payroll Payable",       value: payrollPayable },
+    { name: "Petty Cash Outflow",    value: pettyCashOut },
+    { name: "Loans (Borrowed)",      value: loanLiab },
+    { name: "Retained Earnings",     value: Math.max(0, retainedEarnings) },
   ].filter(d => d.value > 0);
 
   const Section = ({ title, color, children }: { title: string; color: string; children: React.ReactNode }) => (
@@ -142,14 +221,24 @@ export default function BalanceSheetPage() {
             <Row label="Cash & Collections"    value={totalCash}           indent />
             <Row label="Accounts Receivable"   value={accountsReceivable}  indent />
             <Row label="Total Current Assets"  value={totalCurrentAssets}  bold />
+            <div className="px-4 py-1.5 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">Non-Current Assets</div>
+            <Row label="Fixed Assets (Equipment/Vehicles)" value={fixedAssets}      indent />
+            <Row label="Loans Receivable (Active)"         value={loansReceivable}  indent />
+            <Row label="Total Non-Current Assets"         value={totalNonCurrentAssets} bold />
             <Row label="TOTAL ASSETS"          value={totalAssets}         bold />
           </Section>
 
           <Section title="Liabilities" color="bg-red-50 text-red-800">
             <div className="px-4 py-1.5 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">Current Liabilities</div>
-            <Row label="Accounts Payable (Pending)"  value={accountsPayable}  indent />
-            <Row label="Petty Cash Outflows"          value={pettyCashOut}     indent />
-            <Row label="Total Current Liabilities"   value={totalCurrentLiab} bold />
+            <Row label="Staff Claims Payable"    value={accountsPayable}  indent />
+            <Row label="Office Expenses Payable" value={officePayable}    indent />
+            <Row label="Payroll Payable (Draft)" value={payrollPayable}   indent />
+            <Row label="Petty Cash Outflows"     value={pettyCashOut}     indent />
+            <Row label="Total Current Liabilities" value={totalCurrentLiab} bold />
+            <div className="px-4 py-1.5 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">Non-Current Liabilities</div>
+            <Row label="Loans (Borrowed)"           value={loanLiab}         indent />
+            <Row label="Total Non-Current Liabilities" value={totalNonCurrLiab} bold />
+            <Row label="TOTAL LIABILITIES"          value={totalLiab}        bold />
           </Section>
 
           <Section title="Equity" color="bg-emerald-50 text-emerald-800">
