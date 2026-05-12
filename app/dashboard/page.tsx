@@ -25,6 +25,7 @@ const EXPENSES_KEY      = "phidtech_expenses";
 const OFFICE_EXP_KEY    = "phidtech_office_expenses";
 const PAYROLL_KEY       = "phidtech_payroll";
 const LOANINT_KEY       = "phidtech_loan_interest";
+const LOANS_KEY         = "phidtech_loans";
 
 const GROUP_ID   = "group";
 const GROUP_NAME = "PHIDTECH GROUP OF COMPANIES LIMITED";
@@ -55,6 +56,7 @@ interface Expense { id: string; companyId: string; amount: number; status: strin
 interface OfficeExpense { id: string; companyId: string; amount: number; status: string; }
 interface PayrollEntry { id: string; companyId: string; netSalary: number; status: string; }
 interface LoanInterest { id: string; companyId: string; interestRevenue: number; status: string; date?: string; createdAt?: string; }
+interface Loan { id: string; companyId: string; amountOfLoan: number; interestPerMonth: number; loanPeriod: number; status: string; }
 
 export default function DashboardPage() {
   usePermissionGuard("dashboard");
@@ -71,6 +73,7 @@ export default function DashboardPage() {
   const [officeExp, setOfficeExp]     = useState<OfficeExpense[]>([]);
   const [payroll, setPayroll]         = useState<PayrollEntry[]>([]);
   const [loanInt, setLoanInt]         = useState<LoanInterest[]>([]);
+  const [loans,   setLoans]           = useState<Loan[]>([]);
 
   const reload = async () => {
     const sess = lsGet<{name:string;isSuperAdmin:boolean;companyId:string|null;role?:string;position?:string;branchId?:string|null}>(SESSION_KEY, null as never);
@@ -91,6 +94,7 @@ export default function DashboardPage() {
     setOfficeExp(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, []));
     setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, []));
     setLoanInt(lsGet<LoanInterest[]>(LOANINT_KEY, []));
+    setLoans(lsGet<Loan[]>(LOANS_KEY, []));
 
     // ── Step 2: fetch fresh data — each setter fires as soon as its own response arrives ──
     const go = <T,>(url: string, setter: (d: T) => void, cacheKey?: string) =>
@@ -114,6 +118,7 @@ export default function DashboardPage() {
       go<OfficeExpense[]>("/api/office-expenses",setOfficeExp, OFFICE_EXP_KEY),
       go<PayrollEntry[]> ("/api/payroll",       setPayroll,    PAYROLL_KEY),
       go<LoanInterest[]>  ("/api/loan-interest", setLoanInt,    LOANINT_KEY),
+      go<Loan[]>          ("/api/loans",          setLoans,      LOANS_KEY),
     ]);
   };
 
@@ -150,6 +155,8 @@ export default function DashboardPage() {
   const activeComp = companies.find(c => c.id === activeCompanyId);
 
   const LINT_PAID = ["active","paid"];
+  const loanInterestCalc = (ls: Loan[]) =>
+    ls.filter(l => l.status === "active").reduce((s, l) => s + Math.round(l.amountOfLoan * (l.interestPerMonth / 100) * l.loanPeriod), 0);
 
   // Per-company stats for group dashboard — exclude the company flagged as Group HQ
   const companyStats = companies.filter(co => co.id !== GROUP_ID && co.id !== groupCid).map(co => {
@@ -160,8 +167,9 @@ export default function DashboardPage() {
     const coOE      = officeExp.filter(e => e.companyId === co.id && PAID_S.includes(e.status));
     const coPay     = payroll.filter(p => p.companyId === co.id && p.status === "paid");
     const coLInt    = loanInt.filter(l => l.companyId === co.id && LINT_PAID.includes(l.status));
+    const coLoans   = loans.filter(l => l.companyId === co.id);
     const salesRev  = coSales.reduce((s, e) => s + e.paid, 0);
-    const lintRev   = coLInt.reduce((s, l) => s + l.interestRevenue, 0);
+    const lintRev   = coLInt.reduce((s, l) => s + l.interestRevenue, 0) + loanInterestCalc(coLoans);
     const revenue   = salesRev + lintRev;
     const expAmt    = coExp.reduce((s, e) => s + e.amount, 0)
                     + coOE.reduce((s, e) => s + e.amount, 0)
@@ -177,8 +185,9 @@ export default function DashboardPage() {
 
   // Group-wide totals
   const groupStaff   = staffUsers.filter(u => u.companyId !== GROUP_ID).length;
-  const groupLoanInt = loanInt.filter(l => LINT_PAID.includes(l.status)).reduce((s, l) => s + l.interestRevenue, 0);
-  const groupRevenue = sales.reduce((s, e) => s + e.paid, 0) + groupLoanInt;
+  const groupLoanInt  = loanInt.filter(l => LINT_PAID.includes(l.status)).reduce((s, l) => s + l.interestRevenue, 0);
+  const groupLoanCalc = loanInterestCalc(loans);
+  const groupRevenue  = sales.reduce((s, e) => s + e.paid, 0) + groupLoanInt + groupLoanCalc;
   const PAID_STATUSES = ["paid","approved","disbursed","ceo_approved"];
   const groupExpClaims  = expenses.filter(e => PAID_STATUSES.includes(e.status)).reduce((s, e) => s + e.amount, 0);
   const groupOfficeExp  = officeExp.filter(e => PAID_STATUSES.includes(e.status)).reduce((s, e) => s + e.amount, 0);
@@ -203,7 +212,10 @@ export default function DashboardPage() {
   const coLoanInt  = _effCid
     ? loanInt.filter(l => l.companyId === _effCid && LINT_PAID.includes(l.status))
     : loanInt.filter(l => LINT_PAID.includes(l.status));
-  const coRevenue  = coSales.reduce((s, e) => s + e.paid, 0) + coLoanInt.reduce((s, l) => s + l.interestRevenue, 0);
+  const coLoansActive = _effCid ? loans.filter(l => l.companyId === _effCid) : loans;
+  const coRevenue  = coSales.reduce((s, e) => s + e.paid, 0)
+                   + coLoanInt.reduce((s, l) => s + l.interestRevenue, 0)
+                   + loanInterestCalc(coLoansActive);
   const coExpAmt   = coExp.reduce((s, e) => s + e.amount, 0)
                    + coOE.reduce((s, e) => s + e.amount, 0)
                    + coPay.reduce((s, p) => s + p.netSalary, 0);
