@@ -11,7 +11,7 @@ import {
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatCompact } from "@/lib/utils";
 import { usePermissionGuard } from "@/lib/usePermissionGuard";
 
 const SESSION_KEY    = "phidtech_session";
@@ -272,8 +272,8 @@ export default function DashboardPage() {
               { label: "Subsidiaries",   value: companies.length,              color: "text-blue-200" },
               { label: "Total Staff",    value: groupStaff,                    color: "text-white" },
               { label: "HQ Staff",       value: groupStaff_HQ,                 color: "text-indigo-200" },
-              { label: "Group Revenue",  value: formatCurrency(groupRevenue),  color: "text-emerald-300" },
-              { label: "Net P&L",        value: formatCurrency(groupProfit),   color: groupProfit >= 0 ? "text-green-300" : "text-red-300" },
+              { label: "Group Revenue",  value: formatCompact(groupRevenue),  color: "text-emerald-300" },
+              { label: "Net P&L",        value: formatCompact(groupProfit),   color: groupProfit >= 0 ? "text-green-300" : "text-red-300" },
               { label: "Pending Leave",  value: totalGroupLeaveP,              color: "text-orange-300" },
             ].map((k, i) => (
               <div key={i} className="px-5 py-3 border-r border-white/10 last:border-r-0 text-center">
@@ -345,11 +345,11 @@ export default function DashboardPage() {
                           <p className="text-[10px] text-gray-400 uppercase tracking-wider">Staff</p>
                         </div>
                         <div className="px-4 py-3 text-center">
-                          <p className="text-sm font-bold text-emerald-700">{formatCurrency(co.revenue)}</p>
+                          <p className="text-sm font-bold text-emerald-700">{formatCompact(co.revenue)}</p>
                           <p className="text-[10px] text-gray-400 uppercase tracking-wider">Revenue</p>
                         </div>
                         <div className="px-4 py-3 text-center">
-                          <p className={`text-sm font-bold ${co.profit >= 0 ? "text-blue-700" : "text-red-500"}`}>{formatCurrency(co.profit)}</p>
+                          <p className={`text-sm font-bold ${co.profit >= 0 ? "text-blue-700" : "text-red-500"}`}>{formatCompact(co.profit)}</p>
                           <p className="text-[10px] text-gray-400 uppercase tracking-wider">Profit</p>
                         </div>
                       </div>
@@ -375,9 +375,9 @@ export default function DashboardPage() {
               </div>
               <div className="divide-y divide-gray-50">
                 {[
-                  { label: "Total Revenue",  value: formatCurrency(groupRevenue), color: "text-emerald-600" },
-                  { label: "Total Expenses", value: formatCurrency(groupExp),     color: "text-red-500" },
-                  { label: "Net Profit",     value: formatCurrency(groupProfit),  color: groupProfit >= 0 ? "text-blue-700 font-bold" : "text-red-600 font-bold" },
+                  { label: "Total Revenue",  value: formatCompact(groupRevenue), color: "text-emerald-600" },
+                  { label: "Total Expenses", value: formatCompact(groupExp),     color: "text-red-500" },
+                  { label: "Net Profit",     value: formatCompact(groupProfit),  color: groupProfit >= 0 ? "text-blue-700 font-bold" : "text-red-600 font-bold" },
                   { label: "Open Tasks",     value: String(totalGroupTasks),      color: "text-purple-600" },
                   { label: "Pending Leave",  value: String(totalGroupLeaveP),     color: "text-orange-500" },
                 ].map(row => (
@@ -510,8 +510,8 @@ export default function DashboardPage() {
                 icon={Users} iconColor="text-blue-600" iconBg="bg-blue-50"
                 subtitle={isBranchManagerDash ? (myBranch?.name ?? "Your branch") : `${coStaff.filter(u => u.status === "active").length} active`}
               />
-              <StatCard title="Revenue"           value={formatCurrency(coRevenue)}    icon={TrendingUp}  iconColor="text-emerald-600" iconBg="bg-emerald-50" subtitle={`Profit: ${formatCurrency(coProfit)}`} />
-              <StatCard title="Pending Expenses"  value={pendingExp}                   icon={Receipt}     iconColor="text-red-600"     iconBg="bg-red-50"     subtitle={formatCurrency(pendingExpAmt)} />
+              <StatCard title="Revenue"           value={formatCompact(coRevenue)}    icon={TrendingUp}  iconColor="text-emerald-600" iconBg="bg-emerald-50" subtitle={`Profit: ${formatCompact(coProfit)}`} />
+              <StatCard title="Pending Expenses"  value={pendingExp}                   icon={Receipt}     iconColor="text-red-600"     iconBg="bg-red-50"     subtitle={formatCompact(pendingExpAmt)} />
               <StatCard title="Open Tasks"        value={openTasks}                    icon={CheckSquare} iconColor="text-purple-600" iconBg="bg-purple-50"  subtitle={`${coLeave.length} leave pending`} />
             </div>
             {/* Pending Approvals Alert Strip */}
@@ -525,7 +525,7 @@ export default function DashboardPage() {
                   {pendingExp > 0 && (
                     <Link href="/expenses">
                       <span className="inline-flex items-center gap-1.5 bg-white border border-amber-200 text-amber-800 rounded-lg px-3 py-1.5 font-medium hover:bg-amber-100 transition-colors">
-                        <Receipt className="w-3.5 h-3.5" /> {pendingExp} Expense Claim{pendingExp !== 1 ? "s" : ""} ({formatCurrency(pendingExpAmt)})
+                        <Receipt className="w-3.5 h-3.5" /> {pendingExp} Expense Claim{pendingExp !== 1 ? "s" : ""} ({formatCompact(pendingExpAmt)})
                       </span>
                     </Link>
                   )}

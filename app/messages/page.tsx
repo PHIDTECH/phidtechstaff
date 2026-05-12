@@ -48,14 +48,41 @@ export default function MessagesPage() {
       fetch("/api/messages",              { cache: "no-store" }),
       fetch("/api/settings/beem/balance", { cache: "no-store" }),
     ]);
-    if (sr.status   === "fulfilled" && sr.value.ok)   setStaff((await sr.value.json()).filter((u: Staff) => u.status !== "inactive"));
-    if (cr.status   === "fulfilled" && cr.value.ok)   setCustomers(await cr.value.json());
+    if (sr.status === "fulfilled" && sr.value.ok)
+      setStaff((await sr.value.json()).filter((u: Staff) => u.status !== "inactive"));
+
+    // Read customers once; also used to enrich loan phone numbers
+    let custList: Customer[] = [];
+    if (cr.status === "fulfilled" && cr.value.ok) {
+      custList = await cr.value.json();
+      setCustomers(custList);
+    }
+
     if (loanR.status === "fulfilled" && loanR.value.ok) {
       const raw: LoanCustomer[] = await loanR.value.json();
-      setLoanCustomers(raw.map(l => ({ id: l.id, name: l.customerName, phone: l.contactPhone ?? "", companyId: l.companyId })));
+      // Cross-reference each loan with the Sales customers list for phone numbers
+      const merged: Customer[] = raw.map(l => {
+        const norm = (s: string) => s.toLowerCase().trim();
+        const match = custList.find(c => norm(c.name) === norm(l.customerName));
+        return {
+          id:        l.id,
+          name:      l.customerName,
+          phone:     match?.phone || l.contactPhone || "",
+          companyId: l.companyId,
+        };
+      });
+      // Deduplicate by name (same customer may have multiple loans)
+      const seen = new Set<string>();
+      const unique = merged.filter(c => {
+        const key = c.name.toLowerCase().trim();
+        if (seen.has(key)) return false;
+        seen.add(key); return true;
+      });
+      setLoanCustomers(unique);
     }
-    if (lr.status   === "fulfilled" && lr.value.ok)   setLogs(await lr.value.json());
-    if (br.status   === "fulfilled" && br.value.ok) {
+
+    if (lr.status === "fulfilled" && lr.value.ok)   setLogs(await lr.value.json());
+    if (br.status === "fulfilled" && br.value.ok) {
       const d = await br.value.json();
       setBalance(d.balance ?? null);
       if (d.senderId) setSenderId(d.senderId);

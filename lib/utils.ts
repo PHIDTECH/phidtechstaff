@@ -13,6 +13,16 @@ export function formatCurrency(amount: number, currency = "TZS") {
   }).format(amount);
 }
 
+export function formatCompact(amount: number, currency = "TZS"): string {
+  const prefix = currency === "TZS" ? "TSh " : `${currency} `;
+  const sign   = amount < 0 ? "-" : "";
+  const abs    = Math.abs(amount);
+  if (abs >= 1_000_000_000) return `${sign}${prefix}${(abs / 1_000_000_000).toFixed(1)}B`;
+  if (abs >= 1_000_000)     return `${sign}${prefix}${(abs / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000)         return `${sign}${prefix}${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}${prefix}${abs.toLocaleString()}`;
+}
+
 export function formatDate(date: string | Date) {
   return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
