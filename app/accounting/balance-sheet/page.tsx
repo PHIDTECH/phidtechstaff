@@ -16,6 +16,8 @@ const INV_KEY      = "phidtech_invoices";
 const PETTY_KEY    = "phidtech_petty_cash";
 const PAYROLL_KEY  = "phidtech_payroll";
 const OFFICE_KEY   = "phidtech_office_expenses";
+const COMPANIES_KEY= "phidtech_companies";
+const LOAN_INT_KEY = "phidtech_loan_interest";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -29,8 +31,10 @@ interface OfficeExp    { id: string; companyId: string; amount: number; status: 
 interface Invoice      { id: string; companyId: string; total: number; status: string; }
 interface PettyCash    { id: string; companyId: string; amount: number; type: string; }
 interface PayrollEntry { id: string; companyId: string; netSalary: number; status: string; }
-interface Loan         { id: string; companyId: string; amountOfLoan: number; status: string; }
+interface Loan         { id: string; companyId: string; amountOfLoan: number; interestPerMonth: number; loanPeriod: number; status: string; }
+interface LoanInterest { id: string; companyId: string; interestRevenue: number; status: string; }
 interface Asset        { id: string; companyId: string; purchaseCost: number; currentValue?: number; status: string; }
+interface Company      { id: string; name: string; industry?: string; }
 
 const COLORS = ["#3b82f6","#10b981","#f97316","#8b5cf6","#ec4899","#06b6d4","#f59e0b"];
 
@@ -42,7 +46,9 @@ export default function BalanceSheetPage() {
   const [petty,     setPetty]     = useState<PettyCash[]>([]);
   const [payroll,   setPayroll]   = useState<PayrollEntry[]>([]);
   const [loans,     setLoans]     = useState<Loan[]>([]);
+  const [loanInt,   setLoanInt]   = useState<LoanInterest[]>([]);
   const [assets,    setAssets]    = useState<Asset[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [cid,       setCid]       = useState("");
   const cidRef                    = useRef("");
   const [groupCid,  setGroupCid]  = useState("");
@@ -62,6 +68,7 @@ export default function BalanceSheetPage() {
     setPetty(lsGet<PettyCash[]>(PETTY_KEY, []));
     setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, []));
     setOfficeExp(lsGet<OfficeExp[]>(OFFICE_KEY, []));
+    setCompanies(lsGet<Company[]>(COMPANIES_KEY, []));
     // Fetch fresh data in parallel
     const go = <T,>(url: string, setter: (d: T) => void, ck?: string) =>
       fetch(url, { cache: "no-store" })
@@ -80,7 +87,9 @@ export default function BalanceSheetPage() {
       go<PettyCash[]>   ("/api/petty-cash",       setPetty,     PETTY_KEY),
       go<PayrollEntry[]>("/api/payroll",          setPayroll,   PAYROLL_KEY),
       go<Loan[]>        ("/api/loans",            setLoans),
+      go<LoanInterest[]>("/api/loan-interest",   setLoanInt, LOAN_INT_KEY),
       go<Asset[]>       ("/api/assets",           setAssets),
+      go<Company[]>     ("/api/companies",        setCompanies, COMPANIES_KEY),
     ]);
   };
 
@@ -98,13 +107,17 @@ export default function BalanceSheetPage() {
   const _gc = groupCidRef.current || groupCid;
   const isGroupView = !co || co === "group" || (!!_gc && co === _gc);
   const byco = <T extends { companyId: string }>(arr: T[]) => isGroupView ? arr : arr.filter(x => x.companyId === co);
+  // Finance companies: also include loans/loanInt saved under groupCid or 'group' (created from Group HQ mode)
+  const isFinance = (companies.find(c => c.id === co)?.industry ?? "").toLowerCase().includes("finance");
+  const loanCids  = !isGroupView && isFinance ? [co, _gc, "group"].filter(Boolean) : null;
   const coS   = byco(sales);
   const coE   = byco(expenses);
   const coOE  = byco(officeExp);
   const coI   = byco(invoices);
   const coP   = byco(petty);
   const coPayroll = byco(payroll);
-  const coLoans   = byco(loans);
+  const coLoans   = loanCids ? loans.filter(l => loanCids.includes(l.companyId)) : byco(loans);
+  const coLoanInt = loanCids ? loanInt.filter(l => loanCids.includes(l.companyId)) : byco(loanInt);
   const coAssets  = byco(assets);
 
   // ── CURRENT ASSETS ──
@@ -139,7 +152,9 @@ export default function BalanceSheetPage() {
   const totalLiab = totalCurrentLiab + totalNonCurrLiab;
 
   // ── EQUITY ──
-  const totalRevenue      = coS.reduce((s,e) => s + e.paid, 0);
+  const calcLoanInterest  = (ls: Loan[]) => ls.filter(l => l.status === "active").reduce((s,l) => s + Math.round(l.amountOfLoan * (l.interestPerMonth/100) * l.loanPeriod), 0);
+  const loanIntRevenue    = coLoanInt.filter(l => l.status === "active" || l.status === "paid").reduce((s,l) => s + l.interestRevenue, 0) + calcLoanInterest(coLoans);
+  const totalRevenue      = coS.reduce((s,e) => s + e.paid, 0) + (isFinance ? loanIntRevenue : 0);
   const totalExpPaid      = coE.filter(e => e.status === "paid" || e.status === "disbursed").reduce((s,e) => s + e.amount, 0)
                           + coOE.filter(e => e.status === "paid" || e.status === "disbursed").reduce((s,e) => s + e.amount, 0)
                           + coPayroll.filter(p => p.status === "paid").reduce((s,p) => s + p.netSalary, 0);
