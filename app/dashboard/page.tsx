@@ -167,7 +167,10 @@ export default function DashboardPage() {
     const coOE      = officeExp.filter(e => e.companyId === co.id && PAID_S.includes(e.status));
     const coPay     = payroll.filter(p => p.companyId === co.id && p.status === "paid");
     const coLInt    = loanInt.filter(l => l.companyId === co.id && LINT_PAID.includes(l.status));
-    const coLoans   = loans.filter(l => l.companyId === co.id);
+    const isFinance = (co.industry ?? "").toLowerCase().includes("finance");
+    // Finance companies: also include loans that were saved under the group HQ ID (created from Group HQ mode)
+    const loanCids  = isFinance ? [co.id, groupCid, "group"].filter(Boolean) : [co.id];
+    const coLoans   = loans.filter(l => loanCids.includes(l.companyId));
     // Also count active loans linked via loanId to loanInt records of this company
     const linkedLoanIds = new Set(coLInt.map(l => l.loanId).filter(Boolean));
     const linkedLoans   = loans.filter(l => linkedLoanIds.has(l.id) && !coLoans.find(cl => cl.id === l.id));
@@ -217,7 +220,13 @@ export default function DashboardPage() {
   const coLoanInt  = _effCid
     ? loanInt.filter(l => l.companyId === _effCid && LINT_PAID.includes(l.status))
     : loanInt.filter(l => LINT_PAID.includes(l.status));
-  const coLoansActive = _effCid ? loans.filter(l => l.companyId === _effCid) : loans;
+  const _coCo       = companies.find(c => c.id === _effCid);
+  const _isFinance   = (_coCo?.industry ?? "").toLowerCase().includes("finance");
+  // Finance companies: also include loans saved under the group HQ ID (created from Group HQ mode)
+  const _loanCids    = _effCid
+    ? (_isFinance ? [_effCid, groupCid, "group"].filter(Boolean) : [_effCid])
+    : null;
+  const coLoansActive = _loanCids ? loans.filter(l => _loanCids.includes(l.companyId)) : loans;
   // Resolve loans linked via loanInt loanId (handles loans saved with wrong companyId)
   const coLinkedIds   = new Set(coLoanInt.map(l => l.loanId).filter(Boolean));
   const coLinkedLoans = loans.filter(l => coLinkedIds.has(l.id) && !coLoansActive.find(cl => cl.id === l.id));
