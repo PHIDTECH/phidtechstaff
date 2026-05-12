@@ -28,7 +28,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = JSON.parse(await req.text());
     if (!body.name?.trim()) return NextResponse.json({ error: "Document name is required." }, { status: 400 });
     if (!body.companyId)    return NextResponse.json({ error: "companyId is required." }, { status: 400 });
 
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = JSON.parse(await req.text());
     if (!body.id) return NextResponse.json({ error: "Missing id." }, { status: 400 });
 
     const docs = readDb<Doc[]>("documents", []);
