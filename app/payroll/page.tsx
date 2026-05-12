@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, Plus, Search, CheckCircle, Download, Eye, FileText, AlertCircle, Building2, Edit, Trash2, Printer, FileSpreadsheet } from "lucide-react";
-import { formatCurrency, getInitials } from "@/lib/utils";
+import { formatCurrency, formatCompact, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const ACTIVE_KEY      = "phidtech_active_company";
@@ -846,9 +846,9 @@ export default function PayrollPage() {
         </div>
       )}
       {!dataLoading && <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Total Gross" value={formatCurrency(totalGross)} icon={DollarSign} iconBg="bg-blue-50" iconColor="text-blue-600" subtitle={`${selectedMonth} ${selectedYear}`} />
-        <StatCard title="Total Net Pay" value={formatCurrency(totalNet)} icon={CheckCircle} iconBg="bg-green-50" iconColor="text-green-600" subtitle="After deductions" />
-        <StatCard title="Total Deductions" value={formatCurrency(totalDeductions)} icon={DollarSign} iconBg="bg-red-50" iconColor="text-red-500" subtitle="PAYE + NSSF (employee)" />
+        <StatCard title="Total Gross" value={formatCompact(totalGross)} icon={DollarSign} iconBg="bg-blue-50" iconColor="text-blue-600" subtitle={`${selectedMonth} ${selectedYear}`} />
+        <StatCard title="Total Net Pay" value={formatCompact(totalNet)} icon={CheckCircle} iconBg="bg-green-50" iconColor="text-green-600" subtitle="After deductions" />
+        <StatCard title="Total Deductions" value={formatCompact(totalDeductions)} icon={DollarSign} iconBg="bg-red-50" iconColor="text-red-500" subtitle="PAYE + NSSF (employee)" />
         <StatCard title="Paid Staff" value={`${paidCount}/${companyEntries.length}`} icon={CheckCircle} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="This month" />
       </div>}
 

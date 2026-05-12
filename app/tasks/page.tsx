@@ -154,7 +154,8 @@ export default function TasksPage() {
       const res = await fetch("/api/tasks", { cache: "no-store" });
       if (res.ok) {
         const data: Task[] = await res.json();
-        setTasksList(Array.isArray(data) ? data : []);
+        const tasks = Array.isArray(data) ? data : [];
+        setTasksList(tasks);
         const local = lsGet<Task[]>(TASKS_KEY, []);
         if (local.length > 0) {
           const serverIds = new Set(data.map(t => t.id));
@@ -170,7 +171,18 @@ export default function TasksPage() {
     } catch { setTasksList(lsGet<Task[]>(TASKS_KEY, [])); }
   };
 
-  const reload = async () => { await loadSession(); await fetchTasks(); };
+  const reload = async () => {
+    await loadSession();
+    const sess = lsGet<{id:string;name:string;isSuperAdmin:boolean;companyId?:string;role?:string;position?:string;branchId?:string|null}>(SESSION_KEY, null as never);
+    try {
+      const res = await fetch("/api/tasks", { cache: "no-store" });
+      if (res.ok) {
+        const tasks: Task[] = await res.json();
+        setTasksList(Array.isArray(tasks) ? tasks : []);
+        checkDueNotifications(Array.isArray(tasks) ? tasks : [], sess?.id);
+      }
+    } catch {}
+  };
 
   useEffect(() => {
     loadSession();
@@ -229,9 +241,30 @@ export default function TasksPage() {
   })).filter(d => d.tasks.length > 0);
 
   const pushNotification = (userId: string, message: string, taskId: string) => {
+    if (!userId) return;
     const notifs = lsGet<Notification[]>(NOTIF_KEY, []);
     notifs.push({ id: `n-${Date.now()}`, userId, message, read: false, createdAt: new Date().toISOString(), taskId });
     lsSet(NOTIF_KEY, notifs);
+    window.dispatchEvent(new Event("storage"));
+  };
+
+  const checkDueNotifications = (tasks: Task[], uid?: string) => {
+    if (!uid) return;
+    const today = new Date().toISOString().slice(0,10);
+    const notifs = lsGet<Notification[]>(NOTIF_KEY, []);
+    tasks.forEach(t => {
+      if (t.assignedTo !== uid && t.assignedBy !== uid) return;
+      if (t.status === "completed" || t.status === "cancelled") return;
+      const dueKey = `due-${t.id}-${today}`;
+      if (notifs.some(n => n.id === dueKey)) return;
+      if (t.dueDate === today) {
+        notifs.push({ id: dueKey, userId: uid, message: `Task "${t.title}" is due TODAY!`, read: false, createdAt: new Date().toISOString(), taskId: t.id });
+      } else if (t.dueDate && t.dueDate < today) {
+        notifs.push({ id: dueKey, userId: uid, message: `OVERDUE: Task "${t.title}" was due on ${t.dueDate}`, read: false, createdAt: new Date().toISOString(), taskId: t.id });
+      }
+    });
+    lsSet(NOTIF_KEY, notifs);
+    window.dispatchEvent(new Event("storage"));
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -825,7 +858,8 @@ export default function TasksPage() {
                   <SelectContent className="max-h-52">
                     {(() => {
                       const formCid2 = form.taskCompanyId || activeCompanyId;
-                      const filtered = (formCid2 ? allStaffList.filter(u => u.companyId === formCid2) : staffList).filter(u =>
+                      const baseList = formCid2 ? allStaffList.filter(u => u.companyId === formCid2) : allStaffList;
+                      const filtered = baseList.filter(u =>
                         !form.branchId || form.branchId === "__all" || u.branchId === form.branchId
                       );
                       if (filtered.length === 0) return (
@@ -881,7 +915,7 @@ export default function TasksPage() {
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Chat Participants <span className="text-gray-400 font-normal text-xs">(optional — can chat on this task)</span></label>
               {(() => {
                 const formCid3 = form.taskCompanyId || activeCompanyId;
-                const pickable = (formCid3 ? allStaffList.filter(u => u.companyId === formCid3) : staffList)
+                const pickable = (formCid3 ? allStaffList.filter(u => u.companyId === formCid3) : allStaffList)
                   .filter(u => u.id !== form.assignedTo && u.status === "active");
                 return (
                   <div className="border border-gray-200 rounded-lg p-2 max-h-36 overflow-y-auto space-y-1">
