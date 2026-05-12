@@ -250,7 +250,7 @@ export default function CustomersPage() {
 
   const saveCustomer = async (isEdit: boolean) => {
     if (!form.name.trim()) { setFormError("Customer name is required."); return; }
-    if (!form.assignedTo) { setFormError("Please assign an employee to this customer."); return; }
+    if (!isEdit && !form.assignedTo) { setFormError("Please assign an employee to this customer."); return; }
     const effectiveCid = activeCompanyId || form._companyId || (isEdit ? editCustomer?.companyId : "") || "";
     if (!effectiveCid) { setFormError("Please select a company first."); return; }
     if (isEdit && editCustomer) {

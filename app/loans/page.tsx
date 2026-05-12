@@ -106,9 +106,12 @@ export default function LoansPage() {
       (statusFilter === "all" || l.status === statusFilter);
   });
 
-  const totalCapital  = companyLoans.reduce((s, l) => s + l.amountOfLoan, 0);
-  const totalInterest = companyLoans.reduce((s, l) => s + calcTotalInterest(l.amountOfLoan, l.interestPerMonth, l.loanPeriod), 0);
-  const activeCount   = companyLoans.filter(l => l.status === "active").length;
+  const totalCapital    = companyLoans.reduce((s, l) => s + l.amountOfLoan, 0);
+  const totalInterest   = companyLoans.reduce((s, l) => s + calcTotalInterest(l.amountOfLoan, l.interestPerMonth, l.loanPeriod), 0);
+  const activeLoans     = companyLoans.filter(l => l.status === "active");
+  const activeCount     = activeLoans.length;
+  const activeCapital   = activeLoans.reduce((s, l) => s + l.amountOfLoan, 0);
+  const activeInterest  = activeLoans.reduce((s, l) => s + calcTotalInterest(l.amountOfLoan, l.interestPerMonth, l.loanPeriod), 0);
 
   const openAdd = () => { setEditItem(null); setForm(emptyForm()); setFormError(""); setShowDialog(true); };
   const openEdit = (l: LoanCustomer) => {
@@ -165,11 +168,12 @@ export default function LoansPage() {
         ) : undefined}
       />
 
-      <div className={`grid gap-4 mb-6 ${canViewFinancials ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2"}`}>
-        <StatCard title="Total Loans"  value={companyLoans.length} icon={Users}     iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle="All records" />
-        <StatCard title="Active Loans" value={activeCount}          icon={CheckCircle} iconBg="bg-green-50" iconColor="text-green-600" subtitle="Currently active" />
-        {canViewFinancials && <StatCard title="Total Capital"     value={formatCurrency(totalCapital)}  icon={DollarSign} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="Total loaned out" />}
-        {canViewFinancials && <StatCard title="Expected Interest" value={formatCurrency(totalInterest)} icon={TrendingUp}  iconBg="bg-orange-50" iconColor="text-orange-600" subtitle="Total interest revenue" />}
+      <div className={`grid gap-4 mb-6 ${canViewFinancials ? "grid-cols-2 lg:grid-cols-5" : "grid-cols-2"}`}>
+        <StatCard title="Total Loans"    value={companyLoans.length} icon={Users}       iconBg="bg-blue-50"    iconColor="text-blue-600"   subtitle="All records" />
+        <StatCard title="Active Loans"   value={activeCount}         icon={CheckCircle}  iconBg="bg-green-50"   iconColor="text-green-600" subtitle="Currently active" />
+        {canViewFinancials && <StatCard title="Active Capital"    value={formatCurrency(activeCapital)}   icon={DollarSign} iconBg="bg-purple-50"   iconColor="text-purple-600" subtitle={`Total: ${formatCurrency(totalCapital)}`} />}
+        {canViewFinancials && <StatCard title="Active Interest"   value={formatCurrency(activeInterest)}  icon={TrendingUp}  iconBg="bg-emerald-50" iconColor="text-emerald-600" subtitle="Revenue from active loans" />}
+        {canViewFinancials && <StatCard title="Total Interest"    value={formatCurrency(totalInterest)}   icon={TrendingUp}  iconBg="bg-orange-50"  iconColor="text-orange-600" subtitle="All-time interest revenue" />}
       </div>
 
       {/* Filters */}
