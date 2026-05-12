@@ -129,13 +129,13 @@ export default function TasksPage() {
         const active = Array.isArray(data) ? data.filter(u => u.status !== "inactive") : [];
         setAllStaffList(active);
         const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_TASKS.includes(sess.position ?? sess.role ?? "");
-        setStaffList(active.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
+        setStaffList(cid ? active.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)) : active);
       } else throw new Error();
     } catch {
       const allStaff = lsGet<StaffUser[]>(USERS_KEY, []);
       setAllStaffList(allStaff);
       const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_TASKS.includes(sess.position ?? sess.role ?? "");
-      setStaffList(allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)));
+      setStaffList(cid ? allStaff.filter(u => u.companyId === cid && (!isBM || u.branchId === sess?.branchId)) : allStaff);
     }
     // Load branches
     try {
