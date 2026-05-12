@@ -87,8 +87,6 @@ const ALL_NAV: NavGroup[] = [
     items: [
       { label: "Tasks", href: "/tasks", icon: CheckSquare },
       { label: "KPIs & Reports", href: "/kpis", icon: Target },
-      { label: "Assets", href: "/assets", icon: Briefcase },
-      { label: "Marketing Expenses", href: "/expenses", icon: Receipt },
     ]
   },
   {
@@ -104,7 +102,9 @@ const ALL_NAV: NavGroup[] = [
       { label: "Invoices",             href: "/invoices",                   icon: FileText     },
       { label: "Petty Cash",           href: "/petty-cash",                 icon: DollarSign   },
       { label: "Interest from Loans",  href: "/accounting/loan-interest",   icon: TrendingUp   },
-      { label: "Reports",                href: "/accounting/financial-reports", icon: BarChart3    },
+      { label: "Assets",               href: "/assets",                      icon: Briefcase    },
+      { label: "Marketing Expenses",    href: "/expenses",                    icon: Receipt      },
+      { label: "Reports",               href: "/accounting/financial-reports", icon: BarChart3    },
     ]
   },
   {

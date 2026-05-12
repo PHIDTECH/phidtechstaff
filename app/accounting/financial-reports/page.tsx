@@ -6,7 +6,7 @@ import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BarChart3, Printer, Download, RefreshCw, Users, ShoppingCart, Receipt, DollarSign, TrendingUp, Activity, FileText, Wallet, CreditCard, Landmark, UserCheck } from "lucide-react";
+import { BarChart3, Printer, Download, RefreshCw, Users, ShoppingCart, Receipt, DollarSign, TrendingUp, Activity, FileText, Wallet, CreditCard, Landmark, UserCheck, Briefcase } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
@@ -19,7 +19,7 @@ function lsGet<T>(key: string, fb: T): T {
 
 interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; }
 interface Company { id: string; name: string; }
-type ReportType = "customers" | "sales" | "marketing_expenses" | "office_expenses" | "staff_claims" | "payroll" | "invoices" | "petty_cash" | "loan_customers" | "loan_interest" | "revenue_summary" | "profit_loss";
+type ReportType = "customers" | "sales" | "marketing_expenses" | "office_expenses" | "staff_claims" | "payroll" | "invoices" | "petty_cash" | "loan_customers" | "loan_interest" | "revenue_summary" | "profit_loss" | "assets";
 type DatePreset  = "all" | "today" | "week" | "month" | "year" | "custom";
 
 const REPORT_TYPES: { key: ReportType; label: string; icon: React.ElementType; color: string; bg: string }[] = [
@@ -35,6 +35,7 @@ const REPORT_TYPES: { key: ReportType; label: string; icon: React.ElementType; c
   { key: "loan_interest",      label: "Loan Interest",      icon: TrendingUp,   color: "text-lime-600",    bg: "bg-lime-50"    },
   { key: "revenue_summary",    label: "Revenue Summary",    icon: TrendingUp,   color: "text-emerald-600", bg: "bg-emerald-50" },
   { key: "profit_loss",        label: "Profit & Loss",      icon: Activity,     color: "text-red-600",     bg: "bg-red-50"     },
+  { key: "assets",             label: "Assets",             icon: Briefcase,    color: "text-slate-600",   bg: "bg-slate-50"   },
 ];
 
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
@@ -101,6 +102,7 @@ export default function ReportsPage() {
   const [payroll,    setPayroll]    = useState<Row[]>([]);
   const [invoices,   setInvoices]   = useState<Row[]>([]);
   const [pettyCash,  setPettyCash]  = useState<Row[]>([]);
+  const [assets,     setAssets]     = useState<Row[]>([]);
 
   const loadData = async () => {
     setLoading(true);
@@ -130,6 +132,11 @@ export default function ReportsPage() {
       // Enrich payroll rows with staff name from users list
       const userMap = new Map<string, string>((d10 as Row[]).map(u => [String(u.id), String(u.name)]));
       setPayroll((d7 as Row[]).map(p => ({ ...p, staffName: userMap.get(String(p.staffId)) || String(p.staffId) })));
+      // Fetch assets separately
+      try {
+        const ar = await fetch("/api/assets", { cache: "no-store" });
+        if (ar.ok) setAssets(await ar.json());
+      } catch {}
     } catch {}
     setLoading(false);
   };
@@ -142,6 +149,7 @@ export default function ReportsPage() {
   const fd = (arr: Row[], ...keys: string[]) =>
     filterByCo(arr).filter(x => inRange(keys.reduce<unknown>((v, k) => v ?? x[k], undefined), start, end));
 
+  const fAssets    = fd(assets, "purchaseDate", "createdAt");
   const fCustomers = fd(customers, "date", "createdAt");
   const fSales     = fd(sales,     "date");
   const fMkt       = fd(mktExp,    "submittedAt", "date", "createdAt");
@@ -291,6 +299,17 @@ export default function ReportsPage() {
       { key: "status",       label: "Status"                                                                 },
     ],
     profit_loss: [],
+    assets: [
+      { key: "_assetNum",    label: "#"                                                                         },
+      { key: "name",         label: "Asset Name"                                                                },
+      { key: "category",     label: "Category"                                                                  },
+      { key: "location",     label: "Location"                                                                  },
+      { key: "assignedTo",   label: "Assigned To"                                                               },
+      { key: "purchaseCost", label: "Purchase Cost", render: r => formatCurrency(Number(r.purchaseCost || 0))  },
+      { key: "currentValue", label: "Current Value", render: r => formatCurrency(Number(r.currentValue ?? r.purchaseCost ?? 0)) },
+      { key: "status",       label: "Status"                                                                    },
+      { key: "purchaseDate", label: "Purchase Date", render: r => r.purchaseDate ? formatDate(String(r.purchaseDate)) : (r.createdAt ? formatDate(String(r.createdAt)) : "") },
+    ],
   };
 
   const DATA: Record<ReportType, Row[]> = {
@@ -306,6 +325,7 @@ export default function ReportsPage() {
     loan_interest:      fLoanInt,
     revenue_summary:    fRevenue,
     profit_loss:        [],
+    assets:             fAssets.map((r, i) => ({ ...r, _assetNum: i + 1 })),
   };
 
   const cfg  = REPORT_TYPES.find(r => r.key === report)!;
