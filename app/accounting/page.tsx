@@ -8,6 +8,7 @@ import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import {
   BookOpen, TrendingUp, TrendingDown, DollarSign, BarChart3,
   ShoppingCart, ArrowRight, CreditCard, Activity,
@@ -60,7 +61,10 @@ export default function AccountingPage() {
   const [cid, setCid]                   = useState("");
   const [groupCid, setGroupCid]         = useState("");
   const cidRef                          = useRef("");
-  const [period, setPeriod]             = useState<"daily"|"monthly"|"yearly">("monthly");
+  type FP = "daily"|"weekly"|"monthly"|"yearly"|"custom";
+  const [filterPreset, setFilterPreset] = useState<FP>("monthly");
+  const [customFrom, setCustomFrom]     = useState(() => { const d=new Date(); d.setDate(1); return d.toISOString().slice(0,10); });
+  const [customTo,   setCustomTo]       = useState(() => new Date().toISOString().slice(0,10));
 
   useEffect(() => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
@@ -79,7 +83,6 @@ export default function AccountingPage() {
   }, []);
 
   const co = cidRef.current || cid;
-  // When Group HQ is selected, show all-company consolidated data
   const isGroupView = !co || co === groupCid;
   const byco = <T extends { companyId: string }>(arr: T[]) => isGroupView ? arr : arr.filter(x => x.companyId === co);
   const coSales  = byco(sales);
@@ -89,61 +92,111 @@ export default function AccountingPage() {
   const coAdv    = byco(advances);
   const coCom    = byco(commissions);
 
-  const today     = new Date().toISOString().slice(0,10);
-  const thisMonth = today.slice(0,7);
-  const thisYear  = today.slice(0,4);
+  // ── Unified date-range filter ──
+  const getRange = (): [Date, Date] => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (filterPreset === "daily")   return [today, new Date(today.getTime() + 86_399_999)];
+    if (filterPreset === "weekly") {
+      const dow = today.getDay(); const back = dow === 0 ? 6 : dow - 1;
+      const mon = new Date(today); mon.setDate(today.getDate() - back);
+      const sun = new Date(mon);   sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
+      return [mon, sun];
+    }
+    if (filterPreset === "monthly") return [new Date(now.getFullYear(), now.getMonth(), 1), new Date(now.getFullYear(), now.getMonth()+1, 0, 23, 59, 59, 999)];
+    if (filterPreset === "yearly")  return [new Date(now.getFullYear(), 0, 1), new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)];
+    return [customFrom ? new Date(customFrom) : new Date(0), customTo ? new Date(customTo+"T23:59:59") : new Date()];
+  };
+  const [fStart, fEnd] = getRange();
+  const inR = (d?: string) => { if (!d) return false; const dt = new Date(d); return dt >= fStart && dt <= fEnd; };
+  const fSales = coSales.filter(s => inR(s.date));
+  const fExp   = coExp.filter(e => inR(e.submittedAt));
+  const fOE    = coOE.filter(e => inR(e.date));
+  const fPay   = coPay.filter(p => inR(p.generatedAt || ""));
+  const fAdv   = coAdv.filter(a => a.status === "disbursed");
+  const fCom   = coCom.filter(c => c.status === "paid");
 
-  const totalRevenue   = coSales.reduce((s,e) => s + e.amount, 0);
-  const totalPaid      = coSales.reduce((s,e) => s + e.paid, 0);
-  const totalUnpaid    = totalRevenue - totalPaid;
-  const totalExpClaims = coExp.filter(e => e.status === "paid" || e.status === "approved" || e.status === "disbursed").reduce((s,e) => s + e.amount, 0);
-  const totalOfficeExp = coOE.filter(e => ["paid","approved","disbursed","ceo_approved"].includes(e.status)).reduce((s,e) => s + e.amount, 0);
-  const totalSalaries  = coPay.filter(p => p.status === "paid").reduce((s,p) => s + p.netSalary, 0);
-  const totalAdvances  = coAdv.filter(a => a.status === "disbursed").reduce((s,a) => s + a.amount, 0);
-  const totalComms     = coCom.filter(c => c.status === "paid").reduce((s,c) => s + c.amount, 0);
-  const totalExpAmt    = totalExpClaims + totalOfficeExp + totalSalaries + totalAdvances + totalComms;
-  const netProfit      = totalPaid - totalExpAmt;
+  const filtRevenue = fSales.reduce((s,e) => s + e.amount, 0);
+  const filtPaid    = fSales.reduce((s,e) => s + e.paid, 0);
+  const filtUnpaid  = filtRevenue - filtPaid;
+  const filtExpCl   = fExp.filter(e => ["paid","approved","disbursed"].includes(e.status)).reduce((s,e) => s + e.amount, 0);
+  const filtOffExp  = fOE.filter(e => ["paid","approved","disbursed","ceo_approved"].includes(e.status)).reduce((s,e) => s + e.amount, 0);
+  const filtSalary  = fPay.filter(p => p.status === "paid").reduce((s,p) => s + p.netSalary, 0);
+  const filtAdvAmt  = fAdv.reduce((s,a) => s + a.amount, 0);
+  const filtComAmt  = fCom.reduce((s,c) => s + c.amount, 0);
+  const filtExpAmt  = filtExpCl + filtOffExp + filtSalary + filtAdvAmt + filtComAmt;
+  const filtProfit  = filtPaid - filtExpAmt;
 
-  const dailySales    = coSales.filter(s => s.date === today).reduce((s,e) => s + e.amount, 0);
-  const monthlySales  = coSales.filter(s => s.date.startsWith(thisMonth)).reduce((s,e) => s + e.amount, 0);
-  const yearlySales   = coSales.filter(s => s.date.startsWith(thisYear)).reduce((s,e) => s + e.amount, 0);
+  const periodLabel = { daily: "Today", weekly: "This Week", monthly: "This Month", yearly: "This Year", custom: `${customFrom} → ${customTo}` }[filterPreset];
 
-  // Build chart data
+  // ── Chart data (grouped within selected range) ──
   const buildChart = () => {
-    if (period === "daily") {
-      const days = Array.from({ length: 14 }, (_, i) => {
-        const d = new Date(); d.setDate(d.getDate() - (13 - i));
+    if (filterPreset === "daily") {
+      const ds = fStart.toISOString().slice(0,10);
+      return Array.from({ length: 24 }, (_, h) => {
+        const rev = fSales.filter(s => s.date === ds).reduce((s,e) => s + e.amount, 0) / 24;
+        return { label: `${String(h).padStart(2,"0")}:00`, revenue: Math.round(rev), expenses: 0, profit: Math.round(rev) };
+      }).filter((_,i) => i % 3 === 0);
+    }
+    if (filterPreset === "weekly") {
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(fStart); d.setDate(fStart.getDate() + i);
         const ds = d.toISOString().slice(0,10);
         const rev = coSales.filter(s => s.date === ds).reduce((s,e) => s + e.amount, 0);
-        const exp = coExp.filter(e => e.submittedAt?.slice(0,10) === ds && (e.status==="paid"||e.status==="approved")).reduce((s,e) => s + e.amount, 0);
+        const exp = coExp.filter(e => e.submittedAt?.slice(0,10) === ds && ["paid","approved"].includes(e.status)).reduce((s,e) => s + e.amount, 0);
         return { label: dayLabel(ds), revenue: rev, expenses: exp, profit: rev - exp };
       });
-      return days;
     }
-    if (period === "monthly") {
-      const months = Array.from({ length: 12 }, (_, i) => {
+    if (filterPreset === "monthly") {
+      return Array.from({ length: 12 }, (_, i) => {
         const d = new Date(); d.setMonth(d.getMonth() - (11 - i));
         const ms = d.toISOString().slice(0,7);
         const rev = coSales.filter(s => s.date.startsWith(ms)).reduce((s,e) => s + e.amount, 0);
-        const exp = coExp.filter(e => e.submittedAt?.startsWith(ms) && (e.status==="paid"||e.status==="approved")).reduce((s,e) => s + e.amount, 0);
+        const exp = coExp.filter(e => e.submittedAt?.startsWith(ms) && ["paid","approved"].includes(e.status)).reduce((s,e) => s + e.amount, 0);
         return { label: d.toLocaleDateString("en-GB",{month:"short",year:"2-digit"}), revenue: rev, expenses: exp, profit: rev - exp };
       });
-      return months;
     }
-    // yearly: last 5 years
-    const years = Array.from({ length: 5 }, (_, i) => {
-      const yr = (new Date().getFullYear() - (4 - i)).toString();
-      const rev = coSales.filter(s => s.date.startsWith(yr)).reduce((s,e) => s + e.amount, 0);
-      const exp = coExp.filter(e => e.submittedAt?.startsWith(yr) && (e.status==="paid"||e.status==="approved")).reduce((s,e) => s + e.amount, 0);
-      return { label: yr, revenue: rev, expenses: exp, profit: rev - exp };
+    if (filterPreset === "yearly") {
+      return Array.from({ length: 5 }, (_, i) => {
+        const yr = (new Date().getFullYear() - (4 - i)).toString();
+        const rev = coSales.filter(s => s.date.startsWith(yr)).reduce((s,e) => s + e.amount, 0);
+        const exp = coExp.filter(e => e.submittedAt?.startsWith(yr) && ["paid","approved"].includes(e.status)).reduce((s,e) => s + e.amount, 0);
+        return { label: yr, revenue: rev, expenses: exp, profit: rev - exp };
+      });
+    }
+    // custom — day-by-day if ≤60 days, else month-by-month
+    const diffDays = Math.ceil((fEnd.getTime() - fStart.getTime()) / 86_400_000);
+    if (diffDays <= 60) {
+      return Array.from({ length: diffDays + 1 }, (_, i) => {
+        const d = new Date(fStart); d.setDate(fStart.getDate() + i);
+        const ds = d.toISOString().slice(0,10);
+        const rev = coSales.filter(s => s.date === ds).reduce((s,e) => s + e.amount, 0);
+        const exp = coExp.filter(e => e.submittedAt?.slice(0,10) === ds && ["paid","approved"].includes(e.status)).reduce((s,e) => s + e.amount, 0);
+        return { label: dayLabel(ds), revenue: rev, expenses: exp, profit: rev - exp };
+      });
+    }
+    const months: string[] = []; const d = new Date(fStart.getFullYear(), fStart.getMonth(), 1);
+    while (d <= fEnd) { months.push(d.toISOString().slice(0,7)); d.setMonth(d.getMonth()+1); }
+    return months.map(ms => {
+      const rev = coSales.filter(s => s.date.startsWith(ms)).reduce((s,e) => s + e.amount, 0);
+      const exp = coExp.filter(e => e.submittedAt?.startsWith(ms) && ["paid","approved"].includes(e.status)).reduce((s,e) => s + e.amount, 0);
+      return { label: ms.slice(0,7), revenue: rev, expenses: exp, profit: rev - exp };
     });
-    return years;
   };
 
   const chartData = buildChart();
 
+  // All-time totals for Financial Summary
+  const totalRevenue = coSales.reduce((s,e) => s + e.amount, 0);
+  const totalPaid    = coSales.reduce((s,e) => s + e.paid, 0);
+  const totalUnpaid  = totalRevenue - totalPaid;
+  const totalExpAmt  = coExp.filter(e=>["paid","approved","disbursed"].includes(e.status)).reduce((s,e)=>s+e.amount,0)
+                     + coOE.filter(e=>["paid","approved","disbursed","ceo_approved"].includes(e.status)).reduce((s,e)=>s+e.amount,0)
+                     + coPay.filter(p=>p.status==="paid").reduce((s,p)=>s+p.netSalary,0);
+  const netProfit    = totalPaid - totalExpAmt;
+
   // Recent sales
-  const recentSales = [...coSales].sort((a,b) => b.date.localeCompare(a.date)).slice(0,5);
+  const recentSales = [...fSales].sort((a,b) => b.date.localeCompare(a.date)).slice(0,5);
 
   const statusColors: Record<string,string> = {
     paid:    "bg-green-100 text-green-800",
@@ -191,12 +244,35 @@ export default function AccountingPage() {
         })}
       </div>
 
+      {/* ── Date Filter Strip ── */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 mb-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1">Period:</span>
+          {(["daily","weekly","monthly","yearly","custom"] as FP[]).map(p => (
+            <button key={p} onClick={() => setFilterPreset(p)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${
+                filterPreset === p ? "bg-blue-600 text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}>
+              {p === "daily" ? "Daily" : p === "weekly" ? "Weekly" : p === "monthly" ? "Monthly" : p === "yearly" ? "Yearly" : "Custom"}
+            </button>
+          ))}
+          {filterPreset === "custom" && (
+            <div className="flex items-center gap-2 ml-2">
+              <Input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="h-7 text-xs w-36" />
+              <span className="text-xs text-gray-400">→</span>
+              <Input type="date" value={customTo}   onChange={e => setCustomTo(e.target.value)}   className="h-7 text-xs w-36" />
+            </div>
+          )}
+          <span className="ml-auto text-xs text-gray-400 italic">{periodLabel}</span>
+        </div>
+      </div>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Today&apos;s Sales"  value={formatCompact(dailySales)}   icon={DollarSign}   iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle="Revenue" />
-        <StatCard title="Monthly Revenue" value={formatCompact(monthlySales)} icon={TrendingUp}   iconBg="bg-green-50"  iconColor="text-green-600"  subtitle="This month" />
-        <StatCard title="Yearly Revenue"  value={formatCompact(yearlySales)}  icon={BarChart3}    iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="This year" />
-        <StatCard title="Net Profit (All)" value={formatCompact(netProfit)}   icon={CreditCard}   iconBg={netProfit >= 0 ? "bg-emerald-50" : "bg-red-50"} iconColor={netProfit >= 0 ? "text-emerald-600" : "text-red-600"} subtitle="Collected − Expenses" />
+        <StatCard title="Revenue"     value={formatCompact(filtRevenue)} icon={DollarSign} iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle={periodLabel} />
+        <StatCard title="Collected"   value={formatCompact(filtPaid)}    icon={TrendingUp} iconBg="bg-green-50"  iconColor="text-green-600"  subtitle={periodLabel} />
+        <StatCard title="Expenses"    value={formatCompact(filtExpAmt)}  icon={BarChart3}  iconBg="bg-orange-50" iconColor="text-orange-600" subtitle={periodLabel} />
+        <StatCard title="Net Profit"  value={formatCompact(filtProfit)}  icon={CreditCard} iconBg={filtProfit >= 0 ? "bg-emerald-50" : "bg-red-50"} iconColor={filtProfit >= 0 ? "text-emerald-600" : "text-red-600"} subtitle={periodLabel} />
       </div>
 
       {/* Revenue vs Expenses chart */}
@@ -204,16 +280,8 @@ export default function AccountingPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
           <div>
             <h3 className="font-semibold text-gray-900">Revenue vs Expenses</h3>
-            <p className="text-xs text-gray-400">Profit = Revenue − Expenses</p>
+            <p className="text-xs text-gray-400">{periodLabel} — Profit = Revenue − Expenses</p>
           </div>
-          <Select value={period} onValueChange={v => setPeriod(v as typeof period)}>
-            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="daily">Last 14 Days</SelectItem>
-              <SelectItem value="monthly">Last 12 Months</SelectItem>
-              <SelectItem value="yearly">Last 5 Years</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
         {chartData.every(d => d.revenue === 0 && d.expenses === 0) ? (
           <div className="flex flex-col items-center justify-center h-40 gap-2 text-center">
@@ -267,11 +335,11 @@ export default function AccountingPage() {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col gap-3">
           <h3 className="font-semibold text-gray-900">Financial Summary</h3>
           {[
-            { label: "Total Revenue",      value: totalRevenue,  color: "text-blue-700" },
-            { label: "Total Collected",    value: totalPaid,     color: "text-green-700" },
-            { label: "Outstanding (Unpaid)", value: totalUnpaid, color: "text-red-600" },
-            { label: "Total Expenses",     value: totalExpAmt,   color: "text-orange-600" },
-            { label: "Net Profit",         value: netProfit,     color: netProfit >= 0 ? "text-emerald-700" : "text-red-600" },
+            { label: "Revenue",            value: filtRevenue,  color: "text-blue-700" },
+            { label: "Collected",          value: filtPaid,     color: "text-green-700" },
+            { label: "Outstanding",        value: filtUnpaid,   color: "text-red-600" },
+            { label: "Expenses",           value: filtExpAmt,   color: "text-orange-600" },
+            { label: "Net Profit",         value: filtProfit,   color: filtProfit >= 0 ? "text-emerald-700" : "text-red-600" },
           ].map(r => (
             <div key={r.label} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
               <span className="text-sm text-gray-600">{r.label}</span>
