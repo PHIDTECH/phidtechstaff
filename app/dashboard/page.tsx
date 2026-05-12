@@ -55,7 +55,7 @@ interface Sale { id: string; companyId: string; paid: number; amount: number; }
 interface Expense { id: string; companyId: string; amount: number; status: string; }
 interface OfficeExpense { id: string; companyId: string; amount: number; status: string; }
 interface PayrollEntry { id: string; companyId: string; netSalary: number; status: string; }
-interface LoanInterest { id: string; companyId: string; interestRevenue: number; status: string; date?: string; createdAt?: string; }
+interface LoanInterest { id: string; companyId: string; loanId?: string; interestRevenue: number; status: string; date?: string; createdAt?: string; }
 interface Loan { id: string; companyId: string; amountOfLoan: number; interestPerMonth: number; loanPeriod: number; status: string; }
 
 export default function DashboardPage() {
