@@ -190,10 +190,11 @@ export default function ReportsPage() {
   const fAllCustomers = [
     ...fCustomers.map(c => ({ ...c, customerType: c.customerType ?? "Sales Customer" })),
     ...newLoanRows,
-  ];
+  ].map((r, i) => ({ ...r, _rowNum: i + 1 }));
 
   const COLUMNS: Record<ReportType, Col[]> = {
     customers: [
+      { key: "_rowNum",        label: "#"                                                                    },
       { key: "name",           label: "Customer Name"                                                        },
       { key: "company",        label: "Company"                                                              },
       { key: "customerType",   label: "Customer Type"                                                        },
@@ -201,7 +202,7 @@ export default function ReportsPage() {
       { key: "email",          label: "Email"                                                                },
       { key: "serviceProduct", label: "Service / Product"                                                    },
       { key: "status",         label: "Status"                                                               },
-      { key: "date",           label: "Date",        render: r => formatDate(String(r.date || r.createdAt || "")) },
+      { key: "date",           label: "Date Registered", render: r => formatDate(String(r.date || r.createdAt || "")) },
     ],
     sales: [
       { key: "customerName", label: "Customer"                                                               },
