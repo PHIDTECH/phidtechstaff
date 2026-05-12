@@ -84,25 +84,17 @@ export default function AssetsPage() {
     setCid(c); cidRef.current = c;
     const gc = lsStr(GROUP_KEY).replace(/^"|"$/g, "");
     setGroupCid(gc); groupCidRef.current = gc;
-    // Load staff
-    try {
-      const ur = await fetch("/api/users", { cache: "no-store" });
-      if (ur.ok) setStaffList(await ur.json());
-      else setStaffList(lsGet<StaffUser[]>(USERS_KEY, []));
-    } catch { setStaffList(lsGet<StaffUser[]>(USERS_KEY, [])); }
-    // Load branches (all branches shared across companies)
-    try {
-      const br = await fetch("/api/branches", { cache: "no-store" });
-      if (br.ok) setBranches(await br.json());
-      else setBranches(lsGet<Branch[]>(BRANCHES_KEY, []));
-    } catch { setBranches(lsGet<Branch[]>(BRANCHES_KEY, [])); }
-    // Load assets
-    try {
-      setLoading(true);
-      const ar = await fetch("/api/assets", { cache: "no-store" });
-      if (ar.ok) setAssetList(await ar.json());
-    } catch {}
-    finally { setLoading(false); }
+    // Show cached values immediately
+    setStaffList(lsGet<StaffUser[]>(USERS_KEY, []));
+    setBranches(lsGet<Branch[]>(BRANCHES_KEY, []));
+    setLoading(true);
+    // Fetch fresh data in parallel — each state slice updates as soon as its response arrives
+    await Promise.all([
+      fetch("/api/users",    { cache: "no-store" }).then(r => r.ok ? r.json() : null).then((d: StaffUser[] | null) => { if (d) setStaffList(d); }).catch(() => {}),
+      fetch("/api/branches", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then((d: Branch[]    | null) => { if (d) setBranches(d);  }).catch(() => {}),
+      fetch("/api/assets",   { cache: "no-store" }).then(r => r.ok ? r.json() : null).then((d: Asset[]     | null) => { if (d) setAssetList(d); }).catch(() => {}),
+    ]);
+    setLoading(false);
   };
 
   useEffect(() => { reload(); }, []); // eslint-disable-line

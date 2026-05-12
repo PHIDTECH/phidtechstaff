@@ -77,35 +77,39 @@ export default function DashboardPage() {
     setActiveCompanyId(cid);
     const gc = lsStr(GROUP_KEY).replace(/^"|"$/g, "");
     setGroupCid(gc);
-    // Load all data in parallel for faster dashboard
-    const safe = async <T,>(url: string, fallback: T): Promise<T> => {
-      try {
-        const r = await fetch(url, { cache: "no-store" });
-        return r.ok ? await r.json() : fallback;
-      } catch { return fallback; }
-    };
-    const [companies, users, branches, taskList, leaveList, salesList, expList, oeList, payList] = await Promise.all([
-      safe<Company[]>("/api/companies", lsGet<Company[]>(COMPANIES_KEY, [])),
-      safe<StaffUser[]>("/api/users", lsGet<StaffUser[]>(USERS_KEY, [])),
-      safe<Branch[]>("/api/branches", []),
-      safe<Task[]>("/api/tasks", lsGet<Task[]>(TASKS_KEY, [])),
-      safe<LeaveReq[]>("/api/leave", lsGet<LeaveReq[]>(LEAVE_KEY, [])),
-      safe<Sale[]>("/api/accounting/sales", lsGet<Sale[]>(SALES_KEY, [])),
-      safe<Expense[]>("/api/expenses", lsGet<Expense[]>(EXPENSES_KEY, [])),
-      safe<OfficeExpense[]>("/api/office-expenses", lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, [])),
-      safe<PayrollEntry[]>("/api/payroll", lsGet<PayrollEntry[]>(PAYROLL_KEY, [])),
+
+    // ── Step 1: render cached data immediately so the page is never blank ──
+    setCompanies(lsGet<Company[]>(COMPANIES_KEY, []));
+    setStaffUsers(lsGet<StaffUser[]>(USERS_KEY, []));
+    setTasks(lsGet<Task[]>(TASKS_KEY, []));
+    setLeaves(lsGet<LeaveReq[]>(LEAVE_KEY, []));
+    setSales(lsGet<Sale[]>(SALES_KEY, []));
+    setExpenses(lsGet<Expense[]>(EXPENSES_KEY, []));
+    setOfficeExp(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, []));
+    setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, []));
+
+    // ── Step 2: fetch fresh data — each setter fires as soon as its own response arrives ──
+    const go = <T,>(url: string, setter: (d: T) => void, cacheKey?: string) =>
+      fetch(url, { cache: "no-store" })
+        .then(r => r.ok ? r.json() : null)
+        .then((d: T | null) => {
+          if (d == null) return;
+          setter(d);
+          if (cacheKey) try { localStorage.setItem(cacheKey, JSON.stringify(d)); } catch {}
+        })
+        .catch(() => {/* keep cached value shown in step 1 */});
+
+    await Promise.all([
+      go<Company[]>   ("/api/companies",        setCompanies,  COMPANIES_KEY),
+      go<StaffUser[]> ("/api/users",            setStaffUsers, USERS_KEY),
+      go<Branch[]>    ("/api/branches",         setBranches),
+      go<Task[]>      ("/api/tasks",            setTasks,      TASKS_KEY),
+      go<LeaveReq[]>  ("/api/leave",            setLeaves,     LEAVE_KEY),
+      go<Sale[]>      ("/api/accounting/sales", setSales,      SALES_KEY),
+      go<Expense[]>   ("/api/expenses",         setExpenses,   EXPENSES_KEY),
+      go<OfficeExpense[]>("/api/office-expenses",setOfficeExp, OFFICE_EXP_KEY),
+      go<PayrollEntry[]> ("/api/payroll",       setPayroll,    PAYROLL_KEY),
     ]);
-    setCompanies(companies);
-    try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(companies)); } catch {}
-    setStaffUsers(users);
-    try { localStorage.setItem(USERS_KEY, JSON.stringify(users)); } catch {}
-    setBranches(branches);
-    setTasks(taskList);
-    setLeaves(leaveList);
-    setSales(salesList);
-    setExpenses(expList);
-    setOfficeExp(oeList);
-    setPayroll(payList);
   };
 
   useEffect(() => {
