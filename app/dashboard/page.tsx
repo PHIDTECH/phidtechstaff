@@ -218,9 +218,13 @@ export default function DashboardPage() {
     ? loanInt.filter(l => l.companyId === _effCid && LINT_PAID.includes(l.status))
     : loanInt.filter(l => LINT_PAID.includes(l.status));
   const coLoansActive = _effCid ? loans.filter(l => l.companyId === _effCid) : loans;
+  // Resolve loans linked via loanInt loanId (handles loans saved with wrong companyId)
+  const coLinkedIds   = new Set(coLoanInt.map(l => l.loanId).filter(Boolean));
+  const coLinkedLoans = loans.filter(l => coLinkedIds.has(l.id) && !coLoansActive.find(cl => cl.id === l.id));
   const coRevenue  = coSales.reduce((s, e) => s + e.paid, 0)
                    + coLoanInt.reduce((s, l) => s + l.interestRevenue, 0)
-                   + loanInterestCalc(coLoansActive);
+                   + loanInterestCalc(coLoansActive)
+                   + loanInterestCalc(coLinkedLoans);
   const coExpAmt   = coExp.reduce((s, e) => s + e.amount, 0)
                    + coOE.reduce((s, e) => s + e.amount, 0)
                    + coPay.reduce((s, p) => s + p.netSalary, 0);
