@@ -71,6 +71,7 @@ export default function AccountingSalesPage() {
   const [form, setForm]             = useState(emptyForm());
   const [formError, setFormError]   = useState("");
   const [selCustomer, setSelCustomer] = useState<Customer | null>(null);
+  const [custSearch, setCustSearch]   = useState("");
 
   const [loading, setLoading] = useState(true);
 
@@ -411,15 +412,35 @@ export default function AccountingSalesPage() {
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Customer *</label>
                 <Select value={form.customerId} onValueChange={v => {
                   const c = customers.find(cu => cu.id === v) ?? null;
-                  setSelCustomer(c); sf({ customerId: v });
+                  setSelCustomer(c); sf({ customerId: v }); setCustSearch("");
                 }}>
                   <SelectTrigger><SelectValue placeholder="Select customer from list" /></SelectTrigger>
-                  <SelectContent className="max-h-60">
+                  <SelectContent className="max-h-72 p-0">
+                    {/* Search box — stopPropagation prevents Select hijacking keystrokes */}
+                    <div className="px-2 pt-2 pb-1 border-b border-gray-100" onKeyDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+                      <Input
+                        placeholder="Search customer..."
+                        value={custSearch}
+                        onChange={e => setCustSearch(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="overflow-y-auto max-h-52">
                     {(() => {
                       const formCo = form.saleCompanyId || cid;
-                      const visibleCusts = formCo ? customers.filter(c => c.companyId === formCo) : customers;
-                      if (visibleCusts.length === 0) return (
+                      const base = formCo ? customers.filter(c => c.companyId === formCo) : customers;
+                      const visibleCusts = custSearch
+                        ? base.filter(c =>
+                            c.name.toLowerCase().includes(custSearch.toLowerCase()) ||
+                            (c.company ?? "").toLowerCase().includes(custSearch.toLowerCase()) ||
+                            (c.phone ?? "").includes(custSearch)
+                          )
+                        : base;
+                      if (base.length === 0) return (
                         <div className="px-3 py-4 text-center text-sm text-gray-400">{isGroupHQ && !form.saleCompanyId ? "Select a company first" : "No customers found"}</div>
+                      );
+                      if (visibleCusts.length === 0) return (
+                        <div className="px-3 py-4 text-center text-sm text-gray-400">No match for "{custSearch}"</div>
                       );
                       return visibleCusts.map(c => {
                         const custSales = sales.filter(s => s.customerId === c.id);
@@ -444,6 +465,7 @@ export default function AccountingSalesPage() {
                         );
                       });
                     })()}
+                    </div>
                   </SelectContent>
                 </Select>
                 {selCustomer && (
