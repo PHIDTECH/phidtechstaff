@@ -23,6 +23,7 @@ const ATTENDANCE_KEY = "phidtech_attendance";
 const USERS_KEY      = "phidtech_users";
 const BRANCHES_KEY   = "phidtech_branches_cache";
 const COMPANIES_KEY  = "phidtech_companies";
+const GROUP_KEY      = "phidtech_group_company";
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
@@ -94,6 +95,8 @@ export default function AttendancePage() {
   const [companiesList, setCompaniesList]  = useState<{id:string;name:string}[]>([]);
   const [activeCompanyId, setActiveCompanyId] = useState("");
   const cidRef                            = useRef("");
+  const [groupCid, setGroupCid]           = useState("");
+  const groupCidRef                       = useRef("");
   const [dateFilter, setDateFilter]       = useState(today);
   const [showDialog, setShowDialog]       = useState(false);
   const [form, setForm]                   = useState(emptyForm());
@@ -109,6 +112,8 @@ export default function AttendancePage() {
     const resolvedCid = getActiveCid(sess);
     setActiveCompanyId(resolvedCid);
     cidRef.current = resolvedCid;
+    const gc = lsStr(GROUP_KEY).replace(/^"|"$/g, "");
+    setGroupCid(gc); groupCidRef.current = gc;
     setCompaniesList(lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []));
     // Load ALL staff from API — filter by companyId client-side
     try {
@@ -185,13 +190,18 @@ export default function AttendancePage() {
   }, []);
 
   // Derive cid synchronously from session to avoid empty-string flash before async state settles
+  const _gc = groupCidRef.current || groupCid;
+  const isGroupHqId = (id: string) => !id || id === "group" || (!!_gc && id === _gc);
   const cid = (() => {
-    if (!session) return cidRef.current || activeCompanyId;
+    if (!session) return isGroupHqId(cidRef.current || activeCompanyId) ? "" : (cidRef.current || activeCompanyId);
     const _r = (session.role ?? "").toLowerCase();
     const _p = (session.position ?? "").toLowerCase();
     const ATT_GRP = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
     const isGroupMember = session.isSuperAdmin || session.companyId === "group" || ATT_GRP.includes(_r) || ATT_GRP.includes(_p);
-    if (isGroupMember) return cidRef.current || activeCompanyId; // "" in Group HQ mode
+    if (isGroupMember) {
+      const activeId = cidRef.current || activeCompanyId;
+      return isGroupHqId(activeId) ? "" : activeId; // "" = Group HQ mode
+    }
     return session.companyId || cidRef.current || activeCompanyId;
   })();
 

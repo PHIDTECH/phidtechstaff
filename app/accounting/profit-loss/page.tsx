@@ -32,12 +32,13 @@ interface Sale { id: string; companyId: string; date: string; amount: number; pa
 interface Expense { id: string; companyId: string; amount: number; category: string; status: string; submittedAt: string; }
 interface OfficeExpense { id: string; companyId: string; amount: number; category: string; status: string; date: string; }
 interface PayrollEntry { id: string; staffId: string; companyId: string; month: string; year: number; netSalary: number; grossSalary: number; status: "draft" | "paid"; generatedAt: string; }
-interface Advance    { id: string; companyId: string; amount: number; status: string; disbursedAt?: string; requestedAt?: string; }
-interface Commission { id: string; companyId: string; amount: number; status: string; paidAt?: string; createdAt?: string; }
+interface Advance      { id: string; companyId: string; amount: number; status: string; disbursedAt?: string; requestedAt?: string; }
+interface Commission   { id: string; companyId: string; amount: number; status: string; paidAt?: string; createdAt?: string; }
+interface LoanInterest { id: string; companyId: string; interestRevenue: number; status: string; date?: string; createdAt?: string; }
 
 type Period = "daily" | "weekly" | "monthly" | "yearly";
 
-function buildRows(sales: Sale[], expenses: Expense[], officeExp: OfficeExpense[], payroll: PayrollEntry[], advances: Advance[], commissions: Commission[], period: Period) {
+function buildRows(sales: Sale[], expenses: Expense[], officeExp: OfficeExpense[], payroll: PayrollEntry[], advances: Advance[], commissions: Commission[], loanInterest: LoanInterest[], period: Period) {
   const now = new Date();
   let count = 0;
   let getKey: (d: Date) => string;
@@ -124,8 +125,16 @@ function buildRows(sales: Sale[], expenses: Expense[], officeExp: OfficeExpense[
       return ck === k;
     }).reduce((acc, c) => acc + c.amount, 0);
 
+    const lint = loanInterest.filter(l => {
+      if (!["active","paid"].includes(l.status)) return false;
+      const ld = (l.date || l.createdAt || "").slice(0, 10);
+      const lk = period === "daily" ? ld : period === "weekly" ? getKey(new Date(ld)) :
+                 period === "monthly" ? ld.slice(0, 7) : ld.slice(0, 4);
+      return lk === k;
+    }).reduce((acc, l) => acc + l.interestRevenue, 0);
+    const totalRev = rev + lint;
     const totalExp = exp + sal + oexp + adv + com;
-    return { label: getLabel(k), revenue: rev, expenses: totalExp, salaries: sal, claims: exp, officeExp: oexp, advances: adv, commissions: com, profit: rev - totalExp };
+    return { label: getLabel(k), revenue: totalRev, expenses: totalExp, salaries: sal, claims: exp, officeExp: oexp, advances: adv, commissions: com, loanInterest: lint, profit: totalRev - totalExp };
   });
 }
 
@@ -138,6 +147,7 @@ export default function ProfitLossPage() {
   const [payroll, setPayroll]         = useState<PayrollEntry[]>([]);
   const [advances, setAdvances]       = useState<Advance[]>([]);
   const [commissions, setCommissions] = useState<Commission[]>([]);
+  const [loanInterest, setLoanInterest] = useState<LoanInterest[]>([]);
   const [cid, setCid]                 = useState("");
   const [groupCid, setGroupCid]       = useState("");
   const cidRef                        = useRef("");
@@ -152,8 +162,9 @@ export default function ProfitLossPage() {
     try { const r = await fetch("/api/expenses",          { cache: "no-store" }); if (r.ok) setExpenses(await r.json());    else setExpenses(lsGet<Expense[]>(EXP_KEY, [])); }      catch { setExpenses(lsGet<Expense[]>(EXP_KEY, [])); }
     try { const r = await fetch("/api/office-expenses",   { cache: "no-store" }); if (r.ok) setOfficeExp(await r.json());  else setOfficeExp(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, [])); } catch { setOfficeExp(lsGet<OfficeExpense[]>(OFFICE_EXP_KEY, [])); }
     try { const r = await fetch("/api/payroll",           { cache: "no-store" }); if (r.ok) setPayroll(await r.json());    else setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, [])); } catch { setPayroll(lsGet<PayrollEntry[]>(PAYROLL_KEY, [])); }
-    try { const r = await fetch("/api/advances",          { cache: "no-store" }); if (r.ok) setAdvances(await r.json());   } catch {}
+    try { const r = await fetch("/api/advances",          { cache: "no-store" }); if (r.ok) setAdvances(await r.json());     } catch {}
     try { const r = await fetch("/api/commissions",       { cache: "no-store" }); if (r.ok) setCommissions(await r.json()); } catch {}
+    try { const r = await fetch("/api/loan-interest",     { cache: "no-store" }); if (r.ok) setLoanInterest(await r.json()); } catch {}
   };
 
   useEffect(() => {
@@ -173,12 +184,14 @@ export default function ProfitLossPage() {
   const coE   = byco(expenses);
   const coOE  = byco(officeExpenses);
   const coP   = byco(payroll);
-  const coAdv = byco(advances);
-  const coCom = byco(commissions);
+  const coAdv  = byco(advances);
+  const coCom  = byco(commissions);
+  const coLInt = byco(loanInterest);
 
-  const rows  = buildRows(coS, coE, coOE, coP, coAdv, coCom, period);
+  const rows  = buildRows(coS, coE, coOE, coP, coAdv, coCom, coLInt, period);
 
-  const totalRev        = coS.reduce((s, e) => s + e.paid, 0);
+  const totalLoanInt    = coLInt.filter(l => ["active","paid"].includes(l.status)).reduce((s,l) => s + l.interestRevenue, 0);
+  const totalRev        = coS.reduce((s, e) => s + e.paid, 0) + totalLoanInt;
   const totalExpClaims  = coE.filter(e => e.status === "paid" || e.status === "approved" || e.status === "disbursed").reduce((s,e) => s + e.amount, 0);
   const totalOfficeExp  = coOE.filter(e => ["paid","approved","disbursed","ceo_approved"].includes(e.status)).reduce((s,e) => s + e.amount, 0);
   const totalSalaries   = coP.filter(p => p.status === "paid").reduce((s,p) => s + p.netSalary, 0);
