@@ -194,8 +194,23 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
         const cid = rawCid && rawCid !== '""' ? rawCid.replace(/^"|"$/g, "") : "";
         setActiveCompanyId(cid);
         if (s) {
-          const sess = JSON.parse(s);
+          let sess = JSON.parse(s);
           setSession(sess);
+          // Fetch fresh permissions from server so admin-updated perms apply without logout
+          if (sess?.id && !sess?.isSuperAdmin) {
+            try {
+              const pr = await fetch("/api/users", { cache: "no-store" });
+              if (pr.ok) {
+                const users: {id:string;permissions?:string[]}[] = await pr.json();
+                const freshUser = users.find(u => u.id === sess.id);
+                if (freshUser && Array.isArray(freshUser.permissions)) {
+                  sess = { ...sess, permissions: freshUser.permissions };
+                  setSession(sess);
+                  try { localStorage.setItem(SESSION_KEY, JSON.stringify(sess)); } catch {}
+                }
+              }
+            } catch {}
+          }
           // Load companies — use module cache to avoid network hit on every navigation
           let companies: {id:string;name:string}[] = [];
           const now = Date.now();
