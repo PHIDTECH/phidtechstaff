@@ -62,6 +62,7 @@ interface PayrollEntry {
 }
 interface SalaryAdvance {
   id: string; staffId: string; companyId: string;
+  employeeName?: string;
   amount: number; reason: string; requestDate: string;
   repaymentDate: string;
   status: "pending" | "manager_approved" | "ceo_approved" | "disbursed" | "rejected";
@@ -307,9 +308,11 @@ export default function PayrollPage() {
       setAdvError("Enter a valid amount."); return;
     }
     if (!advForm.reason.trim()) { setAdvError("Enter a reason."); return; }
+    const advEmp = allStaffList.find(u => u.id === sid);
     const adv: SalaryAdvance = {
       id: `adv-${Date.now()}`,
       staffId: sid, companyId: activeCompanyId,
+      employeeName: advEmp?.name ?? session?.name ?? undefined,
       amount: Number(advForm.amount), reason: advForm.reason.trim(),
       requestDate: new Date().toISOString().slice(0, 10),
       repaymentDate: advForm.repaymentDate,
@@ -1030,14 +1033,15 @@ export default function PayrollPage() {
                 <TableBody>
                   {visibleAdvances.map((adv) => {
                     const emp = allStaffList.find(u => u.id === adv.staffId);
+                    const displayName = emp?.name ?? adv.employeeName ?? "Unknown";
                     return (
                       <TableRow key={adv.id}>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Avatar className="w-8 h-8">
-                              <AvatarFallback className="text-xs">{getInitials(emp?.name ?? "?")}</AvatarFallback>
+                              <AvatarFallback className="text-xs">{getInitials(displayName)}</AvatarFallback>
                             </Avatar>
-                            <p className="font-medium text-gray-900 text-sm">{emp?.name ?? "Unknown"}</p>
+                            <p className="font-medium text-gray-900 text-sm">{displayName}</p>
                           </div>
                         </TableCell>
                         <TableCell className="font-semibold text-gray-900">{formatCurrency(adv.amount)}</TableCell>

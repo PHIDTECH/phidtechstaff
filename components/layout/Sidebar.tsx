@@ -26,31 +26,32 @@ const SB_CO_TTL = 60_000;
 
 // Map permission keys to route prefixes
 const PERM_ROUTES: Record<string, string[]> = {
-  dashboard:       ["/dashboard"],
-  users:           ["/users"],
-  attendance:      ["/attendance"],
-  leave:           ["/leave"],
-  payroll:         ["/payroll"],
-  tasks:           ["/tasks"],
-  kpis:            ["/kpis"],
-  assets:          ["/assets"],
-  expenses:        ["/expenses"],
-  accounting:      ["/accounting"],
-  invoices:        ["/invoices"],
-  petty_cash:      ["/petty-cash"],
-  customers:       ["/customers"],
-  sales:           ["/sales", "/quotations", "/tickets"],
-  commissions:     ["/commissions"],
-  marketing:       ["/marketing"],
-  inventory:       ["/inventory", "/vendors"],
-  documents:       ["/documents"],
-  reports:         ["/reports"],
-  services:        ["/services"],
-  messages:        ["/messages"],
-  admin:           ["/admin", "/notifications"],
-  loans:           ["/loans"],
-  loan_interest:   ["/accounting/loan-interest"],
+  dashboard:         ["/dashboard"],
+  users:             ["/users"],
+  attendance:        ["/attendance"],
+  leave:             ["/leave"],
+  payroll:           ["/payroll"],
+  tasks:             ["/tasks"],
+  kpis:              ["/kpis"],
+  assets:            ["/assets"],
+  expenses:          ["/expenses"],
+  office_expenses:   ["/accounting/office-expenses"],
+  loan_interest:     ["/accounting/loan-interest"],
   financial_reports: ["/accounting/financial-reports"],
+  accounting:        ["/accounting"],
+  invoices:          ["/invoices"],
+  petty_cash:        ["/petty-cash"],
+  customers:         ["/customers"],
+  sales:             ["/sales", "/quotations", "/tickets"],
+  commissions:       ["/commissions"],
+  marketing:         ["/marketing"],
+  inventory:         ["/inventory", "/vendors"],
+  documents:         ["/documents"],
+  reports:           ["/reports"],
+  services:          ["/services"],
+  messages:          ["/messages"],
+  admin:             ["/admin", "/notifications"],
+  loans:             ["/loans"],
 };
 
 interface NavItem {
@@ -158,11 +159,18 @@ const ALL_NAV: NavGroup[] = [
 
 function canAccess(href: string, perms: string[] | null): boolean {
   if (!perms) return true; // superadmin sees everything
+  // Use longest-prefix match so /accounting/office-expenses beats /accounting
+  let bestPerm: string | null = null;
+  let bestLen = -1;
   for (const [perm, routes] of Object.entries(PERM_ROUTES)) {
-    if (routes.some(r => href === r || href.startsWith(r + "/"))) {
-      return perms.includes(perm);
+    for (const r of routes) {
+      if ((href === r || href.startsWith(r + "/")) && r.length > bestLen) {
+        bestPerm = perm;
+        bestLen = r.length;
+      }
     }
   }
+  if (bestPerm !== null) return perms.includes(bestPerm);
   return true; // routes not in map are always visible
 }
 
