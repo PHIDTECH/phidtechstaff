@@ -116,6 +116,7 @@ const ALL_NAV: NavGroup[] = [
       { label: "Commissions",     href: "/commissions", icon: Percent    },
       { label: "Loan Customers",           href: "/loans",                    icon: DollarSign },
       { label: "Microfinance Customers",    href: "/microfinance-customers",   icon: Landmark   },
+      { label: "Marketing Customers",       href: "/marketing-customers",      icon: Megaphone  },
       { label: "Quotations",               href: "/quotations",               icon: FileText   },
       { label: "Support Tickets", href: "/tickets",     icon: HelpCircle },
     ]
