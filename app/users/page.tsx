@@ -135,7 +135,7 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
   group_accountant: ["dashboard","accounting","invoices","expenses","office_expenses","payroll","reports","financial_reports","kpis","documents","notifications","petty_cash","messages"],
   // Company-level
   admin:            GROUP_ALL,
-  manager:          ["dashboard","attendance","leave","payroll","tasks","kpis","expenses","office_expenses","reports","services","commissions","notifications","petty_cash","messages"],
+  manager:          ["dashboard","attendance","leave","payroll","tasks","kpis","expenses","office_expenses","customers","reports","services","commissions","notifications","petty_cash","messages"],
   accountant:       ["dashboard","accounting","invoices","expenses","office_expenses","payroll","reports","financial_reports","services","commissions","notifications","petty_cash","messages"],
   hr:               ["dashboard","users","attendance","leave","payroll","reports","services","notifications","messages"],
   sales:            ["dashboard","sales","customers","invoices","tasks","reports","services","commissions","notifications","messages"],

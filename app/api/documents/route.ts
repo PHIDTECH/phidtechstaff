@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readDb, writeDb } from "@/lib/serverDb";
 
-// Increase body size limit for base64 file uploads (App Router route segment config)
+export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 interface Doc {
