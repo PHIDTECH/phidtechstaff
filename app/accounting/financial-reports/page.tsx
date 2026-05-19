@@ -6,7 +6,7 @@ import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BarChart3, Printer, Download, RefreshCw, Users, ShoppingCart, Receipt, DollarSign, TrendingUp, Activity, FileText, Wallet, CreditCard, Landmark, UserCheck, Briefcase } from "lucide-react";
+import { BarChart3, Printer, Download, RefreshCw, Users, ShoppingCart, Receipt, DollarSign, TrendingUp, Activity, FileText, Wallet, CreditCard, Landmark, UserCheck, Briefcase, Scale, Megaphone } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
@@ -19,7 +19,7 @@ function lsGet<T>(key: string, fb: T): T {
 
 interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; }
 interface Company { id: string; name: string; }
-type ReportType = "customers" | "sales" | "marketing_expenses" | "office_expenses" | "staff_claims" | "payroll" | "invoices" | "petty_cash" | "loan_customers" | "loan_interest" | "revenue_summary" | "profit_loss" | "assets";
+type ReportType = "customers" | "sales" | "marketing_expenses" | "office_expenses" | "staff_claims" | "payroll" | "invoices" | "petty_cash" | "loan_customers" | "loan_interest" | "revenue_summary" | "profit_loss" | "assets" | "balance_sheet" | "cashflow" | "microfinance_customers" | "marketing_customers";
 type DatePreset  = "all" | "today" | "week" | "month" | "year" | "custom";
 
 const REPORT_TYPES: { key: ReportType; label: string; icon: React.ElementType; color: string; bg: string }[] = [
@@ -36,6 +36,10 @@ const REPORT_TYPES: { key: ReportType; label: string; icon: React.ElementType; c
   { key: "revenue_summary",    label: "Revenue Summary",    icon: TrendingUp,   color: "text-emerald-600", bg: "bg-emerald-50" },
   { key: "profit_loss",        label: "Profit & Loss",      icon: Activity,     color: "text-red-600",     bg: "bg-red-50"     },
   { key: "assets",             label: "Assets",             icon: Briefcase,    color: "text-slate-600",   bg: "bg-slate-50"   },
+  { key: "balance_sheet",         label: "Balance Sheet",         icon: Scale,     color: "text-violet-600",  bg: "bg-violet-50"  },
+  { key: "cashflow",              label: "Cash Flow",             icon: Activity,  color: "text-sky-600",     bg: "bg-sky-50"     },
+  { key: "microfinance_customers",label: "Microfinance Customers",icon: Landmark,  color: "text-fuchsia-600", bg: "bg-fuchsia-50" },
+  { key: "marketing_customers",   label: "Marketing Customers",   icon: Megaphone, color: "text-rose-600",    bg: "bg-rose-50"    },
 ];
 
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
@@ -103,6 +107,8 @@ export default function ReportsPage() {
   const [invoices,   setInvoices]   = useState<Row[]>([]);
   const [pettyCash,  setPettyCash]  = useState<Row[]>([]);
   const [assets,     setAssets]     = useState<Row[]>([]);
+  const [mfCusts,    setMfCusts]    = useState<Row[]>([]);
+  const [mktCusts,   setMktCusts]   = useState<Row[]>([]);
 
   const loadData = async () => {
     setLoading(true);
@@ -134,8 +140,14 @@ export default function ReportsPage() {
       setPayroll((d7 as Row[]).map(p => ({ ...p, staffName: userMap.get(String(p.staffId)) || String(p.staffId) })));
       // Fetch assets separately
       try {
-        const ar = await fetch("/api/assets", { cache: "no-store" });
-        if (ar.ok) setAssets(await ar.json());
+        const [ar, mfr, mktr] = await Promise.all([
+          fetch("/api/assets",                 { cache: "no-store" }),
+          fetch("/api/microfinance-customers", { cache: "no-store" }),
+          fetch("/api/marketing-customers",    { cache: "no-store" }),
+        ]);
+        if (ar.ok)   setAssets(await ar.json());
+        if (mfr.ok)  setMfCusts(await mfr.json());
+        if (mktr.ok) setMktCusts(await mktr.json());
       } catch {}
     } catch {}
     setLoading(false);
@@ -159,6 +171,8 @@ export default function ReportsPage() {
   const fPayroll   = fd(payroll,   "generatedAt");
   const fInvoices  = fd(invoices,  "date", "createdAt", "invoiceDate");
   const fPettyCash = fd(pettyCash, "date");
+  const fMfCusts   = filterByCo(mfCusts).filter(x  => inRange(x.createdAt,  start, end)).map((r,i) => ({...r, _num: i+1}));
+  const fMktCusts  = filterByCo(mktCusts).filter(x => inRange(x.createdAt,  start, end)).map((r,i) => ({...r, _num: i+1}));
 
   const PAID_EXP     = ["paid","approved","disbursed","ceo_approved","manager_approved"];
   const totalSales   = fSales.reduce((s,x) => s + Number(x.amount || 0), 0);
@@ -174,6 +188,26 @@ export default function ReportsPage() {
     ...fSales.map(s => ({ source: "Customer Sale",  customerName: s.customerName, date: s.date, amount: s.amount, status: s.status })),
     ...fLoanInt.map(l => ({ source: "Loan Interest", customerName: l.customerName, date: l.date, amount: l.interestRevenue, status: l.status })),
   ];
+
+  // ── Balance Sheet calculations (company-filtered, all time) ──
+  const bsFilter   = (arr: Row[]) => isGroupView ? arr : arr.filter(x => x.companyId === cid);
+  const totalAssetValue   = bsFilter(assets).reduce((s,a) => s + Number(a.currentValue ?? a.purchaseCost ?? 0), 0);
+  const activeLoanAmt     = bsFilter(loanCust).filter(l => l.status === "active").reduce((s,l) => s + Number(l.amountOfLoan || 0), 0);
+  const salesReceivable   = bsFilter(sales).filter(s => Number(s.balance) > 0).reduce((s,x) => s + Number(x.balance || 0), 0);
+  const pettyCashBal      = (() => { const pc = bsFilter(pettyCash); return pc.length ? Number(pc[pc.length-1].balance || 0) : 0; })();
+  const totalBsAssets     = totalAssetValue + activeLoanAmt + salesReceivable + pettyCashBal;
+  const unpaidExpenses    = bsFilter(mktExp).filter(x => ["pending","submitted"].includes(String(x.status))).reduce((s,x) => s + Number(x.amount||0), 0)
+                          + bsFilter(offExp).filter(x => ["pending","submitted"].includes(String(x.status))).reduce((s,x) => s + Number(x.amount||0), 0);
+  const payrollDue        = bsFilter(payroll).filter(p => p.status !== "paid").reduce((s,p) => s + Number(p.netSalary||0), 0);
+  const totalBsLiab       = unpaidExpenses + payrollDue;
+  const bsEquity          = totalBsAssets - totalBsLiab;
+
+  // ── Cash Flow calculations (date-filtered) ──
+  const cfSalesIn   = fSales.reduce((s,x) => s + Number(x.paid || 0), 0);
+  const cfLoanIn    = fLoanInt.filter(x => ["active","paid"].includes(String(x.status))).reduce((s,x) => s + Number(x.interestRevenue||0), 0);
+  const cfInflows   = cfSalesIn + cfLoanIn;
+  const cfOutflows  = totalMktExp + totalOffExp + totalPayroll;
+  const netCashFlow = cfInflows - cfOutflows;
 
   // ── Merge regular customers + loan customers for All Customers report ──
   const loanCustNorm: Row[] = filterByCo(loanCust)
@@ -310,6 +344,30 @@ export default function ReportsPage() {
       { key: "status",       label: "Status"                                                                    },
       { key: "purchaseDate", label: "Purchase Date", render: r => r.purchaseDate ? formatDate(String(r.purchaseDate)) : (r.createdAt ? formatDate(String(r.createdAt)) : "") },
     ],
+    balance_sheet:          [],
+    cashflow:               [],
+    microfinance_customers: [
+      { key: "_num",         label: "#"                },
+      { key: "name",         label: "Customer Name"   },
+      { key: "phone",        label: "Phone"           },
+      { key: "businessName", label: "Business / Group" },
+      { key: "permitNumber", label: "Permit No."      },
+      { key: "permitType",   label: "Permit Type"     },
+      { key: "permitExpiry", label: "Expiry Date"     },
+      { key: "address",      label: "Address"         },
+      { key: "createdAt",    label: "Date Added",     render: r => formatDate(String(r.createdAt || "")) },
+    ],
+    marketing_customers: [
+      { key: "_num",         label: "#"              },
+      { key: "name",         label: "Customer Name"  },
+      { key: "phone",        label: "Phone"          },
+      { key: "businessName", label: "Business Name"  },
+      { key: "campaign",     label: "Campaign"       },
+      { key: "category",     label: "Category"       },
+      { key: "source",       label: "Source"         },
+      { key: "email",        label: "Email"          },
+      { key: "createdAt",    label: "Date Added",    render: r => formatDate(String(r.createdAt || "")) },
+    ],
   };
 
   const DATA: Record<ReportType, Row[]> = {
@@ -324,8 +382,12 @@ export default function ReportsPage() {
     loan_customers:     fLoanCust,
     loan_interest:      fLoanInt,
     revenue_summary:    fRevenue,
-    profit_loss:        [],
-    assets:             fAssets.map((r, i) => ({ ...r, _assetNum: i + 1 })),
+    profit_loss:             [],
+    assets:                  fAssets.map((r, i) => ({ ...r, _assetNum: i + 1 })),
+    balance_sheet:           [],
+    cashflow:                [],
+    microfinance_customers:  fMfCusts,
+    marketing_customers:     fMktCusts,
   };
 
   const cfg  = REPORT_TYPES.find(r => r.key === report)!;
@@ -339,7 +401,44 @@ export default function ReportsPage() {
     const w = window.open("", "_blank"); if (!w) return;
     const header = `<h1 style="margin:0">${cfg.label} Report</h1><p style="color:#666;margin:4px 0 16px">${companyName} &nbsp;|&nbsp; ${dateLabel} &nbsp;|&nbsp; Generated: ${new Date().toLocaleString()}</p>`;
     const style  = `<style>*{font-family:Arial,sans-serif;font-size:12px}body{padding:24px}h1{font-size:20px}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}th{background:#f5f5f5;font-weight:bold}tr:nth-child(even){background:#fafafa}.section{margin-top:20px}.section h2{font-size:14px;margin-bottom:8px}.total{font-weight:bold;background:#e9f7ef}.loss{background:#fdecea}.net-positive{color:#16a34a}.net-negative{color:#dc2626}</style>`;
-    if (report === "profit_loss") {
+    if (report === "balance_sheet") {
+      w.document.write(`<html><head>${style}</head><body>${header}
+        <div class="section"><h2>Assets</h2><table>
+          <tr><th>Description</th><th>Amount</th></tr>
+          <tr><td>Fixed Assets (Book Value)</td><td>${formatCurrency(totalAssetValue)}</td></tr>
+          <tr><td>Loan Portfolio (Active)</td><td>${formatCurrency(activeLoanAmt)}</td></tr>
+          <tr><td>Sales Receivable</td><td>${formatCurrency(salesReceivable)}</td></tr>
+          <tr><td>Cash / Petty Cash Fund</td><td>${formatCurrency(pettyCashBal)}</td></tr>
+          <tr class="total"><td>Total Assets</td><td>${formatCurrency(totalBsAssets)}</td></tr>
+        </table></div>
+        <div class="section"><h2>Liabilities &amp; Equity</h2><table>
+          <tr><th>Description</th><th>Amount</th></tr>
+          <tr><td>Unpaid Expenses (Payable)</td><td>${formatCurrency(unpaidExpenses)}</td></tr>
+          <tr><td>Payroll Due</td><td>${formatCurrency(payrollDue)}</td></tr>
+          <tr><td>Total Liabilities</td><td>${formatCurrency(totalBsLiab)}</td></tr>
+          <tr class="${bsEquity>=0?'total':'loss'}"><td>Net Equity</td><td>${formatCurrency(bsEquity)}</td></tr>
+        </table></div>
+      </body></html>`);
+    } else if (report === "cashflow") {
+      w.document.write(`<html><head>${style}</head><body>${header}
+        <div class="section"><h2>Operating Inflows</h2><table>
+          <tr><th>Description</th><th>Amount</th></tr>
+          <tr><td>Customer Sales Received</td><td>${formatCurrency(cfSalesIn)}</td></tr>
+          <tr><td>Loan Interest Collected</td><td>${formatCurrency(cfLoanIn)}</td></tr>
+          <tr class="total"><td>Total Inflows</td><td>${formatCurrency(cfInflows)}</td></tr>
+        </table></div>
+        <div class="section"><h2>Operating Outflows</h2><table>
+          <tr><th>Description</th><th>Amount</th></tr>
+          <tr><td>Marketing Expenses</td><td>${formatCurrency(totalMktExp)}</td></tr>
+          <tr><td>Office Expenses</td><td>${formatCurrency(totalOffExp)}</td></tr>
+          <tr><td>Payroll</td><td>${formatCurrency(totalPayroll)}</td></tr>
+          <tr class="${netCashFlow>=0?'total':'loss'}"><td>Total Outflows</td><td>${formatCurrency(cfOutflows)}</td></tr>
+        </table></div>
+        <div class="section"><h2>Net Cash Flow</h2><table>
+          <tr class="${netCashFlow>=0?'total':'loss'}"><td><strong>Net Cash Flow</strong></td><td>${formatCurrency(netCashFlow)}</td></tr>
+        </table></div>
+      </body></html>`);
+    } else if (report === "profit_loss") {
       w.document.write(`<html><head>${style}</head><body>${header}
         <div class="section"><h2>Revenue</h2><table>
           <tr><th>Description</th><th>Amount</th></tr>
@@ -370,7 +469,30 @@ export default function ReportsPage() {
   // ─── CSV ───
   const downloadCSV = () => {
     let content: string;
-    if (report === "profit_loss") {
+    if (report === "balance_sheet") {
+      content = ["Category,Description,Amount",
+        `Assets,Fixed Assets (Book Value),${totalAssetValue}`,
+        `Assets,Loan Portfolio (Active),${activeLoanAmt}`,
+        `Assets,Sales Receivable,${salesReceivable}`,
+        `Assets,Cash/Petty Cash,${pettyCashBal}`,
+        `Assets,Total Assets,${totalBsAssets}`,
+        `Liabilities,Unpaid Expenses,${unpaidExpenses}`,
+        `Liabilities,Payroll Due,${payrollDue}`,
+        `Liabilities,Total Liabilities,${totalBsLiab}`,
+        `Equity,Net Equity,${bsEquity}`,
+      ].join("\n");
+    } else if (report === "cashflow") {
+      content = ["Category,Description,Amount",
+        `Inflow,Customer Sales Received,${cfSalesIn}`,
+        `Inflow,Loan Interest Collected,${cfLoanIn}`,
+        `Inflow,Total Inflows,${cfInflows}`,
+        `Outflow,Marketing Expenses,${totalMktExp}`,
+        `Outflow,Office Expenses,${totalOffExp}`,
+        `Outflow,Payroll,${totalPayroll}`,
+        `Outflow,Total Outflows,${cfOutflows}`,
+        `Net,Net Cash Flow,${netCashFlow}`,
+      ].join("\n");
+    } else if (report === "profit_loss") {
       content = ["Category,Description,Amount",
         `Revenue,Customer Sales,${totalSales}`,
         `Revenue,Loan Interest,${totalLoanRev}`,
@@ -453,11 +575,122 @@ export default function ReportsPage() {
                 </div>
               )}
               <span className="ml-auto text-xs text-gray-400 bg-gray-50 px-3 py-1.5 rounded-lg">
-                {report !== "profit_loss" ? `${data.length} records • ` : ""}{dateLabel}
+                {!["profit_loss","balance_sheet","cashflow"].includes(report) ? `${data.length} records • ` : ""}{dateLabel}
               </span>
             </div>
 
-            {/* P&L view */}
+            {/* Balance Sheet view */}
+            {report === "balance_sheet" ? (
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="p-5 bg-gray-50 border-b border-gray-100">
+                  <h2 className="font-bold text-gray-900 text-lg">Balance Sheet</h2>
+                  <p className="text-sm text-gray-500">{companyName} &nbsp;·&nbsp; As of today</p>
+                </div>
+                <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl">
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Assets</h3>
+                    <div className="divide-y divide-gray-50">
+                      {[
+                        { label: "Fixed Assets (Book Value)", value: totalAssetValue  },
+                        { label: "Loan Portfolio (Active)",   value: activeLoanAmt    },
+                        { label: "Sales Receivable",          value: salesReceivable  },
+                        { label: "Cash / Petty Cash Fund",    value: pettyCashBal     },
+                      ].map(r => (
+                        <div key={r.label} className="flex justify-between py-2.5">
+                          <span className="text-sm text-gray-700">{r.label}</span>
+                          <span className="text-sm font-medium text-gray-900">{formatCurrency(r.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between py-2.5 border-t-2 border-violet-200 mt-1">
+                      <span className="font-bold text-violet-800">Total Assets</span>
+                      <span className="font-bold text-violet-700">{formatCurrency(totalBsAssets)}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Liabilities &amp; Equity</h3>
+                    <div className="divide-y divide-gray-50">
+                      {[
+                        { label: "Unpaid Expenses (Payable)", value: unpaidExpenses },
+                        { label: "Payroll Due",               value: payrollDue     },
+                      ].map(r => (
+                        <div key={r.label} className="flex justify-between py-2.5">
+                          <span className="text-sm text-gray-700">{r.label}</span>
+                          <span className="text-sm font-medium text-gray-900">{formatCurrency(r.value)}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between py-2.5">
+                        <span className="text-sm text-gray-500 font-semibold">Total Liabilities</span>
+                        <span className="text-sm font-bold">{formatCurrency(totalBsLiab)}</span>
+                      </div>
+                    </div>
+                    <div className={`flex justify-between py-2.5 border-t-2 mt-1 ${bsEquity >= 0 ? "border-green-200" : "border-red-200"}`}>
+                      <span className={`font-bold ${bsEquity >= 0 ? "text-green-800" : "text-red-800"}`}>Net Equity</span>
+                      <span className={`font-bold ${bsEquity >= 0 ? "text-green-700" : "text-red-700"}`}>{formatCurrency(bsEquity)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : report === "cashflow" ? (
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="p-5 bg-gray-50 border-b border-gray-100">
+                  <h2 className="font-bold text-gray-900 text-lg">Cash Flow Statement</h2>
+                  <p className="text-sm text-gray-500">{companyName} &nbsp;·&nbsp; {dateLabel}</p>
+                </div>
+                <div className="p-5 space-y-8 max-w-xl">
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Operating Inflows</h3>
+                    <div className="divide-y divide-gray-50">
+                      {[
+                        { label: "Customer Sales Received",  value: cfSalesIn  },
+                        { label: "Loan Interest Collected",  value: cfLoanIn   },
+                      ].map(r => (
+                        <div key={r.label} className="flex justify-between py-2.5">
+                          <span className="text-sm text-gray-700">{r.label}</span>
+                          <span className="text-sm font-medium text-green-700">+{formatCurrency(r.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between py-2.5 border-t-2 border-green-200 mt-1">
+                      <span className="font-bold text-green-800">Total Inflows</span>
+                      <span className="font-bold text-green-700">{formatCurrency(cfInflows)}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Operating Outflows</h3>
+                    <div className="divide-y divide-gray-50">
+                      {[
+                        { label: "Marketing Expenses", value: totalMktExp  },
+                        { label: "Office Expenses",    value: totalOffExp  },
+                        { label: "Payroll",            value: totalPayroll },
+                      ].map(r => (
+                        <div key={r.label} className="flex justify-between py-2.5">
+                          <span className="text-sm text-gray-700">{r.label}</span>
+                          <span className="text-sm font-medium text-red-600">−{formatCurrency(r.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between py-2.5 border-t-2 border-red-200 mt-1">
+                      <span className="font-bold text-red-800">Total Outflows</span>
+                      <span className="font-bold text-red-700">{formatCurrency(cfOutflows)}</span>
+                    </div>
+                  </div>
+                  <div className={`rounded-xl p-5 ${netCashFlow >= 0 ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">Net Cash Flow</p>
+                        <p className="text-sm text-gray-500 mt-0.5">{formatCurrency(cfInflows)} in − {formatCurrency(cfOutflows)} out</p>
+                      </div>
+                      <span className={`text-3xl font-bold ${netCashFlow >= 0 ? "text-green-700" : "text-red-700"}`}>
+                        {formatCurrency(Math.abs(netCashFlow))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* P&L / special views */}
             {report === "profit_loss" ? (
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="p-5 bg-gray-50 border-b border-gray-100">
@@ -518,7 +751,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : !["balance_sheet","cashflow"].includes(report) ? (
               /* Standard table */
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-auto">
                 {loading ? (
@@ -568,7 +801,7 @@ export default function ReportsPage() {
                   </table>
                 )}
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
