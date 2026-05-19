@@ -10,9 +10,10 @@ import { MessageSquare, Send, Clock, CheckCircle, XCircle, AlertCircle, RefreshC
 interface Staff        { id: string; name: string; phone: string; companyId: string; status: string; }
 interface Customer     { id: string; name: string; phone: string; companyId: string; }
 interface LoanCustomer { id: string; customerName: string; contactPhone?: string; companyId: string; }
+interface MfCustomer   { id: string; name: string; phone: string; companyId: string; }
 interface SmsLog       { id: string; to: string; recipientName: string; message: string; status: string; sentAt: string; trigger?: string; }
 
-type SendMode = "single" | "staff" | "customer" | "loan_customer";
+type SendMode = "single" | "staff" | "customer" | "loan_customer" | "microfinance";
 
 const VARS = ["{staff_name}", "{customer_name}", "{company_name}", "{date}", "{amount}"];
 const SMS_LEN = 160;
@@ -25,7 +26,8 @@ function fmtDate(d: string) {
 export default function MessagesPage() {
   const [staff,          setStaff]          = useState<Staff[]>([]);
   const [customers,      setCustomers]      = useState<Customer[]>([]);
-  const [loanCustomers,  setLoanCustomers]  = useState<Customer[]>([]);
+  const [loanCustomers,         setLoanCustomers]         = useState<Customer[]>([]);
+  const [microfinanceCusts,     setMicrofinanceCusts]     = useState<Customer[]>([]);
   const [logs,           setLogs]           = useState<SmsLog[]>([]);
   const [balance,   setBalance]   = useState<number | null>(null);
   const [senderId,  setSenderId]  = useState("INFO");
@@ -41,12 +43,13 @@ export default function MessagesPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const loadData = async () => {
-    const [sr, cr, loanR, lr, br] = await Promise.allSettled([
-      fetch("/api/users",                 { cache: "no-store" }),
-      fetch("/api/customers",             { cache: "no-store" }),
-      fetch("/api/loans",                 { cache: "no-store" }),
-      fetch("/api/messages",              { cache: "no-store" }),
-      fetch("/api/settings/beem/balance", { cache: "no-store" }),
+    const [sr, cr, loanR, lr, br, mfR] = await Promise.allSettled([
+      fetch("/api/users",                  { cache: "no-store" }),
+      fetch("/api/customers",              { cache: "no-store" }),
+      fetch("/api/loans",                  { cache: "no-store" }),
+      fetch("/api/messages",               { cache: "no-store" }),
+      fetch("/api/settings/beem/balance",  { cache: "no-store" }),
+      fetch("/api/microfinance-customers", { cache: "no-store" }),
     ]);
     if (sr.status === "fulfilled" && sr.value.ok)
       setStaff((await sr.value.json()).filter((u: Staff) => u.status !== "inactive"));
@@ -81,7 +84,11 @@ export default function MessagesPage() {
       setLoanCustomers(unique);
     }
 
-    if (lr.status === "fulfilled" && lr.value.ok)   setLogs(await lr.value.json());
+    if (lr.status === "fulfilled" && lr.value.ok) setLogs(await lr.value.json());
+    if (mfR.status === "fulfilled" && mfR.value.ok) {
+      const raw: MfCustomer[] = await mfR.value.json();
+      setMicrofinanceCusts(raw.map(m => ({ id: m.id, name: m.name, phone: m.phone, companyId: m.companyId })));
+    }
     if (br.status === "fulfilled" && br.value.ok) {
       const d = await br.value.json();
       setBalance(d.balance ?? null);
@@ -91,7 +98,11 @@ export default function MessagesPage() {
 
   useEffect(() => { loadData(); }, []);
 
-  const recipientList: Customer[] = mode === "staff" ? (staff as unknown as Customer[]) : mode === "loan_customer" ? loanCustomers : customers;
+  const recipientList: Customer[] =
+    mode === "staff"         ? (staff as unknown as Customer[]) :
+    mode === "loan_customer" ? loanCustomers :
+    mode === "microfinance"  ? microfinanceCusts :
+    customers;
   const filteredRecipients = recipientList.filter(r =>
     r.name.toLowerCase().includes(recipientSearch.toLowerCase()) ||
     (r.phone ?? "").includes(recipientSearch)
@@ -191,7 +202,7 @@ export default function MessagesPage() {
             <div>
               <p className="text-xs font-medium text-gray-500 mb-2.5 uppercase tracking-wide">Send To</p>
               <div className="flex flex-wrap gap-5">
-                {(["single", "staff", "customer", "loan_customer"] as const).map(m => (
+                {(["single", "staff", "customer", "loan_customer", "microfinance"] as const).map(m => (
                   <label key={m} className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="radio" name="sendMode" value={m}
@@ -200,7 +211,7 @@ export default function MessagesPage() {
                       className="w-4 h-4 accent-blue-600"
                     />
                     <span className="text-sm text-gray-700 font-medium">
-                      {m === "single" ? "Single Number" : m === "staff" ? "Staff Members" : m === "loan_customer" ? "Loan Customers" : "Customers"}
+                      {m === "single" ? "Single Number" : m === "staff" ? "Staff Members" : m === "loan_customer" ? "Loan Customers" : m === "microfinance" ? "Microfinance Customers" : "Customers"}
                     </span>
                   </label>
                 ))}
@@ -228,7 +239,7 @@ export default function MessagesPage() {
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                     <Users className="w-4 h-4 text-gray-400" />
-                    {mode === "staff" ? "Staff Members" : mode === "loan_customer" ? "Loan Customers" : "Customers"}
+                    {mode === "staff" ? "Staff Members" : mode === "loan_customer" ? "Loan Customers" : mode === "microfinance" ? "Microfinance Customers" : "Customers"}
                     {selectedIds.length > 0 && (
                       <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-semibold">
                         {selectedIds.length} selected
@@ -249,7 +260,7 @@ export default function MessagesPage() {
 
                 {/* Search box */}
                 <Input
-                  placeholder={`Search ${mode === "staff" ? "staff" : mode === "loan_customer" ? "loan customers" : "customers"} by name or phone…`}
+                  placeholder={`Search ${mode === "staff" ? "staff" : mode === "loan_customer" ? "loan customers" : mode === "microfinance" ? "microfinance customers" : "customers"} by name or phone…`}
                   value={recipientSearch}
                   onChange={e => setRecipientSearch(e.target.value)}
                   className="mb-2"

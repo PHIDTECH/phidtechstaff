@@ -8,7 +8,7 @@ import {
   ChevronRight, Building2, ShoppingCart, Megaphone, Package,
   Receipt, BarChart3, FileText, Warehouse, TrendingUp, Briefcase,
   Clock, HelpCircle, X, Menu, Percent, Wrench, Activity, Scale, MapPin,
-  Users2, MessageSquarePlus, MessageSquare
+  Users2, MessageSquarePlus, MessageSquare, Landmark
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -114,8 +114,9 @@ const ALL_NAV: NavGroup[] = [
       { label: "Customers",       href: "/customers",   icon: UserCheck  },
       { label: "Sales Pipeline",  href: "/sales",       icon: TrendingUp },
       { label: "Commissions",     href: "/commissions", icon: Percent    },
-      { label: "Loan Customers",   href: "/loans",       icon: DollarSign },
-      { label: "Quotations",      href: "/quotations",  icon: FileText   },
+      { label: "Loan Customers",           href: "/loans",                    icon: DollarSign },
+      { label: "Microfinance Customers",    href: "/microfinance-customers",   icon: Landmark   },
+      { label: "Quotations",               href: "/quotations",               icon: FileText   },
       { label: "Support Tickets", href: "/tickets",     icon: HelpCircle },
     ]
   },
