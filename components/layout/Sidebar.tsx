@@ -261,8 +261,8 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
     ...group,
     items: group.items.filter(item => {
       if (item.href === "/admin" || item.href === "/admin#branches") return isSuperAdmin;
-      // Staff Meeting & Marketing Report: visible to all logged-in users
-      if (item.href === "/staff-meetings" || item.href === "/marketing-reports") return true;
+      // Always visible to all logged-in users (no permission gate)
+      if (["/staff-meetings", "/marketing-reports", "/customers", "/microfinance-customers", "/marketing-customers"].includes(item.href)) return true;
       return canAccess(item.href, session ? perms : []);
     }),
   })).filter(group => group.items.length > 0);
