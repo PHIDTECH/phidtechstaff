@@ -259,7 +259,17 @@ export default function PayrollPage() {
       const nssf_er   = calcNSSF_employer(gross);
       const sdl       = calcSDL(gross);
       const wcf       = calcWCF(gross);
-      const totalDed  = paye + nssf_emp;
+      // Advance deductions: disbursed advances whose repaymentDate is in this month/year
+      const monthIdx = MONTHS.indexOf(selectedMonth);
+      const advanceDeds: Deduction[] = advances
+        .filter(a => {
+          if (a.staffId !== emp.id || a.status !== "disbursed" || !a.repaymentDate) return false;
+          const d = new Date(a.repaymentDate + "T00:00:00");
+          return d.getMonth() === monthIdx && d.getFullYear() === selectedYear;
+        })
+        .map(a => ({ name: `Advance Recovery — ${a.repaymentDate}`, amount: a.amount }));
+      const totalAdvDed = advanceDeds.reduce((s, d) => s + d.amount, 0);
+      const totalDed  = paye + nssf_emp + totalAdvDed;
       const net       = gross - totalDed;
       return {
         id: `pr-${emp.id}-${monthKey}-${Date.now()}`,
@@ -270,6 +280,7 @@ export default function PayrollPage() {
         deductions: [
           { name: "PAYE", amount: paye },
           { name: "NSSF (Employee 10%)", amount: nssf_emp },
+          ...advanceDeds,
         ],
         employerCosts: [
           { name: "NSSF (Employer 10%)", amount: nssf_er },
@@ -357,7 +368,17 @@ export default function PayrollPage() {
     const nssf_er  = calcNSSF_employer(gross);
     const sdl      = calcSDL(gross);
     const wcf      = calcWCF(gross);
-    const net      = gross - paye - nssf_emp;
+    // Re-include advance deductions for this staff/month/year
+    const editMonthIdx = MONTHS.indexOf(editEntry.month);
+    const editAdvanceDeds: Deduction[] = advances
+      .filter(a => {
+        if (a.staffId !== editEntry.staffId || a.status !== "disbursed" || !a.repaymentDate) return false;
+        const d = new Date(a.repaymentDate + "T00:00:00");
+        return d.getMonth() === editMonthIdx && d.getFullYear() === editEntry.year;
+      })
+      .map(a => ({ name: `Advance Recovery — ${a.repaymentDate}`, amount: a.amount }));
+    const editTotalAdvDed = editAdvanceDeds.reduce((s, d) => s + d.amount, 0);
+    const net      = gross - paye - nssf_emp - editTotalAdvDed;
     await fetch("/api/payroll", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
       id: editEntry.id,
       basicSalary: basic,
@@ -365,6 +386,7 @@ export default function PayrollPage() {
       deductions: [
         { name: "PAYE", amount: paye },
         { name: "NSSF (Employee 10%)", amount: nssf_emp },
+        ...editAdvanceDeds,
       ],
       employerCosts: [
         { name: "NSSF (Employer 10%)", amount: nssf_er },
@@ -1167,7 +1189,7 @@ export default function PayrollPage() {
                 <p className="text-xs text-yellow-700">Payroll already exists for this month. Running again will <strong>replace</strong> existing entries.</p>
               </div>
             )}
-            <p className="text-xs text-gray-400">Employee deductions: PAYE (TRA rates) + NSSF 10%. Employer costs: NSSF 10%, SDL 3.5%, WCF 0.5%.</p>
+            <p className="text-xs text-gray-400">Employee deductions: PAYE (TRA rates) + NSSF 10% + any disbursed advance recoveries due this month. Employer costs: NSSF 10%, SDL 3.5%, WCF 0.5%.</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRunConfirm(false)}>Cancel</Button>
