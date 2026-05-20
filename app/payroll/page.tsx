@@ -842,7 +842,7 @@ export default function PayrollPage() {
       {/* Access notice */}
       <div className="mb-4 flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-sm text-blue-700">
         <Building2 className="w-4 h-4 shrink-0" />
-        <span>You are viewing as <strong>{session?.isSuperAdmin ? "Super Admin" : "Accountant"}</strong> — full payroll access for <strong>{activeCompanyName}</strong></span>
+        <span>You are viewing as <strong>{session?.isSuperAdmin ? "Super Admin" : isManager ? "Manager" : isCEO ? "CEO" : isAccountant ? "Accountant" : "Admin"}</strong> — full payroll access for <strong>{activeCompanyName || "All Companies (Group HQ)"}</strong></span>
       </div>
 
       {dataLoading && (

@@ -8,7 +8,7 @@ import {
   ChevronRight, Building2, ShoppingCart, Megaphone, Package,
   Receipt, BarChart3, FileText, Warehouse, TrendingUp, Briefcase,
   Clock, HelpCircle, X, Menu, Percent, Wrench, Activity, Scale, MapPin,
-  Users2, MessageSquarePlus, MessageSquare, Landmark, Radio, BadgeCheck, Music, Film
+  Users2, MessageSquarePlus, MessageSquare, Landmark, Radio, BadgeCheck, Music, Film, Wallet
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -37,8 +37,9 @@ const PERM_ROUTES: Record<string, string[]> = {
   expenses:          ["/expenses"],
   office_expenses:   ["/accounting/office-expenses"],
   loan_interest:     ["/accounting/loan-interest"],
-  financial_reports: ["/accounting/financial-reports"],
-  accounting:        ["/accounting"],
+  financial_reports:  ["/accounting/financial-reports"],
+  pending_payments:    ["/accounting/pending-payments"],
+  accounting:          ["/accounting"],
   invoices:          ["/invoices"],
   petty_cash:        ["/petty-cash"],
   customers:              ["/customers"],
@@ -110,6 +111,7 @@ const ALL_NAV: NavGroup[] = [
       { label: "Interest from Loans",  href: "/accounting/loan-interest",   icon: TrendingUp   },
       { label: "Assets",               href: "/assets",                      icon: Briefcase    },
       { label: "Marketing Expenses",    href: "/expenses",                    icon: Receipt      },
+      { label: "Pending Payments",      href: "/accounting/pending-payments",  icon: Wallet       },
       { label: "Reports",               href: "/accounting/financial-reports", icon: BarChart3    },
     ]
   },
@@ -272,7 +274,7 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
     items: group.items.filter(item => {
       if (item.href === "/admin" || item.href === "/admin#branches") return isSuperAdmin;
       // Always visible to all logged-in users (no permission gate)
-      if (["/staff-meetings","/marketing-reports","/customers","/microfinance-customers","/marketing-customers","/media-customers","/business-customers","/licence-customers","/entertainment-customers","/movies-customers","/expenses","/accounting/office-expenses"].includes(item.href)) return true;
+      if (["/staff-meetings","/marketing-reports","/customers","/microfinance-customers","/marketing-customers","/media-customers","/business-customers","/licence-customers","/entertainment-customers","/movies-customers","/expenses","/accounting/office-expenses","/accounting/pending-payments"].includes(item.href)) return true;
       return canAccess(item.href, session ? perms : []);
     }),
   })).filter(group => group.items.length > 0);

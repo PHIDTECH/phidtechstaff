@@ -15,7 +15,8 @@ interface MktCustomer  { id: string; name: string; phone: string; companyId: str
 interface GenCustomer  { id: string; name: string; phone: string; companyId: string; }
 interface SmsLog       { id: string; to: string; recipientName: string; message: string; status: string; sentAt: string; trigger?: string; }
 
-type SendMode = "single" | "staff" | "customer" | "loan_customer" | "microfinance" | "marketing_customer" | "media_customer" | "business_customer" | "licence_customer" | "entertainment_customer" | "movies_customer";
+interface PendingCustomer { id: string; name: string; phone: string; companyId: string; amountNegotiated?: number; promisedDate?: string; }
+type SendMode = "single" | "staff" | "customer" | "loan_customer" | "microfinance" | "marketing_customer" | "media_customer" | "business_customer" | "licence_customer" | "entertainment_customer" | "movies_customer" | "pending_payment";
 
 const VARS = ["{staff_name}", "{customer_name}", "{company_name}", "{date}", "{amount}"];
 const SMS_LEN = 160;
@@ -36,6 +37,7 @@ export default function MessagesPage() {
   const [licenceCusts,          setLicenceCusts]          = useState<Customer[]>([]);
   const [entertainmentCusts,    setEntertainmentCusts]    = useState<Customer[]>([]);
   const [moviesCusts,           setMoviesCusts]           = useState<Customer[]>([]);
+  const [pendingCusts,          setPendingCusts]          = useState<PendingCustomer[]>([]);
   const [logs,           setLogs]           = useState<SmsLog[]>([]);
   const [balance,   setBalance]   = useState<number | null>(null);
   const [senderId,  setSenderId]  = useState("INFO");
@@ -64,10 +66,11 @@ export default function MessagesPage() {
       fetch("/api/licence-customers",         { cache: "no-store" }),
       fetch("/api/entertainment-customers",   { cache: "no-store" }),
       fetch("/api/movies-customers",          { cache: "no-store" }),
+      fetch("/api/pending-payments",           { cache: "no-store" }),
     ]);
     const sr = _r[0]; const cr = _r[1]; const loanR = _r[2];
     const lr = _r[3]; const br = _r[4]; const mfR = _r[5]; const mktR = _r[6];
-    const mdR = _r[7]; const bsR = _r[8]; const lcR = _r[9]; const enR = _r[10]; const mvR = _r[11];
+    const mdR = _r[7]; const bsR = _r[8]; const lcR = _r[9]; const enR = _r[10]; const mvR = _r[11]; const ppR = _r[12];
     if (sr.status === "fulfilled" && sr.value.ok)
       setStaff((await sr.value.json()).filter((u: Staff) => u.status !== "inactive"));
 
@@ -123,6 +126,10 @@ export default function MessagesPage() {
       mapGen(enR, setEntertainmentCusts),
       mapGen(mvR, setMoviesCusts),
     ]);
+    if (ppR && ppR.status === "fulfilled" && ppR.value.ok) {
+      const raw: { id:string; customerName:string; phone?:string; companyId:string; amountNegotiated:number; promisedDate:string; status:string }[] = await ppR.value.json();
+      setPendingCusts(raw.filter(p=>p.status!=="paid").map(p=>({ id:p.id, name:p.customerName, phone:p.phone??"", companyId:p.companyId, amountNegotiated:p.amountNegotiated, promisedDate:p.promisedDate })));
+    }
     if (br.status === "fulfilled" && br.value.ok) {
       const d = await br.value.json();
       setBalance(d.balance ?? null);
@@ -142,6 +149,7 @@ export default function MessagesPage() {
     mode === "licence_customer"      ? licenceCusts :
     mode === "entertainment_customer"? entertainmentCusts :
     mode === "movies_customer"       ? moviesCusts :
+    mode === "pending_payment"       ? (pendingCusts as unknown as Customer[]) :
     customers;
   const filteredRecipients = recipientList.filter(r =>
     r.name.toLowerCase().includes(recipientSearch.toLowerCase()) ||
@@ -242,7 +250,7 @@ export default function MessagesPage() {
             <div>
               <p className="text-xs font-medium text-gray-500 mb-2.5 uppercase tracking-wide">Send To</p>
               <div className="flex flex-wrap gap-5">
-                {(["single", "staff", "customer", "loan_customer", "microfinance", "marketing_customer", "media_customer", "business_customer", "licence_customer", "entertainment_customer", "movies_customer"] as const).map(m => (
+{(["single", "staff", "customer", "loan_customer", "microfinance", "marketing_customer", "media_customer", "business_customer", "licence_customer", "entertainment_customer", "movies_customer", "pending_payment"] as const).map(m => (
                   <label key={m} className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="radio" name="sendMode" value={m}
@@ -251,7 +259,7 @@ export default function MessagesPage() {
                       className="w-4 h-4 accent-blue-600"
                     />
                     <span className="text-sm text-gray-700 font-medium">
-                      {m === "single" ? "Single Number" : m === "staff" ? "Staff Members" : m === "loan_customer" ? "Loan Customers" : m === "microfinance" ? "Microfinance Customers" : m === "marketing_customer" ? "Marketing Customers" : m === "media_customer" ? "Media Customers" : m === "business_customer" ? "Business Customers" : m === "licence_customer" ? "Licence Customers" : m === "entertainment_customer" ? "Entertainment Customers" : m === "movies_customer" ? "Movies Customers" : "Customers"}
+                      {m === "single" ? "Single Number" : m === "staff" ? "Staff Members" : m === "loan_customer" ? "Loan Customers" : m === "microfinance" ? "Microfinance Customers" : m === "marketing_customer" ? "Marketing Customers" : m === "media_customer" ? "Media Customers" : m === "business_customer" ? "Business Customers" : m === "licence_customer" ? "Licence Customers" : m === "entertainment_customer" ? "Entertainment Customers" : m === "movies_customer" ? "Movies Customers" : m === "pending_payment" ? "Pending Payments" : "Customers"}
                     </span>
                   </label>
                 ))}
