@@ -32,7 +32,7 @@ interface Customer {
   id: string; name: string; companyId: string;
   phone?: string; address?: string; email?: string;
   company?: string; serviceProduct?: string; status?: string;
-  totalRevenue?: number;
+  totalRevenue?: number; _source?: string;
 }
 interface SaleItem { description: string; quantity: number; unitPrice: number; total: number; }
 interface Sale {
@@ -80,11 +80,41 @@ export default function AccountingSalesPage() {
     const c = getActiveCid(sess);
     setCid(c); cidRef.current = c;
     setCompanies(lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []));
-    // Load customers from server API
+    // Load customers from ALL registries in parallel
     try {
-      const cr = await fetch("/api/customers", { cache: "no-store" });
-      if (cr.ok) { const d: Customer[] = await cr.json(); setCustomers(Array.isArray(d) ? d : []); }
-      else setCustomers(lsGet<Customer[]>(CUSTOMERS_KEY, []));
+      const [r0,r1,r2,r3,r4,r5,r6,r7,r8] = await Promise.allSettled([
+        fetch("/api/customers",              { cache: "no-store" }),
+        fetch("/api/marketing-customers",    { cache: "no-store" }),
+        fetch("/api/microfinance-customers", { cache: "no-store" }),
+        fetch("/api/media-customers",        { cache: "no-store" }),
+        fetch("/api/business-customers",     { cache: "no-store" }),
+        fetch("/api/licence-customers",      { cache: "no-store" }),
+        fetch("/api/entertainment-customers",{ cache: "no-store" }),
+        fetch("/api/movies-customers",       { cache: "no-store" }),
+        fetch("/api/pending-payments",       { cache: "no-store" }),
+      ]);
+      const norm = (arr: Record<string,unknown>[], src: string): Customer[] =>
+        arr.map(x => ({ id: String(x.id), name: String(x.customerName ?? x.name ?? ""),
+          companyId: String(x.companyId ?? ""), phone: String(x.phone ?? ""),
+          email: String(x.email ?? ""), address: String(x.address ?? ""),
+          _source: src }));
+      const get = async (r: PromiseSettledResult<Response>, src: string): Promise<Customer[]> => {
+        if (r.status !== "fulfilled" || !r.value.ok) return [];
+        const d = await r.value.json(); return Array.isArray(d) ? norm(d as Record<string,unknown>[], src) : [];
+      };
+      const [main, mkt, mf, med, biz, lic, ent, mov, pp] = await Promise.all([
+        get(r0,"Customer"), get(r1,"Marketing"), get(r2,"Microfinance"),
+        get(r3,"Media"),    get(r4,"Business"),  get(r5,"Licence"),
+        get(r6,"Entertainment"), get(r7,"Movies"), get(r8,"Pending Pmt"),
+      ]);
+      // Merge; deduplicate by phone (keep first occurrence)
+      const seen = new Set<string>();
+      const merged: Customer[] = [];
+      for (const c of [...main,...mkt,...mf,...med,...biz,...lic,...ent,...mov,...pp]) {
+        const key = c.phone?.trim() || c.id;
+        if (!seen.has(key)) { seen.add(key); merged.push(c); }
+      }
+      setCustomers(merged.length > 0 ? merged : lsGet<Customer[]>(CUSTOMERS_KEY, []));
     } catch { setCustomers(lsGet<Customer[]>(CUSTOMERS_KEY, [])); }
     // Load sales from server API
     try {
@@ -428,7 +458,9 @@ export default function AccountingSalesPage() {
                     <div className="overflow-y-auto max-h-52">
                     {(() => {
                       const formCo = form.saleCompanyId || cid;
-                      const base = formCo ? customers.filter(c => c.companyId === formCo) : customers;
+                      const base = formCo
+                        ? customers.filter(c => c.companyId === formCo || c.companyId === "group" || !c.companyId)
+                        : customers;
                       const visibleCusts = custSearch
                         ? base.filter(c =>
                             c.name.toLowerCase().includes(custSearch.toLowerCase()) ||
@@ -451,8 +483,10 @@ export default function AccountingSalesPage() {
                             <div className="flex items-center justify-between gap-3 w-full">
                               <div>
                                 <span className="font-medium">{c.name}</span>
-                                {c.company && <span className="text-gray-400 text-xs ml-1">· {c.company}</span>}
-                                {c.phone   && <span className="text-gray-400 text-xs ml-1">· {c.phone}</span>}
+                                {c.phone && <span className="text-gray-400 text-xs ml-1">· {c.phone}</span>}
+                                {c._source && c._source !== "Customer" && (
+                                  <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">{c._source}</span>
+                                )}
                               </div>
                               {custSales.length > 0 && (
                                 <div className="text-xs shrink-0">
