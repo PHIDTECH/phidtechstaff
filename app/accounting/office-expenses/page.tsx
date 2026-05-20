@@ -162,7 +162,7 @@ export default function OfficeExpensesPage() {
   const _op = (session?.position ?? "").toLowerCase();
   const GROUP_ROLES_OE = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
   const isGroupUser  = session?.companyId === "group" || GROUP_ROLES_OE.includes(_or) || GROUP_ROLES_OE.includes(_op);
-  const isOEManager    = _or === "manager"    || _op === "manager"    || _or === "group_manager" || _op === "group_manager";
+  const isOEManager    = _or === "manager"    || _op === "manager"    || _or === "group_manager" || _op === "group_manager" || _op === "general manager" || _or === "general manager";
   const isOECEO        = session?.isSuperAdmin || _or === "admin" || _op === "admin" || _or === "group_ceo" || _op === "group_ceo";
   const isOEAccountant = _or === "accountant" || _op === "accountant" || _or === "group_cfo" || _op === "group_cfo" || _or === "group_accountant" || _op === "group_accountant";
   const canManage = session?.isSuperAdmin || isGroupUser || isOEManager || isOECEO || isOEAccountant;

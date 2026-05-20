@@ -223,7 +223,7 @@ export default function CommissionsPage() {
       const newItem: Commission = {
         id: `comm-${Date.now()}`,
         staffId: form.staffId,
-        companyId: activeCompanyIdRef.current || activeCompanyId,
+        companyId: activeCompanyIdRef.current || activeCompanyId || session?.companyId || "group",
         customerName: form.customerName.trim(),
         month: form.month, year: Number(form.year), datePaid: form.datePaid,
         saleAmount: Number(form.saleAmount), commissionPct: Number(form.commissionPct),

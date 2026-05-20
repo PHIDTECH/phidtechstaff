@@ -251,7 +251,7 @@ export default function CustomersPage() {
   const saveCustomer = async (isEdit: boolean) => {
     if (!form.name.trim()) { setFormError("Customer name is required."); return; }
     if (!isEdit && !form.assignedTo) { setFormError("Please assign an employee to this customer."); return; }
-    const effectiveCid = activeCompanyId || form._companyId || (isEdit ? editCustomer?.companyId : "") || "";
+    const effectiveCid = activeCompanyId || form._companyId || (isEdit ? editCustomer?.companyId : "") || (isGroupUser ? (session?.companyId || "group") : "");
     if (!effectiveCid) { setFormError("Please select a company first."); return; }
     if (isEdit && editCustomer) {
       const payload = { id: editCustomer.id, ...form, credentials: form.credentials, totalRevenue: editCustomer.totalRevenue };

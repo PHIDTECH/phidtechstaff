@@ -204,7 +204,9 @@ export default function PayrollPage() {
   const _pr = (session?.role ?? "").toLowerCase();
   const _pp = (session?.position ?? "").toLowerCase();
   const canManagePayroll = session?.isSuperAdmin ||
-    GENERAL_ROLES_PAYROLL.some(r => _pr.includes(r) || _pp.includes(r));
+    GENERAL_ROLES_PAYROLL.some(r => _pr.includes(r) || _pp.includes(r)) ||
+    _pr === "general manager" || _pp === "general manager" ||
+    session?.companyId === "group";
   const myPayrollOnly = !canManagePayroll && !!session?.id;
 
   // Group HQ (activeCompanyId === "") → show ALL companies' payroll in read-only mode
@@ -311,7 +313,7 @@ export default function PayrollPage() {
     const advEmp = allStaffList.find(u => u.id === sid);
     const adv: SalaryAdvance = {
       id: `adv-${Date.now()}`,
-      staffId: sid, companyId: activeCompanyId,
+      staffId: sid, companyId: activeCompanyId || session?.companyId || "group",
       employeeName: advEmp?.name ?? session?.name ?? undefined,
       amount: Number(advForm.amount), reason: advForm.reason.trim(),
       requestDate: new Date().toISOString().slice(0, 10),
@@ -538,7 +540,7 @@ export default function PayrollPage() {
   const _pos  = (session?.position ?? "").toLowerCase();
 
   // Approval workflow roles
-  const isManager    = _role === "manager" || _pos === "manager" || _role === "group_manager" || _pos === "group_manager";
+  const isManager    = _role === "manager" || _pos === "manager" || _role === "group_manager" || _pos === "group_manager" || _pos === "general manager" || _role === "general manager";
   const isCEO        = session?.isSuperAdmin || _role === "admin" || _pos === "admin" || _role === "group_ceo" || _pos === "group_ceo";
   const isAccountant = _role === "accountant" || _pos === "accountant" || _role === "group_cfo" || _pos === "group_cfo" || _role === "group_accountant" || _pos === "group_accountant";
 
@@ -552,7 +554,7 @@ export default function PayrollPage() {
 
   // Staff personal data
   const myEntry = companyEntries.find(p => p.staffId === session?.id);
-  const myAdvances = advances.filter(a => a.staffId === session?.id && a.companyId === activeCompanyId);
+  const myAdvances = advances.filter(a => a.staffId === session?.id && (!activeCompanyId || a.companyId === activeCompanyId || a.companyId === session?.companyId));
   const myStaff = staffList.find(u => u.id === session?.id);
 
   // ─────────────────────────────────────────────
