@@ -63,7 +63,6 @@ const categoryColors: Record<string, string> = {
 };
 
 export default function ExpensesPage() {
-  usePermissionGuard("expenses");
   const [expenses, setExpenses]           = useState<Expense[]>([]);
   const [staff, setStaff]                 = useState<StaffUser[]>([]);
   const [session, setSession]             = useState<Session | null>(null);
@@ -174,13 +173,14 @@ export default function ExpensesPage() {
     return matchSearch && matchStatus;
   });
 
-  const pending       = companyExpenses.filter(e => e.status === "pending").length;
-  const approved      = companyExpenses.filter(e => e.status === "approved" || e.status === "paid").length;
-  const totalApproved = companyExpenses.filter(e => e.status === "approved" || e.status === "paid").reduce((s,e) => s + e.amount, 0);
-  const totalPending  = companyExpenses.filter(e => e.status === "pending").reduce((s,e) => s + e.amount, 0);
+  const pending           = companyExpenses.filter(e => e.status === "pending").length;
+  const gmApproved        = companyExpenses.filter(e => e.status === "manager_approved").length;
+  const ceoApproved       = companyExpenses.filter(e => e.status === "ceo_approved").length;
+  const totalApproved     = companyExpenses.filter(e => e.status === "ceo_approved").reduce((s,e) => s + e.amount, 0);
+  const totalPending      = companyExpenses.filter(e => e.status === "pending").reduce((s,e) => s + e.amount, 0);
   const totalDisbursed    = companyExpenses.filter(e => e.status === "disbursed").length;
   const totalDisbursedAmt = companyExpenses.filter(e => e.status === "disbursed").reduce((s,e) => s + e.amount, 0);
-  const totalReimbursed   = companyExpenses.filter(e => e.status === "paid" || e.status === "disbursed").reduce((s,e) => s + e.amount, 0);
+  const totalReimbursed   = companyExpenses.filter(e => e.status === "disbursed").reduce((s,e) => s + e.amount, 0);
 
   const openAdd = () => {
     setEditItem(null);
@@ -270,11 +270,11 @@ export default function ExpensesPage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
-        <StatCard title="Total Claims"     value={companyExpenses.length}          icon={Receipt}      iconBg="bg-blue-50"   iconColor="text-blue-600" />
-        <StatCard title="Pending Approval" value={pending}                          icon={Clock}        iconBg="bg-yellow-50" iconColor="text-yellow-600" subtitle={formatCurrency(totalPending)} />
-        <StatCard title="Approved"         value={approved}                         icon={CheckCircle}  iconBg="bg-green-50"  iconColor="text-green-600" subtitle={formatCurrency(totalApproved)} />
-        <StatCard title="Total Disbursed"  value={totalDisbursed}                   icon={DollarSign}   iconBg="bg-emerald-50" iconColor="text-emerald-600" subtitle={formatCurrency(totalDisbursedAmt)} />
-        <StatCard title="Total Reimbursed" value={formatCurrency(totalReimbursed)}  icon={DollarSign}   iconBg="bg-purple-50" iconColor="text-purple-600" />
+        <StatCard title="Total Claims"    value={companyExpenses.length}            icon={Receipt}      iconBg="bg-blue-50"    iconColor="text-blue-600" />
+        <StatCard title="Pending GM"       value={pending}                           icon={Clock}        iconBg="bg-yellow-50"  iconColor="text-yellow-600" subtitle={formatCurrency(totalPending)} />
+        <StatCard title="Pending CEO"      value={gmApproved}                        icon={Clock}        iconBg="bg-blue-50"    iconColor="text-blue-600" />
+        <StatCard title="CEO Approved"     value={ceoApproved}                       icon={CheckCircle}  iconBg="bg-indigo-50"  iconColor="text-indigo-600" subtitle={formatCurrency(totalApproved)} />
+        <StatCard title="Disbursed"        value={totalDisbursed}                    icon={DollarSign}   iconBg="bg-green-50"   iconColor="text-green-600" subtitle={formatCurrency(totalDisbursedAmt)} />
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -286,13 +286,14 @@ export default function ExpensesPage() {
               <Input placeholder="Search claims..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 w-52" />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
+                <SelectItem value="pending">⏳ Pending GM</SelectItem>
+                <SelectItem value="manager_approved">🔵 Pending CEO</SelectItem>
+                <SelectItem value="ceo_approved">✅ CEO Approved</SelectItem>
+                <SelectItem value="disbursed">💵 Disbursed</SelectItem>
+                <SelectItem value="rejected">❌ Rejected</SelectItem>
               </SelectContent>
             </Select>
           </div>

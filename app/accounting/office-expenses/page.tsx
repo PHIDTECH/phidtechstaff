@@ -88,7 +88,6 @@ const emptyForm = () => ({
 });
 
 export default function OfficeExpensesPage() {
-  usePermissionGuard("office_expenses");
   const [expenses, setExpenses]           = useState<OfficeExpense[]>([]);
   const [allStaff, setAllStaff]           = useState<StaffUser[]>([]);
   const [companies, setCompanies]         = useState<Company[]>([]);
@@ -178,10 +177,11 @@ export default function OfficeExpensesPage() {
   const showCompanyCol  = !cid || (session?.isSuperAdmin && !cid);
   const getCompanyName  = (id: string) => companies.find(c => c.id === id)?.name ?? id;
 
-  const totalAll      = companyExpenses.reduce((s, e) => s + e.amount, 0);
-  const totalPaid     = companyExpenses.filter(e => e.status === "paid").reduce((s, e) => s + e.amount, 0);
-  const totalPending  = companyExpenses.filter(e => e.status === "pending").reduce((s, e) => s + e.amount, 0);
-  const totalApproved = companyExpenses.filter(e => e.status === "approved").reduce((s, e) => s + e.amount, 0);
+  const totalAll       = companyExpenses.reduce((s, e) => s + e.amount, 0);
+  const totalPending   = companyExpenses.filter(e => e.status === "pending").reduce((s, e) => s + e.amount, 0);
+  const totalGMApproved = companyExpenses.filter(e => e.status === "manager_approved").reduce((s, e) => s + e.amount, 0);
+  const totalCEOApproved = companyExpenses.filter(e => e.status === "ceo_approved").reduce((s, e) => s + e.amount, 0);
+  const totalDisbursed  = companyExpenses.filter(e => e.status === "disbursed").reduce((s, e) => s + e.amount, 0);
 
   const filtered = companyExpenses.filter(e => {
     const recorder    = allStaff.find(u => u.id === e.recordedBy);
@@ -278,19 +278,18 @@ export default function OfficeExpensesPage() {
         subtitle="Record and track business operating expenses — advertisement, TRA, licences, rent, utilities and more"
         icon={Building2}
         actions={
-          canManage ? (
-            <Button size="sm" onClick={openAdd}>
-              <Plus className="w-4 h-4 mr-2" /> Record Expense
-            </Button>
-          ) : undefined
+          <Button size="sm" onClick={openAdd}>
+            <Plus className="w-4 h-4 mr-2" /> Record Expense
+          </Button>
         }
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Total Recorded"  value={formatCurrency(totalAll)}      icon={Building2}   iconBg="bg-blue-50"   iconColor="text-blue-600"   subtitle={`${companyExpenses.length} entries`} />
-        <StatCard title="Pending"         value={formatCurrency(totalPending)}   icon={Clock}       iconBg="bg-yellow-50" iconColor="text-yellow-600" subtitle={`${companyExpenses.filter(e=>e.status==="pending").length} items`} />
-        <StatCard title="Approved"        value={formatCurrency(totalApproved)}  icon={CheckCircle} iconBg="bg-green-50"  iconColor="text-green-600"  subtitle={`${companyExpenses.filter(e=>e.status==="approved").length} items`} />
-        <StatCard title="Paid / Settled"  value={formatCurrency(totalPaid)}      icon={DollarSign}  iconBg="bg-purple-50" iconColor="text-purple-600" subtitle={`${companyExpenses.filter(e=>e.status==="paid").length} items`} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 mb-6">
+        <StatCard title="Total Recorded"   value={formatCurrency(totalAll)}          icon={Building2}   iconBg="bg-blue-50"    iconColor="text-blue-600"   subtitle={`${companyExpenses.length} entries`} />
+        <StatCard title="Pending GM"        value={formatCurrency(totalPending)}      icon={Clock}       iconBg="bg-yellow-50"  iconColor="text-yellow-600" subtitle={`${companyExpenses.filter(e=>e.status==="pending").length} items`} />
+        <StatCard title="Pending CEO"       value={formatCurrency(totalGMApproved)}   icon={Clock}       iconBg="bg-blue-50"    iconColor="text-blue-600"   subtitle={`${companyExpenses.filter(e=>e.status==="manager_approved").length} items`} />
+        <StatCard title="CEO Approved"      value={formatCurrency(totalCEOApproved)}  icon={CheckCircle} iconBg="bg-indigo-50"  iconColor="text-indigo-600" subtitle={`${companyExpenses.filter(e=>e.status==="ceo_approved").length} items`} />
+        <StatCard title="Disbursed"         value={formatCurrency(totalDisbursed)}    icon={DollarSign}  iconBg="bg-green-50"   iconColor="text-green-600"  subtitle={`${companyExpenses.filter(e=>e.status==="disbursed").length} items`} />
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -309,13 +308,14 @@ export default function OfficeExpensesPage() {
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
+                <SelectItem value="pending">⏳ Pending GM</SelectItem>
+                <SelectItem value="manager_approved">🔵 Pending CEO</SelectItem>
+                <SelectItem value="ceo_approved">✅ CEO Approved</SelectItem>
+                <SelectItem value="disbursed">💵 Disbursed</SelectItem>
+                <SelectItem value="rejected">❌ Rejected</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -328,7 +328,7 @@ export default function OfficeExpensesPage() {
             </div>
             <p className="font-semibold text-gray-700">No office expenses recorded</p>
             <p className="text-sm text-gray-400">Click &quot;Record Expense&quot; to add the first entry.</p>
-            {canManage && <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4 mr-2" />Record Expense</Button>}
+            <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4 mr-2" />Record Expense</Button>
           </div>
         ) : (
           <Table>
@@ -407,14 +407,11 @@ export default function OfficeExpensesPage() {
                             </Button>
                           </>
                         )}
-                        {/* Stage 2: CEO — approve or disburse directly */}
+                        {/* Stage 2: CEO approves only */}
                         {exp.status === "manager_approved" && isOECEO && (
                           <>
                             <Button variant="ghost" size="sm" className="text-indigo-600 text-xs px-2" onClick={() => updateStatus(exp.id, "ceo_approved")}>
-                              <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
-                            </Button>
-                            <Button variant="ghost" size="sm" className="text-green-700 text-xs px-2" onClick={() => updateStatus(exp.id, "disbursed")}>
-                              💵 Disburse
+                              <CheckCircle className="w-3.5 h-3.5 mr-1" /> CEO Approve
                             </Button>
                             <Button variant="ghost" size="sm" className="text-red-500 text-xs px-2" onClick={() => updateStatus(exp.id, "rejected")}>
                               <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
@@ -502,8 +499,7 @@ export default function OfficeExpensesPage() {
             )}
             {viewItem && viewItem.status === "manager_approved" && isOECEO && (
               <>
-                <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => { updateStatus(viewItem.id, "ceo_approved"); setViewItem(null); }}>Approve</Button>
-                <Button className="bg-green-600 hover:bg-green-700" onClick={() => { updateStatus(viewItem.id, "disbursed"); setViewItem(null); }}>💵 Disburse</Button>
+                <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => { updateStatus(viewItem.id, "ceo_approved"); setViewItem(null); }}>CEO Approve</Button>
                 <Button variant="destructive" onClick={() => { updateStatus(viewItem.id, "rejected"); setViewItem(null); }}>Reject</Button>
               </>
             )}

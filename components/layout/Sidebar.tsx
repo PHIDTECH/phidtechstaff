@@ -272,7 +272,7 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
     items: group.items.filter(item => {
       if (item.href === "/admin" || item.href === "/admin#branches") return isSuperAdmin;
       // Always visible to all logged-in users (no permission gate)
-      if (["/staff-meetings","/marketing-reports","/customers","/microfinance-customers","/marketing-customers","/media-customers","/business-customers","/licence-customers","/entertainment-customers","/movies-customers"].includes(item.href)) return true;
+      if (["/staff-meetings","/marketing-reports","/customers","/microfinance-customers","/marketing-customers","/media-customers","/business-customers","/licence-customers","/entertainment-customers","/movies-customers","/expenses","/accounting/office-expenses"].includes(item.href)) return true;
       return canAccess(item.href, session ? perms : []);
     }),
   })).filter(group => group.items.length > 0);
