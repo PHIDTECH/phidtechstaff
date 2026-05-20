@@ -12,9 +12,10 @@ interface Customer     { id: string; name: string; phone: string; companyId: str
 interface LoanCustomer { id: string; customerName: string; contactPhone?: string; companyId: string; }
 interface MfCustomer   { id: string; name: string; phone: string; companyId: string; }
 interface MktCustomer  { id: string; name: string; phone: string; companyId: string; }
+interface GenCustomer  { id: string; name: string; phone: string; companyId: string; }
 interface SmsLog       { id: string; to: string; recipientName: string; message: string; status: string; sentAt: string; trigger?: string; }
 
-type SendMode = "single" | "staff" | "customer" | "loan_customer" | "microfinance" | "marketing_customer";
+type SendMode = "single" | "staff" | "customer" | "loan_customer" | "microfinance" | "marketing_customer" | "media_customer" | "business_customer" | "licence_customer" | "entertainment_customer" | "movies_customer";
 
 const VARS = ["{staff_name}", "{customer_name}", "{company_name}", "{date}", "{amount}"];
 const SMS_LEN = 160;
@@ -30,6 +31,11 @@ export default function MessagesPage() {
   const [loanCustomers,         setLoanCustomers]         = useState<Customer[]>([]);
   const [microfinanceCusts,     setMicrofinanceCusts]     = useState<Customer[]>([]);
   const [marketingCusts,        setMarketingCusts]        = useState<Customer[]>([]);
+  const [mediaCusts,            setMediaCusts]            = useState<Customer[]>([]);
+  const [businessCusts,         setBusinessCusts]         = useState<Customer[]>([]);
+  const [licenceCusts,          setLicenceCusts]          = useState<Customer[]>([]);
+  const [entertainmentCusts,    setEntertainmentCusts]    = useState<Customer[]>([]);
+  const [moviesCusts,           setMoviesCusts]           = useState<Customer[]>([]);
   const [logs,           setLogs]           = useState<SmsLog[]>([]);
   const [balance,   setBalance]   = useState<number | null>(null);
   const [senderId,  setSenderId]  = useState("INFO");
@@ -51,11 +57,17 @@ export default function MessagesPage() {
       fetch("/api/loans",                  { cache: "no-store" }),
       fetch("/api/messages",               { cache: "no-store" }),
       fetch("/api/settings/beem/balance",  { cache: "no-store" }),
-      fetch("/api/microfinance-customers", { cache: "no-store" }),
-      fetch("/api/marketing-customers",    { cache: "no-store" }),
+      fetch("/api/microfinance-customers",    { cache: "no-store" }),
+      fetch("/api/marketing-customers",       { cache: "no-store" }),
+      fetch("/api/media-customers",           { cache: "no-store" }),
+      fetch("/api/business-customers",        { cache: "no-store" }),
+      fetch("/api/licence-customers",         { cache: "no-store" }),
+      fetch("/api/entertainment-customers",   { cache: "no-store" }),
+      fetch("/api/movies-customers",          { cache: "no-store" }),
     ]);
     const sr = _r[0]; const cr = _r[1]; const loanR = _r[2];
-    const lr = _r[3]; const br = _r[4]; const mfR   = _r[5]; const mktR = _r[6];
+    const lr = _r[3]; const br = _r[4]; const mfR = _r[5]; const mktR = _r[6];
+    const mdR = _r[7]; const bsR = _r[8]; const lcR = _r[9]; const enR = _r[10]; const mvR = _r[11];
     if (sr.status === "fulfilled" && sr.value.ok)
       setStaff((await sr.value.json()).filter((u: Staff) => u.status !== "inactive"));
 
@@ -98,6 +110,19 @@ export default function MessagesPage() {
       const raw: MktCustomer[] = await mktR.value.json();
       setMarketingCusts(raw.map(m => ({ id: m.id, name: m.name, phone: m.phone, companyId: m.companyId })));
     }
+    const mapGen = async (r: PromiseSettledResult<Response>, setter: (v: Customer[]) => void) => {
+      if (r.status === "fulfilled" && r.value.ok) {
+        const raw: GenCustomer[] = await r.value.json();
+        setter(raw.map(m => ({ id: m.id, name: m.name, phone: m.phone, companyId: m.companyId })));
+      }
+    };
+    await Promise.all([
+      mapGen(mdR, setMediaCusts),
+      mapGen(bsR, setBusinessCusts),
+      mapGen(lcR, setLicenceCusts),
+      mapGen(enR, setEntertainmentCusts),
+      mapGen(mvR, setMoviesCusts),
+    ]);
     if (br.status === "fulfilled" && br.value.ok) {
       const d = await br.value.json();
       setBalance(d.balance ?? null);
@@ -108,10 +133,15 @@ export default function MessagesPage() {
   useEffect(() => { loadData(); }, []);
 
   const recipientList: Customer[] =
-    mode === "staff"             ? (staff as unknown as Customer[]) :
-    mode === "loan_customer"     ? loanCustomers :
-    mode === "microfinance"      ? microfinanceCusts :
-    mode === "marketing_customer" ? marketingCusts :
+    mode === "staff"                 ? (staff as unknown as Customer[]) :
+    mode === "loan_customer"         ? loanCustomers :
+    mode === "microfinance"          ? microfinanceCusts :
+    mode === "marketing_customer"    ? marketingCusts :
+    mode === "media_customer"        ? mediaCusts :
+    mode === "business_customer"     ? businessCusts :
+    mode === "licence_customer"      ? licenceCusts :
+    mode === "entertainment_customer"? entertainmentCusts :
+    mode === "movies_customer"       ? moviesCusts :
     customers;
   const filteredRecipients = recipientList.filter(r =>
     r.name.toLowerCase().includes(recipientSearch.toLowerCase()) ||
@@ -212,7 +242,7 @@ export default function MessagesPage() {
             <div>
               <p className="text-xs font-medium text-gray-500 mb-2.5 uppercase tracking-wide">Send To</p>
               <div className="flex flex-wrap gap-5">
-                {(["single", "staff", "customer", "loan_customer", "microfinance", "marketing_customer"] as const).map(m => (
+                {(["single", "staff", "customer", "loan_customer", "microfinance", "marketing_customer", "media_customer", "business_customer", "licence_customer", "entertainment_customer", "movies_customer"] as const).map(m => (
                   <label key={m} className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="radio" name="sendMode" value={m}
@@ -221,7 +251,7 @@ export default function MessagesPage() {
                       className="w-4 h-4 accent-blue-600"
                     />
                     <span className="text-sm text-gray-700 font-medium">
-                      {m === "single" ? "Single Number" : m === "staff" ? "Staff Members" : m === "loan_customer" ? "Loan Customers" : m === "microfinance" ? "Microfinance Customers" : m === "marketing_customer" ? "Marketing Customers" : "Customers"}
+                      {m === "single" ? "Single Number" : m === "staff" ? "Staff Members" : m === "loan_customer" ? "Loan Customers" : m === "microfinance" ? "Microfinance Customers" : m === "marketing_customer" ? "Marketing Customers" : m === "media_customer" ? "Media Customers" : m === "business_customer" ? "Business Customers" : m === "licence_customer" ? "Licence Customers" : m === "entertainment_customer" ? "Entertainment Customers" : m === "movies_customer" ? "Movies Customers" : "Customers"}
                     </span>
                   </label>
                 ))}
@@ -249,7 +279,7 @@ export default function MessagesPage() {
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                     <Users className="w-4 h-4 text-gray-400" />
-                    {mode === "staff" ? "Staff Members" : mode === "loan_customer" ? "Loan Customers" : mode === "microfinance" ? "Microfinance Customers" : mode === "marketing_customer" ? "Marketing Customers" : "Customers"}
+                    {mode === "staff" ? "Staff Members" : mode === "loan_customer" ? "Loan Customers" : mode === "microfinance" ? "Microfinance Customers" : mode === "marketing_customer" ? "Marketing Customers" : mode === "media_customer" ? "Media Customers" : mode === "business_customer" ? "Business Customers" : mode === "licence_customer" ? "Licence Customers" : mode === "entertainment_customer" ? "Entertainment Customers" : mode === "movies_customer" ? "Movies Customers" : "Customers"}
                     {selectedIds.length > 0 && (
                       <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-semibold">
                         {selectedIds.length} selected
@@ -270,7 +300,7 @@ export default function MessagesPage() {
 
                 {/* Search box */}
                 <Input
-                  placeholder={`Search ${mode === "staff" ? "staff" : mode === "loan_customer" ? "loan customers" : mode === "microfinance" ? "microfinance customers" : mode === "marketing_customer" ? "marketing customers" : "customers"} by name or phone…`}
+                  placeholder={`Search ${mode === "staff" ? "staff" : mode === "loan_customer" ? "loan customers" : mode === "microfinance" ? "microfinance customers" : mode === "marketing_customer" ? "marketing customers" : mode === "media_customer" ? "media customers" : mode === "business_customer" ? "business customers" : mode === "licence_customer" ? "licence customers" : mode === "entertainment_customer" ? "entertainment customers" : mode === "movies_customer" ? "movies customers" : "customers"} by name or phone…`}
                   value={recipientSearch}
                   onChange={e => setRecipientSearch(e.target.value)}
                   className="mb-2"

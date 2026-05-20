@@ -295,8 +295,13 @@ export default function AdminPage() {
     { module: "Messages & Notifications", admin: true, manager: true, staff: true },
     { module: "Petty Cash", admin: true, manager: true, staff: false },
     { module: "Staff Meeting", admin: true, manager: true, staff: false },
-    { module: "Marketing Report", admin: true, manager: true, staff: true },
-    { module: "Admin Panel", admin: true, manager: false, staff: false },
+    { module: "Marketing Report",            admin: true, manager: true,  staff: true  },
+    { module: "Media Customers",              admin: true, manager: true,  staff: true  },
+    { module: "Business Customers",           admin: true, manager: true,  staff: true  },
+    { module: "Licence Customers",            admin: true, manager: true,  staff: true  },
+    { module: "Entertainment Customers",      admin: true, manager: true,  staff: true  },
+    { module: "Movies Customers",             admin: true, manager: true,  staff: true  },
+    { module: "Admin Panel",                  admin: true, manager: false, staff: false },
   ];
 
   return (

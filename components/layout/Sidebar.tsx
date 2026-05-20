@@ -8,7 +8,7 @@ import {
   ChevronRight, Building2, ShoppingCart, Megaphone, Package,
   Receipt, BarChart3, FileText, Warehouse, TrendingUp, Briefcase,
   Clock, HelpCircle, X, Menu, Percent, Wrench, Activity, Scale, MapPin,
-  Users2, MessageSquarePlus, MessageSquare, Landmark
+  Users2, MessageSquarePlus, MessageSquare, Landmark, Radio, BadgeCheck, Music, Film
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -41,7 +41,12 @@ const PERM_ROUTES: Record<string, string[]> = {
   accounting:        ["/accounting"],
   invoices:          ["/invoices"],
   petty_cash:        ["/petty-cash"],
-  customers:         ["/customers"],
+  customers:              ["/customers"],
+  media_customers:        ["/media-customers"],
+  business_customers:     ["/business-customers"],
+  licence_customers:      ["/licence-customers"],
+  entertainment_customers:["/entertainment-customers"],
+  movies_customers:       ["/movies-customers"],
   sales:             ["/sales", "/quotations", "/tickets"],
   commissions:       ["/commissions"],
   marketing:         ["/marketing"],
@@ -117,6 +122,11 @@ const ALL_NAV: NavGroup[] = [
       { label: "Loan Customers",           href: "/loans",                    icon: DollarSign },
       { label: "Microfinance Customers",    href: "/microfinance-customers",   icon: Landmark   },
       { label: "Marketing Customers",       href: "/marketing-customers",      icon: Megaphone  },
+      { label: "Media Customers",            href: "/media-customers",          icon: Radio      },
+      { label: "Business Customers",         href: "/business-customers",       icon: Building2  },
+      { label: "Licence Customers",          href: "/licence-customers",        icon: BadgeCheck },
+      { label: "Entertainment Customers",    href: "/entertainment-customers",  icon: Music      },
+      { label: "Movies Customers",           href: "/movies-customers",         icon: Film       },
       { label: "Quotations",               href: "/quotations",               icon: FileText   },
       { label: "Support Tickets", href: "/tickets",     icon: HelpCircle },
     ]
@@ -262,7 +272,7 @@ export default function Sidebar({ collapsed, onToggle, mobile, onClose }: Sideba
     items: group.items.filter(item => {
       if (item.href === "/admin" || item.href === "/admin#branches") return isSuperAdmin;
       // Always visible to all logged-in users (no permission gate)
-      if (["/staff-meetings", "/marketing-reports", "/customers", "/microfinance-customers", "/marketing-customers"].includes(item.href)) return true;
+      if (["/staff-meetings","/marketing-reports","/customers","/microfinance-customers","/marketing-customers","/media-customers","/business-customers","/licence-customers","/entertainment-customers","/movies-customers"].includes(item.href)) return true;
       return canAccess(item.href, session ? perms : []);
     }),
   })).filter(group => group.items.length > 0);
