@@ -1,87 +1,62 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Eye, EyeOff, Lock, Mail, ArrowLeft, KeyRound, CheckCircle2, ShieldAlert } from "lucide-react";
+import { Building2, Eye, EyeOff, Lock, Phone, Mail, ArrowLeft, KeyRound, CheckCircle2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-const ADMIN_EMAIL      = "phidtechnology@gmail.com";
-const SESSION_KEY      = "phidtech_session";
-const RESET_TOKENS_KEY = "phidtech_reset_tokens";
-
-const APP_URL = typeof window !== "undefined"
-  ? window.location.origin
-  : "https://www.phidtechstaff.co.tz";
-
-function lsGet<T>(key: string, fallback: T): T {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; }
-}
-function lsSet(key: string, val: unknown) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
-}
-
-interface ResetToken { token: string; email: string; expiresAt: number; used: boolean; }
+const SESSION_KEY = "phidtech_session";
 
 export default function LoginPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail]     = useState("");
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState("");
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");
 
-  // Forgot password state
-  const [forgotMode, setForgotMode]     = useState(false);
-  const [forgotEmail, setForgotEmail]   = useState("");
-  const [forgotError, setForgotError]   = useState("");
-  const [forgotSending, setForgotSending] = useState(false);
-  const [forgotSent, setForgotSent]     = useState(false);
+  // OTP reset state — step: 0=login, 1=enter phone, 2=enter OTP+newpw, 3=done
+  const [otpStep, setOtpStep]         = useState(0);
+  const [otpPhone, setOtpPhone]       = useState("");
+  const [otpCode, setOtpCode]         = useState("");
+  const [otpNewPw, setOtpNewPw]       = useState("");
+  const [otpError, setOtpError]       = useState("");
+  const [otpLoading, setOtpLoading]   = useState(false);
+  const [otpName, setOtpName]         = useState("");
 
-  const handleForgot = async (e: React.FormEvent) => {
+  const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    setForgotError("");
-    if (!forgotEmail.trim() || !forgotEmail.includes("@")) {
-      setForgotError("Please enter a valid email address.");
-      return;
-    }
-    // Only superadmin can use forgot password
-    if (forgotEmail.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
-      setForgotError("Only the system administrator can reset their password here. Staff passwords are reset by the administrator in the Users section.");
-      return;
-    }
-
-    setForgotSending(true);
+    setOtpError("");
+    if (!otpPhone.trim()) { setOtpError("Enter your registered phone number."); return; }
+    setOtpLoading(true);
     try {
-      // Generate a secure token valid for 1 hour
-      const token = `rst_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-      const expiresAt = Date.now() + 60 * 60 * 1000; // 1 hour
-      const tokens = lsGet<ResetToken[]>(RESET_TOKENS_KEY, []);
-      // Invalidate old unused tokens for this email
-      const cleaned = tokens.filter(t => t.email !== ADMIN_EMAIL || t.used);
-      lsSet(RESET_TOKENS_KEY, [...cleaned, { token, email: ADMIN_EMAIL, expiresAt, used: false }]);
-
-      const resetLink = `${APP_URL}/reset-password?token=${token}`;
-
-      const res = await fetch("/api/send-reset-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to_email:   ADMIN_EMAIL,
-          to_name:    "System Administrator",
-          reset_link: resetLink,
-          expires_in: "1 hour",
-        }),
+      const res = await fetch("/api/auth/otp-reset?action=request", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: otpPhone.trim() }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Failed to send email");
-      }
+      const data = await res.json();
+      if (!res.ok) { setOtpError(data.error ?? "Failed to send OTP."); return; }
+      setOtpName(data.name ?? "");
+      setOtpStep(2);
+    } catch { setOtpError("Connection error. Try again."); }
+    finally { setOtpLoading(false); }
+  };
 
-      setForgotSent(true);
-    } catch (err: unknown) {
-      setForgotError(err instanceof Error ? err.message : "Failed to send reset email. Please try again.");
-    } finally {
-      setForgotSending(false);
-    }
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOtpError("");
+    if (!otpCode.trim()) { setOtpError("Enter the OTP sent to your phone."); return; }
+    if (otpNewPw.length < 6) { setOtpError("Password must be at least 6 characters."); return; }
+    setOtpLoading(true);
+    try {
+      const res = await fetch("/api/auth/otp-reset?action=verify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: otpPhone.trim(), otp: otpCode.trim(), newPassword: otpNewPw }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setOtpError(data.error ?? "Verification failed."); return; }
+      setOtpStep(3);
+    } catch { setOtpError("Connection error. Try again."); }
+    finally { setOtpLoading(false); }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -152,80 +127,83 @@ export default function LoginPage() {
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
 
-          {/* ── FORGOT PASSWORD MODE ── */}
-          {forgotMode ? (
+          {/* ── OTP RESET STEP 1: enter phone ── */}
+          {otpStep === 1 ? (
             <>
-              <div className="mb-6">
-                <button
-                  onClick={() => { setForgotMode(false); setForgotEmail(""); setForgotError(""); setForgotSent(false); }}
-                  className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium mb-4"
-                >
-                  <ArrowLeft className="w-4 h-4" /> Back to Sign In
-                </button>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-                    <KeyRound className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">Forgot Password?</h2>
-                    <p className="text-gray-500 text-sm">Superadmin only — a reset link will be sent to your Gmail</p>
-                  </div>
+              <button onClick={() => { setOtpStep(0); setOtpError(""); }} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium mb-5">
+                <ArrowLeft className="w-4 h-4" /> Back to Sign In
+              </button>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                  <KeyRound className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Reset Password</h2>
+                  <p className="text-gray-500 text-sm">Enter your registered phone — we&apos;ll SMS you a code</p>
                 </div>
               </div>
-
-              {/* Sent confirmation */}
-              {forgotSent ? (
-                <div className="space-y-4">
-                  <div className="p-4 bg-green-50 border border-green-200 rounded-xl flex flex-col items-center gap-3 text-center">
-                    <CheckCircle2 className="w-10 h-10 text-green-500" />
-                    <div>
-                      <p className="font-semibold text-green-800">Reset link sent!</p>
-                      <p className="text-sm text-green-700 mt-1">Check your Gmail inbox at <strong>{ADMIN_EMAIL}</strong>.<br />The link expires in <strong>1 hour</strong>.</p>
-                    </div>
+              {otpError && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{otpError}</div>}
+              <form onSubmit={handleRequestOtp} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone Number</label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input type="tel" value={otpPhone} onChange={e => { setOtpPhone(e.target.value); setOtpError(""); }} className="pl-10" placeholder="e.g. 0712 345 678" autoFocus />
                   </div>
-                  <Button variant="outline" className="w-full" onClick={() => { setForgotMode(false); setForgotEmail(""); setForgotSent(false); }}>
-                    Back to Sign In
-                  </Button>
                 </div>
-              ) : (
-                <form onSubmit={handleForgot} className="space-y-4">
-                  {forgotError && (
-                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-                      <div className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center shrink-0 mt-0.5">
-                        <span className="text-white text-[10px] font-bold">!</span>
-                      </div>
-                      <p className="text-sm text-red-700">{forgotError}</p>
-                    </div>
-                  )}
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-                    <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-700">Password reset is only available for the <strong>System Administrator</strong> account. Staff passwords are managed by the administrator in the Users section.</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Administrator Email</label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <Input
-                        type="email"
-                        value={forgotEmail}
-                        onChange={e => { setForgotEmail(e.target.value); setForgotError(""); }}
-                        className="pl-10"
-                        placeholder={ADMIN_EMAIL}
-                        autoFocus
-                      />
-                    </div>
-                  </div>
-                  <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={forgotSending}>
-                    {forgotSending ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Sending reset link...
-                      </div>
-                    ) : "Send Reset Link to Gmail"}
-                  </Button>
-                </form>
-              )}
+                <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={otpLoading}>
+                  {otpLoading ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />Sending OTP...</> : "Send OTP via SMS"}
+                </Button>
+              </form>
             </>
+
+          ) : otpStep === 2 ? (
+            <>
+              <button onClick={() => { setOtpStep(1); setOtpError(""); }} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium mb-5">
+                <ArrowLeft className="w-4 h-4" /> Change phone
+              </button>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Enter OTP</h2>
+                  <p className="text-gray-500 text-sm">OTP sent to <strong>{otpPhone}</strong>{otpName ? ` (${otpName})` : ""}</p>
+                </div>
+              </div>
+              {otpError && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{otpError}</div>}
+              <form onSubmit={handleVerifyOtp} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">6-Digit OTP</label>
+                  <Input value={otpCode} onChange={e => { setOtpCode(e.target.value.replace(/\D/g,"")); setOtpError(""); }} maxLength={6} placeholder="e.g. 123456" className="text-center text-xl tracking-widest font-mono" autoFocus />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">New Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input type="password" value={otpNewPw} onChange={e => { setOtpNewPw(e.target.value); setOtpError(""); }} className="pl-10" placeholder="Min. 6 characters" autoComplete="new-password" />
+                  </div>
+                </div>
+                <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={otpLoading}>
+                  {otpLoading ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />Verifying...</> : "Confirm & Change Password"}
+                </Button>
+              </form>
+            </>
+
+          ) : otpStep === 3 ? (
+            <div className="space-y-4">
+              <div className="p-5 bg-green-50 border border-green-200 rounded-xl flex flex-col items-center gap-3 text-center">
+                <CheckCircle2 className="w-12 h-12 text-green-500" />
+                <div>
+                  <p className="font-semibold text-green-800 text-lg">Password Changed!</p>
+                  <p className="text-sm text-green-700 mt-1">You can now sign in with your new password.</p>
+                </div>
+              </div>
+              <Button className="w-full h-11" onClick={() => { setOtpStep(0); setOtpPhone(""); setOtpCode(""); setOtpNewPw(""); setOtpError(""); }}>
+                Back to Sign In
+              </Button>
+            </div>
+
           ) : (
 
           /* ── LOGIN MODE ── */
@@ -265,7 +243,7 @@ export default function LoginPage() {
                   <label className="block text-sm font-medium text-gray-700">Password</label>
                   <button
                     type="button"
-                    onClick={() => { setForgotMode(true); setForgotEmail(email); setForgotError(""); setForgotSent(false); }}
+                    onClick={() => { setOtpStep(1); setOtpPhone(""); setOtpError(""); }}
                     className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                   >
                     Forgot password?

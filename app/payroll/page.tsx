@@ -225,6 +225,26 @@ export default function PayrollPage() {
     return name.toLowerCase().includes(search.toLowerCase());
   });
 
+  // Always show latest disbursed advances as deductions (even if payroll was run before disbursal)
+  const getMergedDeductions = (entry: PayrollEntry): Deduction[] => {
+    const statutory = entry.deductions.filter(d => !d.name.toLowerCase().includes("advance recovery"));
+    const monthIdx = MONTHS.indexOf(entry.month);
+    const advDeds: Deduction[] = advances
+      .filter(a => {
+        if (a.staffId !== entry.staffId || a.status !== "disbursed") return false;
+        const dateStr = (a.disbursedAt ?? "").slice(0, 10) || a.repaymentDate || "";
+        if (!dateStr) return false;
+        const d = new Date(dateStr + "T00:00:00");
+        return d.getMonth() === monthIdx && d.getFullYear() === entry.year;
+      })
+      .map(a => ({ name: `Advance Recovery — ${(a.disbursedAt ?? "").slice(0,10) || a.repaymentDate}`, amount: a.amount }));
+    return [...statutory, ...advDeds];
+  };
+  const getMergedNetPay = (entry: PayrollEntry): number => {
+    const merged = getMergedDeductions(entry);
+    return entry.grossSalary - merged.reduce((s, d) => s + d.amount, 0);
+  };
+
   const totalGross = companyEntries.reduce((s, p) => s + p.grossSalary, 0);
   const totalNet = companyEntries.reduce((s, p) => s + getMergedNetPay(p), 0);
   const totalDeductions = totalGross - totalNet;
@@ -566,26 +586,6 @@ export default function PayrollPage() {
     fetch(`/api/advances?id=${id}`, { method: "DELETE" })
       .then(() => fetchAdvances())
       .catch(() => {});
-  };
-
-  // Always show latest disbursed advances as deductions (even if payroll was run before disbursal)
-  const getMergedDeductions = (entry: PayrollEntry): Deduction[] => {
-    const statutory = entry.deductions.filter(d => !d.name.toLowerCase().includes("advance recovery"));
-    const monthIdx = MONTHS.indexOf(entry.month);
-    const advDeds: Deduction[] = advances
-      .filter(a => {
-        if (a.staffId !== entry.staffId || a.status !== "disbursed") return false;
-        const dateStr = (a.disbursedAt ?? "").slice(0, 10) || a.repaymentDate || "";
-        if (!dateStr) return false;
-        const d = new Date(dateStr + "T00:00:00");
-        return d.getMonth() === monthIdx && d.getFullYear() === entry.year;
-      })
-      .map(a => ({ name: `Advance Recovery — ${(a.disbursedAt ?? "").slice(0,10) || a.repaymentDate}`, amount: a.amount }));
-    return [...statutory, ...advDeds];
-  };
-  const getMergedNetPay = (entry: PayrollEntry): number => {
-    const merged = getMergedDeductions(entry);
-    return entry.grossSalary - merged.reduce((s, d) => s + d.amount, 0);
   };
 
   const years = [now.getFullYear(), now.getFullYear() - 1];

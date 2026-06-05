@@ -42,9 +42,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    if (!body.companyId || !body.staffId || !body.date || !body.createdBy) {
+    if (!body.staffId || !body.date || !body.createdBy) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+    if (!body.companyId) body.companyId = "group";
     const reports = readDb<MarketingReport[]>("marketing-reports", []);
     const newReport: MarketingReport = {
       ...body,

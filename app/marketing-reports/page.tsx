@@ -112,8 +112,8 @@ export default function MarketingReportsPage() {
         const list: MarketingReport[] = await res.json();
         // Managers see all company reports; staff see only their own
         const visible = isMgr
-          ? list.filter(r => r.companyId === cid)
-          : list.filter(r => r.staffId === sess.id && r.companyId === cid);
+          ? (!cid ? list : list.filter(r => r.companyId === cid))
+          : list.filter(r => r.staffId === sess.id && (!cid || r.companyId === cid));
         setReports(visible);
       }
     } catch { /* silently fail */ }
@@ -131,7 +131,7 @@ export default function MarketingReportsPage() {
     setEditTarget(null);
     setForm({ 
       ...emptyForm(), 
-      companyId: activeCompanyId, 
+      companyId: activeCompanyId || session?.companyId || "group",
       staffId: session?.id ?? "",
       createdBy: session?.id ?? "",
       date: new Date().toISOString().split('T')[0]

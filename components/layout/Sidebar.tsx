@@ -112,7 +112,7 @@ const ALL_NAV: NavGroup[] = [
       { label: "Interest from Loans",  href: "/accounting/loan-interest",   icon: TrendingUp   },
       { label: "Assets",               href: "/assets",                      icon: Briefcase    },
       { label: "Marketing Expenses",    href: "/expenses",                    icon: Receipt      },
-      { label: "Pending Payments",      href: "/accounting/pending-payments",  icon: Wallet       },
+      { label: "Promised Deal & Payments", href: "/accounting/pending-payments",  icon: Wallet       },
       { label: "Account Floats",         href: "/accounting/account-floats",   icon: Wallet       },
       { label: "Reports",               href: "/accounting/financial-reports", icon: BarChart3    },
     ]

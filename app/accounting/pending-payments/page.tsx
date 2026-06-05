@@ -134,7 +134,7 @@ export default function PendingPaymentsPage() {
 
   return (
     <MainLayout>
-      <PageHeader title="Pending to Pay Customers" subtitle="Track customers with negotiated amounts and promised payment dates" icon={Wallet}
+      <PageHeader title="Promised Deal & Payments" subtitle="Track customers with negotiated amounts and promised payment dates" icon={Wallet}
         actions={canEdit ? <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4 mr-2"/>Add Record</Button> : undefined}
       />
 
