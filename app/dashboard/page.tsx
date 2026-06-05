@@ -97,31 +97,26 @@ export default function DashboardPage() {
     setLoanInt(lsGet<LoanInterest[]>(LOANINT_KEY, []));
     setLoans(lsGet<Loan[]>(LOANS_KEY, []));
 
-    // ── Step 2: fetch fresh data — each setter fires as soon as its own response arrives ──
-    const go = <T,>(url: string, setter: (d: T) => void, cacheKey?: string) =>
-      fetch(url, { cache: "no-store" })
-        .then(r => r.ok ? r.json() : null)
-        .then((d: T | null) => {
-          if (d == null) return;
-          setter(d);
-          if (cacheKey) try { localStorage.setItem(cacheKey, JSON.stringify(d)); } catch {}
-        })
-        .catch(() => {/* keep cached value shown in step 1 */});
-
+    // ── Step 2: single batch request replaces 11 individual calls ──
     setDataLoading(true);
-    await Promise.all([
-      go<Company[]>   ("/api/companies",        setCompanies,  COMPANIES_KEY),
-      go<StaffUser[]> ("/api/users",            setStaffUsers, USERS_KEY),
-      go<Branch[]>    ("/api/branches",         setBranches),
-      go<Task[]>      ("/api/tasks",            setTasks,      TASKS_KEY),
-      go<LeaveReq[]>  ("/api/leave",            setLeaves,     LEAVE_KEY),
-      go<Sale[]>      ("/api/accounting/sales", setSales,      SALES_KEY),
-      go<Expense[]>   ("/api/expenses",         setExpenses,   EXPENSES_KEY),
-      go<OfficeExpense[]>("/api/office-expenses",setOfficeExp, OFFICE_EXP_KEY),
-      go<PayrollEntry[]> ("/api/payroll",       setPayroll,    PAYROLL_KEY),
-      go<LoanInterest[]>  ("/api/loan-interest", setLoanInt,    LOANINT_KEY),
-      go<Loan[]>          ("/api/loans",          setLoans,      LOANS_KEY),
-    ]);
+    try {
+      const r = await fetch("/api/dashboard-summary", { cache: "no-store" });
+      if (r.ok) {
+        const d = await r.json();
+        const save = (key: string, val: unknown) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} };
+        if (d.companies)      { setCompanies(d.companies);          save(COMPANIES_KEY,  d.companies); }
+        if (d.users)          { setStaffUsers(d.users);             save(USERS_KEY,      d.users); }
+        if (d.branches)       { setBranches(d.branches); }
+        if (d.tasks)          { setTasks(d.tasks);                  save(TASKS_KEY,      d.tasks); }
+        if (d.leave)          { setLeaves(d.leave);                 save(LEAVE_KEY,      d.leave); }
+        if (d.sales)          { setSales(d.sales);                  save(SALES_KEY,      d.sales); }
+        if (d.expenses)       { setExpenses(d.expenses);            save(EXPENSES_KEY,   d.expenses); }
+        if (d.officeExpenses) { setOfficeExp(d.officeExpenses);     save(OFFICE_EXP_KEY, d.officeExpenses); }
+        if (d.payroll)        { setPayroll(d.payroll);              save(PAYROLL_KEY,    d.payroll); }
+        if (d.loanInterest)   { setLoanInt(d.loanInterest);         save(LOANINT_KEY,    d.loanInterest); }
+        if (d.loans)          { setLoans(d.loans);                  save(LOANS_KEY,      d.loans); }
+      }
+    } catch { /* keep cached values from step 1 */ }
     setDataLoading(false);
   };
 

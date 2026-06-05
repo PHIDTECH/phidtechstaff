@@ -561,6 +561,26 @@ export default function PayrollPage() {
       .catch(() => {});
   };
 
+  // Always show latest disbursed advances as deductions (even if payroll was run before disbursal)
+  const getMergedDeductions = (entry: PayrollEntry): Deduction[] => {
+    const statutory = entry.deductions.filter(d => !d.name.toLowerCase().includes("advance recovery"));
+    const monthIdx = MONTHS.indexOf(entry.month);
+    const advDeds: Deduction[] = advances
+      .filter(a => {
+        if (a.staffId !== entry.staffId || a.status !== "disbursed") return false;
+        const dateStr = (a.disbursedAt ?? "").slice(0, 10) || a.repaymentDate || "";
+        if (!dateStr) return false;
+        const d = new Date(dateStr + "T00:00:00");
+        return d.getMonth() === monthIdx && d.getFullYear() === entry.year;
+      })
+      .map(a => ({ name: `Advance Recovery — ${(a.disbursedAt ?? "").slice(0,10) || a.repaymentDate}`, amount: a.amount }));
+    return [...statutory, ...advDeds];
+  };
+  const getMergedNetPay = (entry: PayrollEntry): number => {
+    const merged = getMergedDeductions(entry);
+    return entry.grossSalary - merged.reduce((s, d) => s + d.amount, 0);
+  };
+
   const years = [now.getFullYear(), now.getFullYear() - 1];
 
   const _role = (session?.role ?? "").toLowerCase();
@@ -675,7 +695,7 @@ export default function PayrollPage() {
                   <div>
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Deductions</p>
                     <div className="space-y-2">
-                      {myEntry.deductions.map(d => (
+                      {getMergedDeductions(myEntry).map(d => (
                         <div key={d.name} className="flex justify-between text-sm">
                           <span className="text-gray-500">{d.name}</span>
                           <span className="text-red-600">-{formatCurrency(d.amount)}</span>
@@ -683,7 +703,7 @@ export default function PayrollPage() {
                       ))}
                       <div className="flex justify-between text-sm font-bold border-t pt-2 mt-1">
                         <span>Total</span>
-                        <span className="text-red-600">-{formatCurrency(myEntry.deductions.reduce((s,d)=>s+d.amount,0))}</span>
+                        <span className="text-red-600">-{formatCurrency(getMergedDeductions(myEntry).reduce((s,d)=>s+d.amount,0))}</span>
                       </div>
                     </div>
                   </div>
@@ -691,7 +711,7 @@ export default function PayrollPage() {
                 {/* Net pay */}
                 <div className="mx-6 mb-4 p-4 bg-green-50 rounded-xl border border-green-100 flex items-center justify-between">
                   <span className="font-bold text-gray-900">Net Pay</span>
-                  <span className="text-2xl font-bold text-green-700">{formatCurrency(myEntry.netSalary)}</span>
+                  <span className="text-2xl font-bold text-green-700">{formatCurrency(getMergedNetPay(myEntry))}</span>
                 </div>
                 {/* Employer costs */}
                 {(() => {
@@ -728,9 +748,11 @@ export default function PayrollPage() {
                           { name: "WCF (0.5%)",           amount: calcWCF(myEntry.grossSalary) },
                         ];
                     const tec = ec.reduce((s,c) => s+c.amount, 0);
+                    const md  = getMergedDeductions(myEntry);
+                    const mn  = getMergedNetPay(myEntry);
                     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payslip</title><style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-width:600px}.hdr{display:flex;justify-content:space-between;background:#1e3a8a;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0}.hdr h1{font-size:15px;margin:0 0 3px;color:#fff}.hdr p{font-size:11px;margin:2px 0;opacity:.85}.body{border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:16px 18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px}.stitle{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}.row{display:flex;justify-content:space-between;padding:3px 0;font-size:11.5px}.row.tot{font-weight:700;border-top:1px solid #e5e7eb;margin-top:4px;padding-top:5px}.net{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin:12px 0}.net .lbl{font-weight:700;font-size:14px}.net .val{font-weight:800;font-size:20px;color:#15803d}.employer{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;margin-top:10px;font-size:11px}.emp-title{font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px}.footer{text-align:center;font-size:10px;color:#9ca3af;margin-top:16px;border-top:1px solid #f3f4f6;padding-top:10px}@media print{@page{margin:12mm}}</style></head><body>
 <div class="hdr"><div><h1>${activeCompanyName}</h1><p>Payslip — ${myEntry.month} ${myEntry.year}</p></div><div style="text-align:right"><p style="font-size:13px;font-weight:700;margin:0">${myStaff?.name ?? session?.name ?? ""}</p><p>${myStaff?.position ?? ""}</p><p>${myStaff?.department ?? ""}</p></div></div>
-<div class="body"><div class="grid"><div><div class="stitle">Earnings</div><div class="row"><span>Basic Salary</span><span>TZS ${myEntry.basicSalary.toLocaleString()}</span></div>${myEntry.allowances.map(a=>`<div class="row"><span>${a.name}</span><span style="color:#16a34a">+TZS ${a.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Gross Salary</span><span>TZS ${myEntry.grossSalary.toLocaleString()}</span></div></div><div><div class="stitle">Employee Deductions</div>${myEntry.deductions.map(d=>`<div class="row"><span>${d.name}</span><span style="color:#dc2626">-TZS ${d.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Total Deductions</span><span style="color:#dc2626">-TZS ${myEntry.deductions.reduce((s,d)=>s+d.amount,0).toLocaleString()}</span></div></div></div><div class="net"><span class="lbl">NET PAY</span><span class="val">TZS ${myEntry.netSalary.toLocaleString()}</span></div>${ec.length>0?`<div class="employer"><div class="emp-title">Employer Statutory Costs (not deducted from employee)</div>${ec.map(c=>`<div class="row"><span>${c.name}</span><span>TZS ${c.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Total</span><span>TZS ${tec.toLocaleString()}</span></div></div>`:""}<div class="footer">PHIDTECH Management System | CONFIDENTIAL | Tanzania Labour Laws Compliant</div></div>
+<div class="body"><div class="grid"><div><div class="stitle">Earnings</div><div class="row"><span>Basic Salary</span><span>TZS ${myEntry.basicSalary.toLocaleString()}</span></div>${myEntry.allowances.map(a=>`<div class="row"><span>${a.name}</span><span style="color:#16a34a">+TZS ${a.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Gross Salary</span><span>TZS ${myEntry.grossSalary.toLocaleString()}</span></div></div><div><div class="stitle">Employee Deductions</div>${md.map(d=>`<div class="row"><span>${d.name}</span><span style="color:#dc2626">-TZS ${d.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Total Deductions</span><span style="color:#dc2626">-TZS ${md.reduce((s,d)=>s+d.amount,0).toLocaleString()}</span></div></div></div><div class="net"><span class="lbl">NET PAY</span><span class="val">TZS ${mn.toLocaleString()}</span></div>${ec.length>0?`<div class="employer"><div class="emp-title">Employer Statutory Costs (not deducted from employee)</div>${ec.map(c=>`<div class="row"><span>${c.name}</span><span>TZS ${c.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Total</span><span>TZS ${tec.toLocaleString()}</span></div></div>`:""}<div class="footer">PHIDTECH Management System | CONFIDENTIAL | Tanzania Labour Laws Compliant</div></div>
 <script>window.onload=()=>window.print();</script></body></html>`;
                     const w = window.open("", "_blank", "width=720,height=900");
                     if (w) { w.document.write(html); w.document.close(); }
@@ -1211,6 +1233,8 @@ export default function PayrollPage() {
           </DialogHeader>
           {showSlipDialog && (() => {
             const emp = staffList.find(u => u.id === showSlipDialog.staffId);
+            const slipDeds = getMergedDeductions(showSlipDialog);
+            const slipNet  = getMergedNetPay(showSlipDialog);
             const empCosts = (showSlipDialog.employerCosts && showSlipDialog.employerCosts.length > 0)
               ? showSlipDialog.employerCosts
               : [
@@ -1252,11 +1276,11 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
     </div>
     <div>
       <div class="stitle">Employee Deductions</div>
-      ${showSlipDialog.deductions.map(d => `<div class="row"><span>${d.name}</span><span style="color:#dc2626">-TZS ${d.amount.toLocaleString()}</span></div>`).join("")}
-      <div class="row tot"><span>Total Deductions</span><span style="color:#dc2626">-TZS ${showSlipDialog.deductions.reduce((s,d)=>s+d.amount,0).toLocaleString()}</span></div>
+      ${slipDeds.map(d => `<div class="row"><span>${d.name}</span><span style="color:#dc2626">-TZS ${d.amount.toLocaleString()}</span></div>`).join("")}
+      <div class="row tot"><span>Total Deductions</span><span style="color:#dc2626">-TZS ${slipDeds.reduce((s,d)=>s+d.amount,0).toLocaleString()}</span></div>
     </div>
   </div>
-  <div class="net"><span class="lbl">NET PAY</span><span class="val">TZS ${showSlipDialog.netSalary.toLocaleString()}</span></div>
+  <div class="net"><span class="lbl">NET PAY</span><span class="val">TZS ${slipNet.toLocaleString()}</span></div>
   ${empCosts.length > 0 ? `<div class="employer">
     <div class="emp-title">Employer Statutory Costs (paid by employer, not deducted from employee)</div>
     ${empCosts.map(c => `<div class="row"><span>${c.name}</span><span>TZS ${c.amount.toLocaleString()}</span></div>`).join("")}
@@ -1308,7 +1332,7 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
                   <div>
                     <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Employee Deductions</p>
                     <div className="space-y-1.5">
-                      {showSlipDialog.deductions.map(d => (
+                      {slipDeds.map(d => (
                         <div key={d.name} className="flex justify-between text-sm">
                           <span className="text-gray-500">{d.name}</span>
                           <span className="text-red-600">-{formatCurrency(d.amount)}</span>
@@ -1316,14 +1340,14 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
                       ))}
                       <div className="flex justify-between text-sm font-bold border-t border-gray-100 pt-1.5 mt-1">
                         <span>Total Deductions</span>
-                        <span className="text-red-600">-{formatCurrency(showSlipDialog.deductions.reduce((s,d)=>s+d.amount,0))}</span>
+                        <span className="text-red-600">-{formatCurrency(slipDeds.reduce((s,d)=>s+d.amount,0))}</span>
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="p-3 bg-green-50 rounded-lg border border-green-100 flex justify-between items-center">
                   <span className="font-bold text-gray-900">Net Pay</span>
-                  <span className="text-xl font-bold text-green-700">{formatCurrency(showSlipDialog.netSalary)}</span>
+                  <span className="text-xl font-bold text-green-700">{formatCurrency(slipNet)}</span>
                 </div>
                 {empCosts.length > 0 && (
                   <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
@@ -1353,9 +1377,11 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
               const emp = staffList.find(u => u.id === showSlipDialog.staffId);
               const empCosts = showSlipDialog.employerCosts ?? [];
               const totalEmpCost = empCosts.reduce((s, c) => s + c.amount, 0);
+              const fd = getMergedDeductions(showSlipDialog);
+              const fn = getMergedNetPay(showSlipDialog);
               const slipHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payslip</title><style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-width:600px}.hdr{display:flex;justify-content:space-between;background:#1e3a8a;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0}.hdr h1{font-size:15px;margin:0 0 3px;color:#fff}.hdr p{font-size:11px;margin:2px 0;opacity:.85}.body{border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:16px 18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px}.stitle{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}.row{display:flex;justify-content:space-between;padding:3px 0;font-size:11.5px}.row.tot{font-weight:700;border-top:1px solid #e5e7eb;margin-top:4px;padding-top:5px}.net{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin:12px 0}.net .lbl{font-weight:700;font-size:14px}.net .val{font-weight:800;font-size:20px;color:#15803d}.employer{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;margin-top:10px;font-size:11px}.emp-title{font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px}.footer{text-align:center;font-size:10px;color:#9ca3af;margin-top:16px;border-top:1px solid #f3f4f6;padding-top:10px}@media print{@page{margin:12mm}}</style></head><body>
 <div class="hdr"><div><h1>${activeCompanyName}</h1><p>Payslip — ${showSlipDialog.month} ${showSlipDialog.year}</p><p>Generated: ${new Date(showSlipDialog.generatedAt).toLocaleDateString()}</p></div><div style="text-align:right"><p style="font-size:13px;font-weight:700;margin:0">${emp?.name ?? "Unknown"}</p><p>${emp?.position ?? ""}</p><p>${emp?.department ?? ""}</p></div></div>
-<div class="body"><div class="grid"><div><div class="stitle">Earnings</div><div class="row"><span>Basic Salary</span><span>TZS ${showSlipDialog.basicSalary.toLocaleString()}</span></div>${showSlipDialog.allowances.map(a=>`<div class="row"><span>${a.name}</span><span style="color:#16a34a">+TZS ${a.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Gross Salary</span><span>TZS ${showSlipDialog.grossSalary.toLocaleString()}</span></div></div><div><div class="stitle">Employee Deductions</div>${showSlipDialog.deductions.map(d=>`<div class="row"><span>${d.name}</span><span style="color:#dc2626">-TZS ${d.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Total Deductions</span><span style="color:#dc2626">-TZS ${showSlipDialog.deductions.reduce((s,d)=>s+d.amount,0).toLocaleString()}</span></div></div></div><div class="net"><span class="lbl">NET PAY</span><span class="val">TZS ${showSlipDialog.netSalary.toLocaleString()}</span></div>${empCosts.length>0?`<div class="employer"><div class="emp-title">Employer Statutory Costs (not deducted from employee)</div>${empCosts.map(c=>`<div class="row"><span>${c.name}</span><span>TZS ${c.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Total Employer Cost</span><span>TZS ${totalEmpCost.toLocaleString()}</span></div></div>`:""}<div class="footer">PHIDTECH Management System | CONFIDENTIAL | Tanzania Labour Laws Compliant</div></div>
+<div class="body"><div class="grid"><div><div class="stitle">Earnings</div><div class="row"><span>Basic Salary</span><span>TZS ${showSlipDialog.basicSalary.toLocaleString()}</span></div>${showSlipDialog.allowances.map(a=>`<div class="row"><span>${a.name}</span><span style="color:#16a34a">+TZS ${a.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Gross Salary</span><span>TZS ${showSlipDialog.grossSalary.toLocaleString()}</span></div></div><div><div class="stitle">Employee Deductions</div>${fd.map(d=>`<div class="row"><span>${d.name}</span><span style="color:#dc2626">-TZS ${d.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Total Deductions</span><span style="color:#dc2626">-TZS ${fd.reduce((s,d)=>s+d.amount,0).toLocaleString()}</span></div></div></div><div class="net"><span class="lbl">NET PAY</span><span class="val">TZS ${fn.toLocaleString()}</span></div>${empCosts.length>0?`<div class="employer"><div class="emp-title">Employer Statutory Costs (not deducted from employee)</div>${empCosts.map(c=>`<div class="row"><span>${c.name}</span><span>TZS ${c.amount.toLocaleString()}</span></div>`).join("")}<div class="row tot"><span>Total Employer Cost</span><span>TZS ${totalEmpCost.toLocaleString()}</span></div></div>`:""}<div class="footer">PHIDTECH Management System | CONFIDENTIAL | Tanzania Labour Laws Compliant</div></div>
 <script>window.onload=()=>window.print();</script></body></html>`;
               const w = window.open("", "_blank", "width=720,height=900");
               if (w) { w.document.write(slipHtml); w.document.close(); }
