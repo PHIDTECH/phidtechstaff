@@ -123,6 +123,7 @@ const ALL_PERMISSIONS = [
   { key: "entertainment_customers",  label: "Entertainment Customers" },
   { key: "movies_customers",         label: "Movies Customers" },
   { key: "admin",                    label: "Admin Panel" },
+  { key: "account_floats",            label: "Account Floats" },
 ];
 
 const GROUP_ALL = ALL_PERMISSIONS.map(p => p.key);
@@ -141,7 +142,7 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
   // Company-level
   admin:            GROUP_ALL,
   manager:          ["dashboard","attendance","leave","payroll","tasks","kpis","expenses","office_expenses","customers","reports","services","commissions","notifications","petty_cash","messages","media_customers","business_customers","licence_customers","entertainment_customers","movies_customers"],
-  accountant:       ["dashboard","accounting","invoices","expenses","office_expenses","payroll","reports","financial_reports","services","commissions","notifications","petty_cash","messages"],
+  accountant:       ["dashboard","accounting","invoices","expenses","office_expenses","payroll","reports","financial_reports","services","commissions","notifications","petty_cash","messages","account_floats"],
   hr:               ["dashboard","users","attendance","leave","payroll","reports","services","notifications","messages"],
   sales:            ["dashboard","sales","customers","invoices","tasks","reports","services","commissions","notifications","messages","media_customers","business_customers","licence_customers","entertainment_customers","movies_customers"],
   it:               ["dashboard","tasks","assets","documents","reports","services","notifications","messages"],

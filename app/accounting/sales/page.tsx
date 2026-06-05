@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ShoppingCart, Plus, Search, DollarSign, CheckCircle, Clock, AlertCircle, Edit, Trash2, Eye, X, BookOpen } from "lucide-react";
+import { ShoppingCart, Plus, Search, DollarSign, CheckCircle, Clock, AlertCircle, Edit, Trash2, Eye, X, BookOpen, Printer } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
@@ -233,6 +233,51 @@ export default function AccountingSalesPage() {
 
   const previewCalc = recalc(form.items, form.paid);
 
+  const printReceipt = (s: Sale) => {
+    const coName = companies.find(c => c.id === s.companyId)?.name ?? s.companyId ?? "";
+    const itemRows = s.items.map(it =>
+      `<tr><td style="padding:5px 8px;border-bottom:1px solid #f3f4f6">${it.description}</td><td style="text-align:center;padding:5px 8px;border-bottom:1px solid #f3f4f6">${it.quantity}</td><td style="text-align:right;padding:5px 8px;border-bottom:1px solid #f3f4f6">${it.unitPrice.toLocaleString()}</td><td style="text-align:right;padding:5px 8px;border-bottom:1px solid #f3f4f6;font-weight:600">${it.total.toLocaleString()}</td></tr>`
+    ).join("");
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt ${s.id}</title>
+<style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:0;padding:20px;max-width:520px}
+.hdr{background:#1e3a8a;color:#fff;padding:16px 20px;border-radius:8px 8px 0 0}
+.hdr h1{margin:0 0 2px;font-size:15px;color:#fff}.hdr p{margin:2px 0;font-size:11px;opacity:.85}
+.body{border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:16px 20px}
+.info{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;font-size:11.5px}
+.lbl{font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:2px}
+ table{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:12px}
+th{background:#f8fafc;padding:6px 8px;text-align:left;font-size:10.5px;color:#6b7280;text-transform:uppercase;letter-spacing:.03em}
+th:nth-child(n+2){text-align:right}th:nth-child(2){text-align:center}
+.total-row{display:flex;justify-content:space-between;padding:3px 0;font-size:11.5px}
+.net{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin:10px 0}
+.net .lbl2{font-weight:700;font-size:13px}.net .val{font-weight:800;font-size:18px;color:#15803d}
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;background:${s.status==='paid'?'#dcfce7':s.status==='partial'?'#fef9c3':'#fee2e2'};color:${s.status==='paid'?'#15803d':s.status==='partial'?'#a16207':'#dc2626'}}
+.footer{text-align:center;font-size:10px;color:#9ca3af;margin-top:14px;border-top:1px solid #f3f4f6;padding-top:10px}
+@media print{@page{margin:10mm}}
+</style></head><body>
+<div class="hdr"><h1>${coName || 'PHIDTECH'}</h1><p>Payment Receipt &nbsp;|&nbsp; ${s.id}</p><p>Date: ${s.date} &nbsp;|&nbsp; Generated: ${new Date().toLocaleDateString()}</p></div>
+<div class="body">
+<div class="info">
+  <div><div class="lbl">Customer</div><strong>${s.customerName}</strong>${s.customerPhone?`<br>${s.customerPhone}`:''}</div>
+  <div style="text-align:right"><div class="lbl">Status</div><span class="badge">${s.status.toUpperCase()}</span></div>
+</div>
+<table><thead><tr><th>Description</th><th style="text-align:center">Qty</th><th>Unit Price (TZS)</th><th>Total (TZS)</th></tr></thead><tbody>${itemRows}</tbody></table>
+<div style="max-width:240px;margin-left:auto">
+  <div class="total-row"><span>Subtotal</span><span>${s.subtotal.toLocaleString()}</span></div>
+  <div class="total-row" style="color:#dc2626"><span>Balance Due</span><span>${s.balance.toLocaleString()}</span></div>
+</div>
+<div class="net"><span class="lbl2">Total Invoice</span><span class="val">TZS ${s.amount.toLocaleString()}</span></div>
+<div style="display:flex;justify-content:space-between;font-size:11.5px;background:#f0fdf4;border-radius:6px;padding:8px 14px">
+  <span style="color:#15803d;font-weight:700">Amount Paid</span><span style="color:#15803d;font-weight:700">TZS ${s.paid.toLocaleString()}</span>
+</div>
+${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.notes}</p>`:''}
+<div class="footer">${coName} &nbsp;|&nbsp; PHIDTECH Management System &nbsp;|&nbsp; Ref: ${s.id}</div>
+</div>
+<script>window.onload=()=>window.print();</script></body></html>`;
+    const w = window.open("", "_blank", "width=620,height=820");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
   return (
     <MainLayout>
       <PageHeader
@@ -312,6 +357,7 @@ export default function AccountingSalesPage() {
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
                       <Button variant="ghost" size="icon" onClick={() => setViewItem(s)}><Eye className="w-4 h-4 text-gray-400" /></Button>
+                      <Button variant="ghost" size="icon" title="Print Receipt" onClick={() => printReceipt(s)}><Printer className="w-4 h-4 text-green-500" /></Button>
                       <Button variant="ghost" size="icon" onClick={() => openEdit(s)}><Edit className="w-4 h-4 text-blue-400" /></Button>
                       <Button variant="ghost" size="icon" onClick={() => setDeleteId(s.id)}><Trash2 className="w-4 h-4 text-red-400" /></Button>
                     </div>
@@ -402,6 +448,7 @@ export default function AccountingSalesPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewItem(null)}>Close</Button>
+            <Button variant="outline" onClick={() => { if (viewItem) printReceipt(viewItem); }}><Printer className="w-4 h-4 mr-2" />Print Receipt</Button>
             <Button onClick={() => { if (viewItem) { openEdit(viewItem); setViewItem(null); } }}><Edit className="w-4 h-4 mr-2" />Edit</Button>
           </DialogFooter>
         </DialogContent>

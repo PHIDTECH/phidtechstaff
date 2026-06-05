@@ -259,15 +259,18 @@ export default function PayrollPage() {
       const nssf_er   = calcNSSF_employer(gross);
       const sdl       = calcSDL(gross);
       const wcf       = calcWCF(gross);
-      // Advance deductions: disbursed advances whose repaymentDate is in this month/year
+      // Advance deductions: disbursed advances whose disbursedAt (or repaymentDate) is in this month/year
       const monthIdx = MONTHS.indexOf(selectedMonth);
       const advanceDeds: Deduction[] = advances
         .filter(a => {
-          if (a.staffId !== emp.id || a.status !== "disbursed" || !a.repaymentDate) return false;
-          const d = new Date(a.repaymentDate + "T00:00:00");
+          if (a.staffId !== emp.id || a.status !== "disbursed") return false;
+          // Prefer disbursedAt, fall back to repaymentDate
+          const dateStr = (a.disbursedAt ?? "").slice(0, 10) || a.repaymentDate || "";
+          if (!dateStr) return false;
+          const d = new Date(dateStr + "T00:00:00");
           return d.getMonth() === monthIdx && d.getFullYear() === selectedYear;
         })
-        .map(a => ({ name: `Advance Recovery — ${a.repaymentDate}`, amount: a.amount }));
+        .map(a => ({ name: `Advance Recovery — ${(a.disbursedAt ?? "").slice(0,10) || a.repaymentDate}`, amount: a.amount }));
       const totalAdvDed = advanceDeds.reduce((s, d) => s + d.amount, 0);
       const totalDed  = paye + nssf_emp + totalAdvDed;
       const net       = gross - totalDed;
@@ -372,11 +375,13 @@ export default function PayrollPage() {
     const editMonthIdx = MONTHS.indexOf(editEntry.month);
     const editAdvanceDeds: Deduction[] = advances
       .filter(a => {
-        if (a.staffId !== editEntry.staffId || a.status !== "disbursed" || !a.repaymentDate) return false;
-        const d = new Date(a.repaymentDate + "T00:00:00");
+        if (a.staffId !== editEntry.staffId || a.status !== "disbursed") return false;
+        const dateStr = (a.disbursedAt ?? "").slice(0, 10) || a.repaymentDate || "";
+        if (!dateStr) return false;
+        const d = new Date(dateStr + "T00:00:00");
         return d.getMonth() === editMonthIdx && d.getFullYear() === editEntry.year;
       })
-      .map(a => ({ name: `Advance Recovery — ${a.repaymentDate}`, amount: a.amount }));
+      .map(a => ({ name: `Advance Recovery — ${(a.disbursedAt ?? "").slice(0,10) || a.repaymentDate}`, amount: a.amount }));
     const editTotalAdvDed = editAdvanceDeds.reduce((s, d) => s + d.amount, 0);
     const net      = gross - paye - nssf_emp - editTotalAdvDed;
     await fetch("/api/payroll", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({

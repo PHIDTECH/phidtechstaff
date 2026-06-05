@@ -25,8 +25,12 @@ export function usePermissionGuard(requiredPermission: string) {
       const sess: Session = JSON.parse(raw);
       if (!sess) { router.replace("/login"); return; }
 
-      // Superadmin bypasses all permission checks
+      // Superadmin and admin-role users bypass all permission checks
       if (sess.isSuperAdmin) return;
+      const sessAny = sess as Record<string,unknown>;
+      const _role = String(sessAny.role ?? "").toLowerCase();
+      const _pos  = String(sessAny.position ?? "").toLowerCase();
+      if (_role === "admin" || _pos === "admin") return;
 
       const perms: string[] = sess.permissions ?? [];
       if (!perms.includes(requiredPermission)) {
