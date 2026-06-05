@@ -74,6 +74,7 @@ export default function DashboardPage() {
   const [payroll, setPayroll]         = useState<PayrollEntry[]>([]);
   const [loanInt, setLoanInt]         = useState<LoanInterest[]>([]);
   const [loans,   setLoans]           = useState<Loan[]>([]);
+  const [dataLoading, setDataLoading]  = useState(true);
 
   const reload = async () => {
     const sess = lsGet<{name:string;isSuperAdmin:boolean;companyId:string|null;role?:string;position?:string;branchId?:string|null}>(SESSION_KEY, null as never);
@@ -107,6 +108,7 @@ export default function DashboardPage() {
         })
         .catch(() => {/* keep cached value shown in step 1 */});
 
+    setDataLoading(true);
     await Promise.all([
       go<Company[]>   ("/api/companies",        setCompanies,  COMPANIES_KEY),
       go<StaffUser[]> ("/api/users",            setStaffUsers, USERS_KEY),
@@ -120,6 +122,7 @@ export default function DashboardPage() {
       go<LoanInterest[]>  ("/api/loan-interest", setLoanInt,    LOANINT_KEY),
       go<Loan[]>          ("/api/loans",          setLoans,      LOANS_KEY),
     ]);
+    setDataLoading(false);
   };
 
   useEffect(() => {
@@ -311,6 +314,11 @@ export default function DashboardPage() {
             </div>
           </div>
           {/* Mini KPI strip */}
+          {dataLoading && (
+            <div className="absolute top-3 right-3 flex items-center gap-1.5 text-[10px] text-blue-200 animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-ping" />Refreshing…
+            </div>
+          )}
           <div className="relative grid grid-cols-3 sm:grid-cols-6 border-t border-white/10">
             {[
               { label: "Subsidiaries",   value: companies.length,              color: "text-blue-200" },

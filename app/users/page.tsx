@@ -239,6 +239,7 @@ export default function UsersPage() {
 
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [dedupMsg, setDedupMsg] = useState("");
 
   // Load users from server API; load companies/depts from localStorage
   const reload = async () => {
@@ -457,9 +458,22 @@ export default function UsersPage() {
         icon={Users}
         actions={
           isGroupManagerUser && (
-            <Button size="sm" onClick={openAdd}>
-              <UserPlus className="w-4 h-4 mr-2" /> Add Employee
-            </Button>
+            <div className="flex items-center gap-2">
+              {sessionData?.isSuperAdmin && (
+                <Button size="sm" variant="outline" className="text-xs" onClick={async () => {
+                  const r = await fetch("/api/users?action=dedup", { method: "PATCH" });
+                  const d = await r.json();
+                  setDedupMsg(d.removed > 0 ? `Removed ${d.removed} duplicate(s).` : "No duplicates found.");
+                  if (d.removed > 0) await reload();
+                  setTimeout(() => setDedupMsg(""), 4000);
+                }}>
+                  Remove Duplicates
+                </Button>
+              )}
+              <Button size="sm" onClick={openAdd}>
+                <UserPlus className="w-4 h-4 mr-2" /> Add Employee
+              </Button>
+            </div>
           )
         }
       />
@@ -470,6 +484,12 @@ export default function UsersPage() {
         <StatCard title="Group HQ Staff" value={groupUsers.length}    icon={Shield}    iconBg="bg-indigo-50" iconColor="text-indigo-600" subtitle="Cross-company roles" />
         <StatCard title="Departments"     value={deptCount}            icon={Building2} iconBg="bg-orange-50" iconColor="text-orange-600" subtitle="Active depts" />
       </div>
+
+      {dedupMsg && (
+        <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-xl text-sm bg-green-50 border border-green-200 text-green-700">
+          <CheckSquare className="w-4 h-4 shrink-0" />{dedupMsg}
+        </div>
+      )}
 
       <Tabs defaultValue="list">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">

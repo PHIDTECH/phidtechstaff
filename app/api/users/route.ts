@@ -35,6 +35,11 @@ export async function POST(req: NextRequest) {
     if (users.find((u) => u.email.toLowerCase() === body.email?.toLowerCase())) {
       return NextResponse.json({ error: "Email already in use." }, { status: 409 });
     }
+    // Check duplicate name within same company
+    const nameLower = (body.name ?? "").trim().toLowerCase();
+    if (nameLower && users.find(u => u.name.trim().toLowerCase() === nameLower && u.companyId === body.companyId)) {
+      return NextResponse.json({ error: "A staff member with this name already exists in this company." }, { status: 409 });
+    }
 
     const newUser: StaffUser = {
       ...body,
@@ -73,6 +78,40 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(safe);
   } catch (err) {
     console.error("PUT /api/users error:", err);
+    return NextResponse.json({ error: "Server error." }, { status: 500 });
+  }
+}
+
+// PATCH /api/users?action=dedup — remove exact-name duplicates, keep the one with non-generic position
+export async function PATCH(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    if (searchParams.get("action") === "dedup") {
+      const users = readDb<StaffUser[]>("users", []);
+      const seen = new Map<string, StaffUser>();
+      const GENERIC = ["general staff", "staff", ""];
+      const keep: StaffUser[] = [];
+      for (const u of users) {
+        const key = u.name.trim().toLowerCase() + "__" + u.companyId;
+        const existing = seen.get(key);
+        if (!existing) {
+          seen.set(key, u); keep.push(u);
+        } else {
+          const existPos = (existing.position ?? "").toLowerCase();
+          const thisPos  = (u.position ?? "").toLowerCase();
+          if (GENERIC.includes(existPos) && !GENERIC.includes(thisPos)) {
+            keep.splice(keep.indexOf(existing), 1, u);
+            seen.set(key, u);
+          }
+        }
+      }
+      const removed = users.length - keep.length;
+      writeDb("users", keep);
+      return NextResponse.json({ removed, total: keep.length });
+    }
+    return NextResponse.json({ error: "Unknown action." }, { status: 400 });
+  } catch (err) {
+    console.error("PATCH /api/users error:", err);
     return NextResponse.json({ error: "Server error." }, { status: 500 });
   }
 }

@@ -211,12 +211,12 @@ export default function AttendancePage() {
   const isBranchManager = !!session && !session.isSuperAdmin && !!session.branchId &&
     (session.role === "branch_manager" || (session.position ?? "").toLowerCase().includes("branch manager"));
 
-  // Dialog: show ALL non-inactive staff — if cid is resolved filter by it, otherwise show everyone so dialog is never empty
+  // Dialog: show ALL active staff only (exclude inactive and resigned)
   const allCompanyStaff = staff.length === 0
     ? []
     : cid
-      ? staff.filter(u => u.companyId === cid && u.status !== "inactive")
-      : staff.filter(u => u.status !== "inactive");
+      ? staff.filter(u => u.companyId === cid && u.status !== "inactive" && u.status !== "resigned")
+      : staff.filter(u => u.status !== "inactive" && u.status !== "resigned");
   // Exclude CEO/admin from both table and dialog
   const trackedStaff = allCompanyStaff.filter(u => {
     const p = (u.position ?? "").toLowerCase();

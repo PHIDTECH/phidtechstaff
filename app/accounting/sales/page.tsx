@@ -73,7 +73,9 @@ export default function AccountingSalesPage() {
   const [selCustomer, setSelCustomer] = useState<Customer | null>(null);
   const [custSearch, setCustSearch]   = useState("");
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]       = useState(true);
+  const [statPeriod, setStatPeriod] = useState<"daily"|"weekly"|"monthly"|"all">("daily");
+  const [statDate, setStatDate]     = useState(new Date().toISOString().slice(0,10));
 
   const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
@@ -158,6 +160,22 @@ export default function AccountingSalesPage() {
   const totalPaid = coSales.reduce((s,e) => s + e.paid, 0);
   const dailyRev  = coSales.filter(s => s.date === today).reduce((s,e) => s + e.amount, 0);
   const monthRev  = coSales.filter(s => s.date.startsWith(thisMonth)).reduce((s,e) => s + e.amount, 0);
+
+  const getWeekStart = (d: string) => {
+    const dt = new Date(d); dt.setDate(dt.getDate() - dt.getDay() + 1); return dt.toISOString().slice(0,10);
+  };
+  const getWeekEnd = (d: string) => {
+    const dt = new Date(d); dt.setDate(dt.getDate() - dt.getDay() + 7); return dt.toISOString().slice(0,10);
+  };
+  const periodSales = coSales.filter(s => {
+    if (statPeriod === "daily")   return s.date === statDate;
+    if (statPeriod === "weekly")  return s.date >= getWeekStart(statDate) && s.date <= getWeekEnd(statDate);
+    if (statPeriod === "monthly") return s.date.startsWith(statDate.slice(0,7));
+    return true;
+  });
+  const periodRev  = periodSales.reduce((s,e) => s + e.amount, 0);
+  const periodPaid = periodSales.reduce((s,e) => s + e.paid, 0);
+  const periodOut  = periodRev - periodPaid;
 
   const save = async (list: Sale[]) => {
     setSales(list);
@@ -289,11 +307,32 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
         }
       />
 
+      {/* Period filter */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {(["daily","weekly","monthly","all"] as const).map(p => (
+          <button key={p} onClick={() => setStatPeriod(p)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+              statPeriod === p ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+            }`}>
+            {p === "daily" ? "Daily" : p === "weekly" ? "Weekly" : p === "monthly" ? "Monthly" : "All Time"}
+          </button>
+        ))}
+        {statPeriod !== "all" && (
+          <input type={statPeriod === "monthly" ? "month" : "date"}
+            value={statPeriod === "monthly" ? statDate.slice(0,7) : statDate}
+            onChange={e => setStatDate(statPeriod === "monthly" ? e.target.value + "-01" : e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+        )}
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Today&apos;s Revenue" value={formatCurrency(dailyRev)}   icon={DollarSign}   iconBg="bg-blue-50"   iconColor="text-blue-600" />
-        <StatCard title="Monthly Revenue"  value={formatCurrency(monthRev)}   icon={CheckCircle}  iconBg="bg-green-50"  iconColor="text-green-600"  subtitle="This month" />
-        <StatCard title="Total Revenue"    value={formatCurrency(totalRev)}   icon={ShoppingCart} iconBg="bg-purple-50" iconColor="text-purple-600" />
-        <StatCard title="Outstanding"      value={formatCurrency(totalRev - totalPaid)} icon={Clock} iconBg="bg-red-50"    iconColor="text-red-500"    subtitle="Unpaid" />
+        <StatCard title="Revenue" value={formatCurrency(periodRev)} icon={DollarSign} iconBg="bg-blue-50" iconColor="text-blue-600"
+          subtitle={statPeriod === "daily" ? statDate : statPeriod === "weekly" ? `${getWeekStart(statDate)} – ${getWeekEnd(statDate)}` : statPeriod === "monthly" ? statDate.slice(0,7) : "All time"} />
+        <StatCard title="Amount Paid" value={formatCurrency(periodPaid)} icon={CheckCircle} iconBg="bg-green-50" iconColor="text-green-600"
+          subtitle={`${periodSales.filter(s=>s.status==="paid").length} fully paid`} />
+        <StatCard title="Outstanding" value={formatCurrency(periodOut)} icon={Clock} iconBg="bg-red-50" iconColor="text-red-500"
+          subtitle={`${periodSales.filter(s=>s.status!=="paid").length} pending`} />
+        <StatCard title="Total Revenue" value={formatCurrency(totalRev)} icon={ShoppingCart} iconBg="bg-purple-50" iconColor="text-purple-600" subtitle="All time" />
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
