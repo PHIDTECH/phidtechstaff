@@ -227,7 +227,7 @@ export default function PayrollPage() {
 
   // Always show latest disbursed advances as deductions (even if payroll was run before disbursal)
   const getMergedDeductions = (entry: PayrollEntry): Deduction[] => {
-    const statutory = entry.deductions.filter(d => !d.name.toLowerCase().includes("advance recovery"));
+    const statutory = entry.deductions.filter(d => !d.name.toLowerCase().startsWith("advance recovery —"));
     const monthIdx = MONTHS.indexOf(entry.month);
     const advDeds: Deduction[] = advances
       .filter(a => {
@@ -249,7 +249,7 @@ export default function PayrollPage() {
   const totalNet = companyEntries.reduce((s, p) => s + getMergedNetPay(p), 0);
   const totalDeductions = totalGross - totalNet;
   const totalAdvDeductions = companyEntries.reduce((s, p) => {
-    const advAmt = getMergedDeductions(p).filter(d => d.name.toLowerCase().includes("advance recovery")).reduce((x, d) => x + d.amount, 0);
+    const advAmt = getMergedDeductions(p).filter(d => d.name.toLowerCase().startsWith("advance recovery —")).reduce((x, d) => x + d.amount, 0);
     return s + advAmt;
   }, 0);
   const paidCount = companyEntries.filter(p => p.status === "paid").length;
@@ -384,7 +384,7 @@ export default function PayrollPage() {
     const manualDeds = entry.deductions
       .filter(d => !d.name.toLowerCase().startsWith("paye") &&
                    !d.name.toLowerCase().startsWith("nssf") &&
-                   !d.name.toLowerCase().includes("advance recovery"));
+                   !d.name.toLowerCase().startsWith("advance recovery —"));
     setEditForm({
       basicSalary: String(entry.basicSalary),
       allowances: entry.allowances.map(a => ({ ...a })),
@@ -1007,8 +1007,8 @@ export default function PayrollPage() {
                     const displayName = emp?.name ?? payroll.employeeName ?? "Unknown";
                     const totalAllowances = payroll.allowances.reduce((s, a) => s + a.amount, 0);
                     const mergedDeds = getMergedDeductions(payroll);
-                    const statutoryDeds = mergedDeds.filter(d => !d.name.toLowerCase().includes("advance recovery"));
-                    const advDeds = mergedDeds.filter(d => d.name.toLowerCase().includes("advance recovery"));
+                    const statutoryDeds = mergedDeds.filter(d => !d.name.toLowerCase().startsWith("advance recovery —"));
+                    const advDeds = mergedDeds.filter(d => d.name.toLowerCase().startsWith("advance recovery —"));
                     const statutoryAmt = statutoryDeds.reduce((s, d) => s + d.amount, 0);
                     const advAmt = advDeds.reduce((s, d) => s + d.amount, 0);
                     const mergedNet = getMergedNetPay(payroll);
