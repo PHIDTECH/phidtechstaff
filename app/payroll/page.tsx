@@ -122,7 +122,7 @@ export default function PayrollPage() {
   const [runConfirm, setRunConfirm] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [editEntry, setEditEntry] = useState<PayrollEntry | null>(null);
-  const [editForm, setEditForm] = useState<{ basicSalary: string; allowances: Allowance[] } | null>(null);
+  const [editForm, setEditForm] = useState<{ basicSalary: string; allowances: Allowance[]; manualDeductions: Deduction[] } | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [groupCompanyId, setGroupCompanyId] = useState("");
   const [dataLoading, setDataLoading] = useState(true);
@@ -381,9 +381,14 @@ export default function PayrollPage() {
 
   const openEditEntry = (entry: PayrollEntry) => {
     setEditEntry(entry);
+    const manualDeds = entry.deductions
+      .filter(d => !d.name.toLowerCase().startsWith("paye") &&
+                   !d.name.toLowerCase().startsWith("nssf") &&
+                   !d.name.toLowerCase().includes("advance recovery"));
     setEditForm({
       basicSalary: String(entry.basicSalary),
       allowances: entry.allowances.map(a => ({ ...a })),
+      manualDeductions: manualDeds.map(d => ({ ...d })),
     });
   };
 
@@ -391,14 +396,15 @@ export default function PayrollPage() {
     if (!editEntry || !editForm) return;
     const basic = Number(editForm.basicSalary) || 0;
     const alws = editForm.allowances.filter(a => a.name.trim() && a.amount > 0);
+    const manualDeds = (editForm.manualDeductions ?? []).filter(d => d.name.trim() && d.amount > 0);
     const totalAlw = alws.reduce((s, a) => s + a.amount, 0);
+    const totalManual = manualDeds.reduce((s, d) => s + d.amount, 0);
     const gross = basic + totalAlw;
     const paye     = calcPAYE(gross);
     const nssf_emp = calcNSSF_employee(gross);
     const nssf_er  = calcNSSF_employer(gross);
     const sdl      = calcSDL(gross);
     const wcf      = calcWCF(gross);
-    // Re-include advance deductions for this staff/month/year
     const editMonthIdx = MONTHS.indexOf(editEntry.month);
     const editAdvanceDeds: Deduction[] = advances
       .filter(a => {
@@ -410,7 +416,7 @@ export default function PayrollPage() {
       })
       .map(a => ({ name: `Advance Recovery — ${(a.disbursedAt ?? "").slice(0,10) || a.repaymentDate}`, amount: a.amount }));
     const editTotalAdvDed = editAdvanceDeds.reduce((s, d) => s + d.amount, 0);
-    const net      = gross - paye - nssf_emp - editTotalAdvDed;
+    const net = gross - paye - nssf_emp - totalManual - editTotalAdvDed;
     await fetch("/api/payroll", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
       id: editEntry.id,
       basicSalary: basic,
@@ -418,6 +424,7 @@ export default function PayrollPage() {
       deductions: [
         { name: "PAYE", amount: paye },
         { name: "NSSF (Employee 10%)", amount: nssf_emp },
+        ...manualDeds,
         ...editAdvanceDeds,
       ],
       employerCosts: [
@@ -1480,12 +1487,52 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
                   )}
                 </div>
 
+                {/* Manual Deductions */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">Extra Deductions</p>
+                    <Button size="sm" variant="outline" type="button"
+                      onClick={() => setEditForm(f => f ? { ...f, manualDeductions: [...(f.manualDeductions ?? []), { name: "", amount: 0 }] } : f)}>
+                      <Plus className="w-3.5 h-3.5 mr-1" /> Add
+                    </Button>
+                  </div>
+                  {(editForm.manualDeductions ?? []).length === 0 ? (
+                    <p className="text-xs text-gray-400 italic">No extra deductions.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {(editForm.manualDeductions ?? []).map((ded, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <Input
+                            placeholder="Name (e.g. Loan Recovery)"
+                            value={ded.name}
+                            onChange={e => setEditForm(f => f ? { ...f, manualDeductions: (f.manualDeductions ?? []).map((d, i) => i === idx ? { ...d, name: e.target.value } : d) } : f)}
+                            className="flex-1"
+                          />
+                          <Input
+                            type="number"
+                            placeholder="Amount"
+                            value={ded.amount || ""}
+                            onChange={e => setEditForm(f => f ? { ...f, manualDeductions: (f.manualDeductions ?? []).map((d, i) => i === idx ? { ...d, amount: Number(e.target.value) } : d) } : f)}
+                            className="w-32"
+                          />
+                          <button type="button"
+                            onClick={() => setEditForm(f => f ? { ...f, manualDeductions: (f.manualDeductions ?? []).filter((_, i) => i !== idx) } : f)}
+                            className="p-1.5 hover:bg-red-50 rounded-lg text-red-400">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* Live preview */}
                 {(() => {
                   const nssfEmp = calcNSSF_employee(previewGross);
                   const taxable = previewGross - nssfEmp;
                   const paye = calcPAYE(previewGross);
-                  const net = previewGross - nssfEmp - paye;
+                  const previewManualTotal = (editForm.manualDeductions ?? []).filter(d => d.name.trim() && d.amount > 0).reduce((s, d) => s + d.amount, 0);
+                  const net = previewGross - nssfEmp - paye - previewManualTotal;
                   return (
                   <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-sm space-y-1">
                     <div className="flex justify-between text-gray-600">
@@ -1504,6 +1551,12 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
                       <span>PAYE (on taxable income)</span>
                       <span className="text-red-500">-{formatCurrency(paye)}</span>
                     </div>
+                    {previewManualTotal > 0 && (
+                      <div className="flex justify-between text-orange-600">
+                        <span>Extra Deductions</span>
+                        <span>-{formatCurrency(previewManualTotal)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between font-bold border-t border-gray-200 pt-1 mt-1">
                       <span>Net Pay</span>
                       <span className="text-green-700">{formatCurrency(net)}</span>
