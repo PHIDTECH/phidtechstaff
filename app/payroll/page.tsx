@@ -53,6 +53,7 @@ interface StoredCommission {
 interface EmployerCost { name: string; amount: number; }
 interface PayrollEntry {
   id: string; staffId: string; companyId: string;
+  employeeName?: string;
   month: string; year: number;
   basicSalary: number; allowances: Allowance[]; deductions: Deduction[];
   employerCosts?: EmployerCost[];
@@ -219,13 +220,18 @@ export default function PayrollPage() {
     ? advances.filter(a => a.staffId === session?.id)
     : advances.filter(a => !activeCompanyId || a.companyId === activeCompanyId);
   const filtered = companyEntries.filter(p => {
-    const emp = staffList.find(u => u.id === p.staffId);
-    return emp?.name.toLowerCase().includes(search.toLowerCase()) ?? false;
+    const emp = allStaffList.find(u => u.id === p.staffId);
+    const name = emp?.name ?? p.employeeName ?? "";
+    return name.toLowerCase().includes(search.toLowerCase());
   });
 
   const totalGross = companyEntries.reduce((s, p) => s + p.grossSalary, 0);
-  const totalNet = companyEntries.reduce((s, p) => s + p.netSalary, 0);
+  const totalNet = companyEntries.reduce((s, p) => s + getMergedNetPay(p), 0);
   const totalDeductions = totalGross - totalNet;
+  const totalAdvDeductions = companyEntries.reduce((s, p) => {
+    const advAmt = getMergedDeductions(p).filter(d => d.name.toLowerCase().includes("advance recovery")).reduce((x, d) => x + d.amount, 0);
+    return s + advAmt;
+  }, 0);
   const paidCount = companyEntries.filter(p => p.status === "paid").length;
 
   const alreadyRun = companyEntries.length > 0;
@@ -277,6 +283,7 @@ export default function PayrollPage() {
       return {
         id: `pr-${emp.id}-${monthKey}-${Date.now()}`,
         staffId: emp.id, companyId: activeCompanyId,
+        employeeName: emp.name,
         month: selectedMonth, year: selectedYear,
         basicSalary: basic,
         allowances: combinedAllowances,
@@ -980,7 +987,8 @@ export default function PayrollPage() {
                     <TableHead>Basic Salary</TableHead>
                     <TableHead>Allowances</TableHead>
                     <TableHead>Gross Salary</TableHead>
-                    <TableHead>Deductions</TableHead>
+                    <TableHead>PAYE/NSSF</TableHead>
+                    <TableHead className="text-orange-600">Adv. Deduction</TableHead>
                     <TableHead>Net Salary</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -989,8 +997,14 @@ export default function PayrollPage() {
                 <TableBody>
                   {filtered.map((payroll) => {
                     const emp = allStaffList.find(u => u.id === payroll.staffId);
+                    const displayName = emp?.name ?? payroll.employeeName ?? "Unknown";
                     const totalAllowances = payroll.allowances.reduce((s, a) => s + a.amount, 0);
-                    const totalDeducAmt = payroll.deductions.reduce((s, d) => s + d.amount, 0);
+                    const mergedDeds = getMergedDeductions(payroll);
+                    const statutoryDeds = mergedDeds.filter(d => !d.name.toLowerCase().includes("advance recovery"));
+                    const advDeds = mergedDeds.filter(d => d.name.toLowerCase().includes("advance recovery"));
+                    const statutoryAmt = statutoryDeds.reduce((s, d) => s + d.amount, 0);
+                    const advAmt = advDeds.reduce((s, d) => s + d.amount, 0);
+                    const mergedNet = getMergedNetPay(payroll);
                     return (
                       <TableRow key={payroll.id}>
                         <TableCell className="">
@@ -999,7 +1013,7 @@ export default function PayrollPage() {
                               <AvatarFallback className="text-xs">{getInitials(emp?.name ?? "?")}</AvatarFallback>
                             </Avatar>
                             <div>
-                              <p className="font-medium text-gray-900 text-sm">{emp?.name ?? "Unknown"}</p>
+                              <p className="font-medium text-gray-900 text-sm">{displayName}</p>
                               <p className="text-xs text-gray-400">{emp?.position}</p>
                             </div>
                           </div>
@@ -1012,8 +1026,11 @@ export default function PayrollPage() {
                         <TableCell className="font-medium text-gray-800">{formatCurrency(payroll.basicSalary)}</TableCell>
                         <TableCell className="text-green-700 font-medium">+{formatCurrency(totalAllowances)}</TableCell>
                         <TableCell className="font-semibold text-gray-900">{formatCurrency(payroll.grossSalary)}</TableCell>
-                        <TableCell className="text-red-600 font-medium">-{formatCurrency(totalDeducAmt)}</TableCell>
-                        <TableCell className="font-bold text-blue-700">{formatCurrency(payroll.netSalary)}</TableCell>
+                        <TableCell className="text-red-600 font-medium">-{formatCurrency(statutoryAmt)}</TableCell>
+                        <TableCell className={advAmt > 0 ? "text-orange-600 font-semibold" : "text-gray-400 text-sm"}>
+                          {advAmt > 0 ? `-${formatCurrency(advAmt)}` : "—"}
+                        </TableCell>
+                        <TableCell className="font-bold text-blue-700">{formatCurrency(mergedNet)}</TableCell>
                         <TableCell>
                           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
                             payroll.status === "paid" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
@@ -1050,7 +1067,8 @@ export default function PayrollPage() {
                 <span className="text-sm font-semibold text-gray-700">Totals ({companyEntries.length} employees)</span>
                 <div className="flex items-center gap-6 text-sm">
                   <span className="text-gray-600">Gross: <strong className="text-gray-900">{formatCurrency(totalGross)}</strong></span>
-                  <span className="text-gray-600">Deductions: <strong className="text-red-600">-{formatCurrency(totalDeductions)}</strong></span>
+                  <span className="text-gray-600">PAYE/NSSF: <strong className="text-red-600">-{formatCurrency(totalDeductions - totalAdvDeductions)}</strong></span>
+                  {totalAdvDeductions > 0 && <span className="text-gray-600">Adv. Ded.: <strong className="text-orange-600">-{formatCurrency(totalAdvDeductions)}</strong></span>}
                   <span className="text-gray-600">Net: <strong className="text-blue-700">{formatCurrency(totalNet)}</strong></span>
                 </div>
               </div>

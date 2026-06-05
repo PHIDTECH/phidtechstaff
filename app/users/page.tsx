@@ -240,6 +240,10 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [dedupMsg, setDedupMsg] = useState("");
+  const [resetPwUser, setResetPwUser] = useState<StaffUser | null>(null);
+  const [resetPwVal, setResetPwVal] = useState("");
+  const [resetPwMsg, setResetPwMsg] = useState("");
+  const [resetPwSaving, setResetPwSaving] = useState(false);
 
   // Load users from server API; load companies/depts from localStorage
   const reload = async () => {
@@ -613,10 +617,15 @@ export default function UsersPage() {
                           </Button>
                           {canEditUser && (
                             <>
-                              <Button variant="ghost" size="icon" onClick={() => openEdit(user)}>
+                              <Button variant="ghost" size="icon" title="Edit user" onClick={() => openEdit(user)}>
                                 <Edit className="w-4 h-4 text-blue-400" />
                               </Button>
-                              <Button variant="ghost" size="icon" onClick={() => setDeleteId(user.id)}>
+                              {sessionData?.isSuperAdmin && (
+                                <Button variant="ghost" size="icon" title="Reset Password" onClick={() => { setResetPwUser(user); setResetPwVal(""); setResetPwMsg(""); }}>
+                                  <Lock className="w-4 h-4 text-orange-400" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="icon" title="Delete user" onClick={() => setDeleteId(user.id)}>
                                 <Trash2 className="w-4 h-4 text-red-400" />
                               </Button>
                             </>
@@ -1048,6 +1057,35 @@ export default function UsersPage() {
           </DialogContent>
         </Dialog>
       ))}
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resetPwUser} onOpenChange={open => { if (!open) setResetPwUser(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Reset Password — {resetPwUser?.name}</DialogTitle></DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-gray-500">Set a new password for <strong>{resetPwUser?.name}</strong><br/><span className="text-xs text-gray-400">{resetPwUser?.email}</span></p>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input className="pl-9" type="password" placeholder="New password (min. 6 chars)" value={resetPwVal} onChange={e => setResetPwVal(e.target.value)} />
+            </div>
+            {resetPwMsg && <p className="text-xs font-medium text-green-600">{resetPwMsg}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetPwUser(null)}>Cancel</Button>
+            <Button disabled={resetPwSaving || resetPwVal.length < 6} onClick={async () => {
+              if (!resetPwUser || resetPwVal.length < 6) return;
+              setResetPwSaving(true);
+              try {
+                const r = await fetch("/api/users", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: resetPwUser.id, password: resetPwVal }) });
+                if (r.ok) { setResetPwMsg("Password reset successfully!"); setTimeout(() => { setResetPwUser(null); setResetPwMsg(""); }, 1500); }
+                else { setResetPwMsg("Failed — try again."); }
+              } catch { setResetPwMsg("Network error."); }
+              finally { setResetPwSaving(false); }
+            }}>
+              {resetPwSaving ? "Saving..." : "Save New Password"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteId} onOpenChange={open => { if (!open) setDeleteId(null); }}>
         <DialogContent className="max-w-sm">
