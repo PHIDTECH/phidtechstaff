@@ -19,10 +19,13 @@ export interface AccountFloat {
 export interface FloatUpdate {
   id: string;
   date: string;           // YYYY-MM-DD
-  balance: number;
+  type: "credit" | "debit";
+  amount: number;         // transaction amount (positive)
+  balance: number;        // balance after transaction
   description: string;
   updatedBy: string;
   createdAt: string;
+  reference?: string;     // e.g. expense ID, payroll month
 }
 
 export async function GET() {
@@ -33,26 +36,55 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    if (!body.companyId) return NextResponse.json({ error: "companyId required." }, { status: 400 });
-    if (!body.provider)  return NextResponse.json({ error: "provider required." },  { status: 400 });
+    const isModifyAction = body._action === "update_balance" || body._action === "deduct";
+    if (!isModifyAction && !body.companyId) return NextResponse.json({ error: "companyId required." }, { status: 400 });
+    if (!isModifyAction && !body.provider)  return NextResponse.json({ error: "provider required." },  { status: 400 });
 
     const floats = readDb<AccountFloat[]>("account_floats", []);
     const now = new Date().toISOString();
 
     if (body._action === "update_balance") {
-      // Add a balance update entry to an existing float
       const idx = floats.findIndex(f => f.id === body.id);
       if (idx === -1) return NextResponse.json({ error: "Float not found." }, { status: 404 });
+      const prev = floats[idx].currentBalance;
+      const next = Number(body.balance);
       const upd: FloatUpdate = {
         id: `fupd_${Date.now()}`,
         date: body.date ?? now.slice(0, 10),
-        balance: Number(body.balance),
+        type: next >= prev ? "credit" : "debit",
+        amount: Math.abs(next - prev),
+        balance: next,
         description: body.description ?? "",
         updatedBy: body.updatedBy ?? "",
         createdAt: now,
       };
       floats[idx].history = [upd, ...(floats[idx].history ?? [])];
       floats[idx].currentBalance = upd.balance;
+      floats[idx].lastUpdatedAt  = now;
+      floats[idx].updatedBy      = upd.updatedBy;
+      writeDb("account_floats", floats);
+      return NextResponse.json(floats[idx]);
+    }
+
+    if (body._action === "deduct") {
+      // Auto-deduct: subtract amount from currentBalance, record debit transaction
+      const idx = floats.findIndex(f => f.id === body.id);
+      if (idx === -1) return NextResponse.json({ error: "Float not found." }, { status: 404 });
+      const deductAmt = Number(body.amount) || 0;
+      const newBalance = floats[idx].currentBalance - deductAmt;
+      const upd: FloatUpdate = {
+        id: `fupd_${Date.now()}`,
+        date: body.date ?? now.slice(0, 10),
+        type: "debit",
+        amount: deductAmt,
+        balance: newBalance,
+        description: body.description ?? "",
+        updatedBy: body.updatedBy ?? "",
+        createdAt: now,
+        reference: body.reference ?? "",
+      };
+      floats[idx].history = [upd, ...(floats[idx].history ?? [])];
+      floats[idx].currentBalance = newBalance;
       floats[idx].lastUpdatedAt  = now;
       floats[idx].updatedBy      = upd.updatedBy;
       writeDb("account_floats", floats);
@@ -71,9 +103,11 @@ export async function POST(req: NextRequest) {
       lastUpdatedAt: now,
       updatedBy: body.updatedBy ?? "",
       createdAt: now,
-      history: body.currentBalance > 0 ? [{
+      history: Number(body.currentBalance) > 0 ? [{
         id: `fupd_${Date.now()}`,
         date: now.slice(0, 10),
+        type: "credit" as const,
+        amount: Number(body.currentBalance),
         balance: Number(body.currentBalance),
         description: "Opening balance",
         updatedBy: body.updatedBy ?? "",

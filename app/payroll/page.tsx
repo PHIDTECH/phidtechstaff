@@ -126,6 +126,13 @@ export default function PayrollPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [groupCompanyId, setGroupCompanyId] = useState("");
   const [dataLoading, setDataLoading] = useState(true);
+  const [floats, setFloats] = useState<{id:string;companyId:string;provider:string;accountName:string;currentBalance:number}[]>([]);
+  const [payFloatDialog, setPayFloatDialog] = useState<{entry: PayrollEntry|null; all: boolean}>({entry:null,all:false});
+  const [payFloatId, setPayFloatId] = useState("");
+  const [payFloatLoading, setPayFloatLoading] = useState(false);
+  const [advDisburseTarget, setAdvDisburseTarget] = useState<SalaryAdvance|null>(null);
+  const [advDisburseFloatId, setAdvDisburseFloatId] = useState("");
+  const [advDisburseLoading, setAdvDisburseLoading] = useState(false);
 
   const GENERAL_ROLES_PAYROLL = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal","group_accountant"];
 
@@ -155,6 +162,10 @@ export default function PayrollPage() {
       } else { allStaff = lsGet<StaffUser[]>(USERS_KEY, []); }
     } catch { allStaff = lsGet<StaffUser[]>(USERS_KEY, []); }
     setAllStaffList(allStaff);
+    try {
+      const rf = await fetch("/api/account-floats", { cache: "no-store" });
+      if (rf.ok) setFloats(await rf.json());
+    } catch {}
     // cid === "" means Group HQ / all-companies view — do NOT default to "group"
     setActiveCompanyId(cid);
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_PAYROLL.includes(sess.position ?? sess.role ?? "");
@@ -342,6 +353,80 @@ export default function PayrollPage() {
       await fetch("/api/payroll", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: p.id, status: "paid" }) });
     }
     await fetchPayroll();
+  };
+
+  const openPayWithFloat = (entry: PayrollEntry | null, all: boolean) => {
+    const coCid = entry?.companyId ?? activeCompanyId;
+    const avail = floats.filter(f => !coCid || f.companyId === coCid || f.companyId === "group");
+    setPayFloatId(avail[0]?.id ?? "");
+    setPayFloatDialog({ entry, all });
+  };
+
+  const confirmPayWithFloat = async () => {
+    setPayFloatLoading(true);
+    const { entry, all } = payFloatDialog;
+    try {
+      if (all) {
+        await markAllPaid();
+        if (payFloatId && payFloatId !== "none") {
+          const totalNet = payrollEntries
+            .filter(p => p.companyId === activeCompanyId && p.month === selectedMonth && p.year === selectedYear && p.status !== "paid")
+            .reduce((s, p) => s + getMergedNetPay(p), 0);
+          await fetch("/api/account-floats", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ _action: "deduct", id: payFloatId, amount: totalNet,
+              description: `Payroll ${selectedMonth} ${selectedYear} — All Staff`, updatedBy: session?.name ?? "",
+              reference: `payroll-${selectedMonth}-${selectedYear}`, date: new Date().toISOString().slice(0,10) }),
+          });
+        }
+      } else if (entry) {
+        await markPaid(entry.id);
+        if (payFloatId && payFloatId !== "none") {
+          const net = getMergedNetPay(entry);
+          const emp = allStaffList.find(u => u.id === entry.staffId);
+          await fetch("/api/account-floats", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ _action: "deduct", id: payFloatId, amount: net,
+              description: `Salary: ${emp?.name ?? entry.staffId} — ${entry.month} ${entry.year}`, updatedBy: session?.name ?? "",
+              reference: entry.id, date: new Date().toISOString().slice(0,10) }),
+          });
+        }
+      }
+      const rf = await fetch("/api/account-floats", { cache: "no-store" });
+      if (rf.ok) setFloats(await rf.json());
+    } finally {
+      setPayFloatLoading(false);
+      setPayFloatDialog({entry:null,all:false});
+    }
+  };
+
+  const openAdvDisburse = (adv: SalaryAdvance) => {
+    const coCid = adv.companyId ?? activeCompanyId;
+    const avail = floats.filter(f => !coCid || f.companyId === coCid || f.companyId === "group");
+    setAdvDisburseFloatId(avail[0]?.id ?? "");
+    setAdvDisburseTarget(adv);
+  };
+
+  const confirmAdvDisburse = async () => {
+    if (!advDisburseTarget) return;
+    setAdvDisburseLoading(true);
+    try {
+      await updateAdvStatus(advDisburseTarget.id, "disbursed");
+      if (advDisburseFloatId && advDisburseFloatId !== "none") {
+        const emp = allStaffList.find(u => u.id === advDisburseTarget.staffId);
+        await fetch("/api/account-floats", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ _action: "deduct", id: advDisburseFloatId, amount: advDisburseTarget.amount,
+            description: `Salary Advance: ${emp?.name ?? advDisburseTarget.staffId}`, updatedBy: session?.name ?? "",
+            reference: advDisburseTarget.id, date: new Date().toISOString().slice(0,10) }),
+        });
+        const rf = await fetch("/api/account-floats", { cache: "no-store" });
+        if (rf.ok) setFloats(await rf.json());
+      }
+    } finally {
+      setAdvDisburseLoading(false);
+      setAdvDisburseTarget(null);
+    }
   };
 
   const saveAdvance = (staffIdOverride?: string) => {
@@ -981,7 +1066,7 @@ export default function PayrollPage() {
                   </span>
                 </div>
                 {paidCount < companyEntries.length && (
-                  <Button size="sm" variant="outline" onClick={markAllPaid} className="text-green-700 border-green-200 hover:bg-green-50">
+                  <Button size="sm" variant="outline" onClick={() => openPayWithFloat(null, true)} className="text-green-700 border-green-200 hover:bg-green-50">
                     <CheckCircle className="w-4 h-4 mr-1.5" /> Mark All Paid
                   </Button>
                 )}
@@ -994,8 +1079,7 @@ export default function PayrollPage() {
                     <TableHead>Basic Salary</TableHead>
                     <TableHead>Allowances</TableHead>
                     <TableHead>Gross Salary</TableHead>
-                    <TableHead>PAYE/NSSF</TableHead>
-                    <TableHead className="text-orange-600">Adv. Deduction</TableHead>
+                    <TableHead className="text-red-600">Deduction</TableHead>
                     <TableHead>Net Salary</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -1033,9 +1117,12 @@ export default function PayrollPage() {
                         <TableCell className="font-medium text-gray-800">{formatCurrency(payroll.basicSalary)}</TableCell>
                         <TableCell className="text-green-700 font-medium">+{formatCurrency(totalAllowances)}</TableCell>
                         <TableCell className="font-semibold text-gray-900">{formatCurrency(payroll.grossSalary)}</TableCell>
-                        <TableCell className="text-red-600 font-medium">-{formatCurrency(statutoryAmt)}</TableCell>
-                        <TableCell className={advAmt > 0 ? "text-orange-600 font-semibold" : "text-gray-400 text-sm"}>
-                          {advAmt > 0 ? `-${formatCurrency(advAmt)}` : "—"}
+                        <TableCell className="text-red-600 font-semibold">
+                          <div className="flex flex-col gap-0.5">
+                            <span>-{formatCurrency(statutoryAmt)}</span>
+                            {advAmt > 0 && <span className="text-orange-600 text-xs">+Adv: -{formatCurrency(advAmt)}</span>}
+                            {mergedDeds.filter(d => !d.name.toLowerCase().startsWith('paye') && !d.name.toLowerCase().startsWith('nssf') && !d.name.toLowerCase().startsWith('advance recovery')).reduce((s,d)=>s+d.amount,0) > 0 && <span className="text-purple-600 text-xs">+Other: -{formatCurrency(mergedDeds.filter(d => !d.name.toLowerCase().startsWith('paye') && !d.name.toLowerCase().startsWith('nssf') && !d.name.toLowerCase().startsWith('advance recovery')).reduce((s,d)=>s+d.amount,0))}</span>}
+                          </div>
                         </TableCell>
                         <TableCell className="font-bold text-blue-700">{formatCurrency(mergedNet)}</TableCell>
                         <TableCell>
@@ -1049,7 +1136,7 @@ export default function PayrollPage() {
                               <Eye className="w-4 h-4 text-gray-400" />
                             </Button>
                             {payroll.status === "draft" && (
-                              <Button variant="ghost" size="sm" className="text-green-600 text-xs h-7 px-2" onClick={() => markPaid(payroll.id)}>
+                              <Button variant="ghost" size="sm" className="text-green-600 text-xs h-7 px-2" onClick={() => openPayWithFloat(payroll, false)}>
                                 Pay
                               </Button>
                             )}
@@ -1074,8 +1161,7 @@ export default function PayrollPage() {
                 <span className="text-sm font-semibold text-gray-700">Totals ({companyEntries.length} employees)</span>
                 <div className="flex items-center gap-6 text-sm">
                   <span className="text-gray-600">Gross: <strong className="text-gray-900">{formatCurrency(totalGross)}</strong></span>
-                  <span className="text-gray-600">PAYE/NSSF: <strong className="text-red-600">-{formatCurrency(totalDeductions - totalAdvDeductions)}</strong></span>
-                  {totalAdvDeductions > 0 && <span className="text-gray-600">Adv. Ded.: <strong className="text-orange-600">-{formatCurrency(totalAdvDeductions)}</strong></span>}
+                  <span className="text-gray-600">Deductions: <strong className="text-red-600">-{formatCurrency(totalDeductions)}</strong></span>
                   <span className="text-gray-600">Net: <strong className="text-blue-700">{formatCurrency(totalNet)}</strong></span>
                 </div>
               </div>
@@ -1158,13 +1244,13 @@ export default function PayrollPage() {
                             {adv.status === "manager_approved" && isCEO && (
                               <>
                                 <Button variant="ghost" size="sm" className="text-indigo-600 text-xs" onClick={() => updateAdvStatus(adv.id, "ceo_approved")}>✓ Approve</Button>
-                                <Button variant="ghost" size="sm" className="text-green-700 text-xs"  onClick={() => updateAdvStatus(adv.id, "disbursed")}>💵 Disburse</Button>
+                                <Button variant="ghost" size="sm" className="text-green-700 text-xs"  onClick={() => openAdvDisburse(adv)}>💵 Disburse</Button>
                                 <Button variant="ghost" size="sm" className="text-red-500 text-xs"    onClick={() => updateAdvStatus(adv.id, "rejected")}>✗ Reject</Button>
                               </>
                             )}
                             {/* Stage 3: Accountant or CEO disburses CEO-approved (also handles legacy 'approved') */}
                             {((adv.status as string) === "ceo_approved" || (adv.status as string) === "approved") && (isAccountant || isCEO) && (
-                              <Button variant="ghost" size="sm" className="text-green-700 text-xs" onClick={() => updateAdvStatus(adv.id, "disbursed")}>💵 Disburse</Button>
+                              <Button variant="ghost" size="sm" className="text-green-700 text-xs" onClick={() => openAdvDisburse(adv)}>💵 Disburse</Button>
                             )}
                             {isCEO && (
                               <Button variant="ghost" size="sm" className="text-gray-400 hover:text-red-600 text-xs px-1" onClick={() => deleteAdvance(adv.id)}>
@@ -1612,6 +1698,81 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
             <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>Cancel</Button>
             <Button variant="destructive" onClick={() => deleteConfirmId && deletePayrollEntry(deleteConfirmId)}>
               <Trash2 className="w-4 h-4 mr-2" /> Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Pay Salary: Select Account Float ── */}
+      <Dialog open={!!(payFloatDialog.entry || payFloatDialog.all)} onOpenChange={v => { if (!v) setPayFloatDialog({entry:null,all:false}); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>{payFloatDialog.all ? "Mark All Paid — Select Account" : "Pay Salary — Select Account"}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-1">
+            {payFloatDialog.all ? (
+              <div className="p-3 bg-blue-50 rounded-lg text-sm">
+                <p className="text-gray-500 mb-1">Total to Pay</p>
+                <p className="font-bold text-blue-700 text-base">{formatCurrency(payrollEntries.filter(p => p.companyId === activeCompanyId && p.month === selectedMonth && p.year === selectedYear && p.status !== "paid").reduce((s,p) => s + getMergedNetPay(p), 0))}</p>
+                <p className="text-xs text-gray-400">{selectedMonth} {selectedYear} — All unpaid staff</p>
+              </div>
+            ) : payFloatDialog.entry && (
+              <div className="p-3 bg-blue-50 rounded-lg text-sm">
+                <p className="text-gray-500 mb-1">Net Salary</p>
+                <p className="font-bold text-blue-700 text-base">{formatCurrency(getMergedNetPay(payFloatDialog.entry))}</p>
+                <p className="text-xs text-gray-400">{allStaffList.find(u => u.id === payFloatDialog.entry?.staffId)?.name} — {payFloatDialog.entry.month} {payFloatDialog.entry.year}</p>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Deduct from Account Float</label>
+              <Select value={payFloatId} onValueChange={setPayFloatId}>
+                <SelectTrigger><SelectValue placeholder="Select account (optional)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No float deduction</SelectItem>
+                  {floats.filter(f => !activeCompanyId || f.companyId === activeCompanyId || f.companyId === "group").map(f => (
+                    <SelectItem key={f.id} value={f.id}>{f.provider} — {f.accountName} ({formatCurrency(f.currentBalance)})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayFloatDialog({entry:null,all:false})}>Cancel</Button>
+            <Button className="bg-green-600 hover:bg-green-700" disabled={payFloatLoading} onClick={confirmPayWithFloat}>
+              {payFloatLoading ? "Processing..." : "✓ Confirm Pay"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Advance Disburse: Select Account Float ── */}
+      <Dialog open={!!advDisburseTarget} onOpenChange={v => { if (!v) setAdvDisburseTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Disburse Advance — Select Account</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-1">
+            {advDisburseTarget && (
+              <div className="p-3 bg-orange-50 rounded-lg text-sm">
+                <p className="text-gray-500 mb-1">Employee</p>
+                <p className="font-semibold text-gray-900">{allStaffList.find(u => u.id === advDisburseTarget.staffId)?.name ?? advDisburseTarget.staffId}</p>
+                <p className="text-orange-700 font-bold text-base mt-1">{formatCurrency(advDisburseTarget.amount)}</p>
+                <p className="text-xs text-gray-400">{advDisburseTarget.reason}</p>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Deduct from Account Float</label>
+              <Select value={advDisburseFloatId} onValueChange={setAdvDisburseFloatId}>
+                <SelectTrigger><SelectValue placeholder="Select account (optional)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No float deduction</SelectItem>
+                  {floats.filter(f => !activeCompanyId || f.companyId === activeCompanyId || f.companyId === "group").map(f => (
+                    <SelectItem key={f.id} value={f.id}>{f.provider} — {f.accountName} ({formatCurrency(f.currentBalance)})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdvDisburseTarget(null)}>Cancel</Button>
+            <Button className="bg-green-600 hover:bg-green-700" disabled={advDisburseLoading} onClick={confirmAdvDisburse}>
+              {advDisburseLoading ? "Processing..." : "💵 Confirm Disburse"}
             </Button>
           </DialogFooter>
         </DialogContent>

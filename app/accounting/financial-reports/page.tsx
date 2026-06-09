@@ -19,7 +19,9 @@ function lsGet<T>(key: string, fb: T): T {
 
 interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; }
 interface Company { id: string; name: string; }
-type ReportType = "customers" | "sales" | "marketing_expenses" | "office_expenses" | "staff_claims" | "payroll" | "invoices" | "petty_cash" | "loan_customers" | "loan_interest" | "revenue_summary" | "profit_loss" | "assets" | "balance_sheet" | "cashflow" | "microfinance_customers" | "marketing_customers";
+interface FloatUpdate { id: string; date: string; type?: "credit" | "debit"; amount?: number; balance: number; description: string; updatedBy: string; createdAt: string; }
+interface AccountFloat { id: string; companyId: string; accountType: string; provider: string; accountName: string; accountNumber?: string; currency: string; currentBalance: number; lastUpdatedAt: string; createdAt: string; history: FloatUpdate[]; }
+type ReportType = "customers" | "sales" | "marketing_expenses" | "office_expenses" | "staff_claims" | "payroll" | "invoices" | "petty_cash" | "loan_customers" | "loan_interest" | "revenue_summary" | "profit_loss" | "assets" | "balance_sheet" | "cashflow" | "microfinance_customers" | "marketing_customers" | "account_floats";
 type DatePreset  = "all" | "today" | "week" | "month" | "year" | "custom";
 
 const REPORT_TYPES: { key: ReportType; label: string; icon: React.ElementType; color: string; bg: string }[] = [
@@ -40,6 +42,7 @@ const REPORT_TYPES: { key: ReportType; label: string; icon: React.ElementType; c
   { key: "cashflow",              label: "Cash Flow",             icon: Activity,  color: "text-sky-600",     bg: "bg-sky-50"     },
   { key: "microfinance_customers",label: "Microfinance Customers",icon: Landmark,  color: "text-fuchsia-600", bg: "bg-fuchsia-50" },
   { key: "marketing_customers",   label: "Marketing Customers",   icon: Megaphone, color: "text-rose-600",    bg: "bg-rose-50"    },
+  { key: "account_floats",        label: "Account Floats",         icon: Wallet,    color: "text-teal-700",    bg: "bg-teal-50"    },
 ];
 
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
@@ -109,6 +112,7 @@ export default function ReportsPage() {
   const [assets,     setAssets]     = useState<Row[]>([]);
   const [mfCusts,    setMfCusts]    = useState<Row[]>([]);
   const [mktCusts,   setMktCusts]   = useState<Row[]>([]);
+  const [floats,     setFloats]     = useState<AccountFloat[]>([]);
 
   const loadData = async () => {
     setLoading(true);
@@ -140,14 +144,16 @@ export default function ReportsPage() {
       setPayroll((d7 as Row[]).map(p => ({ ...p, staffName: userMap.get(String(p.staffId)) || String(p.staffId) })));
       // Fetch assets separately
       try {
-        const [ar, mfr, mktr] = await Promise.all([
+        const [ar, mfr, mktr, flr] = await Promise.all([
           fetch("/api/assets",                 { cache: "no-store" }),
           fetch("/api/microfinance-customers", { cache: "no-store" }),
           fetch("/api/marketing-customers",    { cache: "no-store" }),
+          fetch("/api/account-floats",         { cache: "no-store" }),
         ]);
         if (ar.ok)   setAssets(await ar.json());
         if (mfr.ok)  setMfCusts(await mfr.json());
         if (mktr.ok) setMktCusts(await mktr.json());
+        if (flr.ok)  setFloats(await flr.json());
       } catch {}
     } catch {}
     setLoading(false);
@@ -173,6 +179,8 @@ export default function ReportsPage() {
   const fPettyCash = fd(pettyCash, "date");
   const fMfCusts   = filterByCo(mfCusts).filter(x  => inRange(x.createdAt,  start, end)).map((r,i) => ({...r, _num: i+1}));
   const fMktCusts  = filterByCo(mktCusts).filter(x => inRange(x.createdAt,  start, end)).map((r,i) => ({...r, _num: i+1}));
+
+  const fFloats = isGroupView ? floats : floats.filter(f => f.companyId === cid);
 
   const PAID_EXP     = ["paid","approved","disbursed","ceo_approved","manager_approved"];
   const totalSales   = fSales.reduce((s,x) => s + Number(x.amount || 0), 0);
@@ -346,6 +354,7 @@ export default function ReportsPage() {
     ],
     balance_sheet:          [],
     cashflow:               [],
+    account_floats:         [],
     microfinance_customers: [
       { key: "_num",         label: "#"                },
       { key: "name",         label: "Customer Name"   },
@@ -386,6 +395,7 @@ export default function ReportsPage() {
     assets:                  fAssets.map((r, i) => ({ ...r, _assetNum: i + 1 })),
     balance_sheet:           [],
     cashflow:                [],
+    account_floats:          [],
     microfinance_customers:  fMfCusts,
     marketing_customers:     fMktCusts,
   };
@@ -575,7 +585,7 @@ export default function ReportsPage() {
                 </div>
               )}
               <span className="ml-auto text-xs text-gray-400 bg-gray-50 px-3 py-1.5 rounded-lg">
-                {!["profit_loss","balance_sheet","cashflow"].includes(report) ? `${data.length} records • ` : ""}{dateLabel}
+                {!["profit_loss","balance_sheet","cashflow","account_floats"].includes(report) ? `${data.length} records • ` : ""}{report === "account_floats" ? `${fFloats.length} accounts • ` : ""}{dateLabel}
               </span>
             </div>
 
@@ -750,6 +760,78 @@ export default function ReportsPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+            ) : report === "account_floats" ? (
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="p-5 bg-gray-50 border-b border-gray-100">
+                  <h2 className="font-bold text-gray-900 text-lg">Account Floats Summary</h2>
+                  <p className="text-sm text-gray-500">{companyName} &nbsp;·&nbsp; {fFloats.length} account{fFloats.length !== 1 ? "s" : ""}</p>
+                </div>
+                {fFloats.length === 0 ? (
+                  <div className="py-14 text-center text-gray-400 text-sm">No account floats found.</div>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {/* Summary cards */}
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {fFloats.map(fl => (
+                        <div key={fl.id} className="border border-gray-100 rounded-xl p-4 bg-white shadow-sm">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${fl.accountType === "mobile_money" ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-700"}`}>
+                              {fl.provider}
+                            </span>
+                            <span className="text-xs text-gray-400">{fl.currency ?? "TZS"}</span>
+                          </div>
+                          <p className="text-sm font-semibold text-gray-800 mb-1">{fl.accountName}</p>
+                          {fl.accountNumber && <p className="text-xs text-gray-400 font-mono mb-2">{fl.accountNumber}</p>}
+                          <p className="text-2xl font-bold text-blue-700">{formatCurrency(fl.currentBalance)}</p>
+                          <p className="text-xs text-gray-400 mt-1">Date Added: {fl.createdAt ? formatDate(fl.createdAt.slice(0,10)) : "—"}</p>
+                          <p className="text-xs text-gray-400">Last Updated: {fl.lastUpdatedAt ? formatDate(fl.lastUpdatedAt.slice(0,10)) : "—"}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Total */}
+                    <div className="px-5 py-3 flex justify-between items-center bg-teal-50">
+                      <span className="font-bold text-teal-800">Total Float Balance</span>
+                      <span className="font-bold text-teal-700 text-lg">{formatCurrency(fFloats.reduce((s,f) => s + f.currentBalance, 0))}</span>
+                    </div>
+                    {/* Transaction history per float */}
+                    {fFloats.map(fl => fl.history && fl.history.length > 0 && (
+                      <div key={`hist-${fl.id}`} className="p-5">
+                        <p className="text-sm font-semibold text-gray-700 mb-3">{fl.provider} — {fl.accountName} &nbsp; Transaction History</p>
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-gray-50 border-b border-gray-100">
+                              <th className="text-left px-3 py-2">Date</th>
+                              <th className="text-left px-3 py-2">Type</th>
+                              <th className="text-right px-3 py-2">Amount</th>
+                              <th className="text-right px-3 py-2">Balance</th>
+                              <th className="text-left px-3 py-2">Description</th>
+                              <th className="text-left px-3 py-2">By</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {fl.history.map(h => (
+                              <tr key={h.id} className="border-b border-gray-50 hover:bg-gray-50">
+                                <td className="px-3 py-2 text-gray-600">{h.date}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`px-1.5 py-0.5 rounded font-semibold ${h.type === "debit" ? "bg-red-50 text-red-600" : "bg-green-50 text-green-700"}`}>
+                                    {h.type === "debit" ? "▼ Debit" : "▲ Credit"}
+                                  </span>
+                                </td>
+                                <td className={`px-3 py-2 text-right font-semibold ${h.type === "debit" ? "text-red-600" : "text-green-700"}`}>
+                                  {h.type === "debit" ? "-" : "+"}{formatCurrency(h.amount ?? 0)}
+                                </td>
+                                <td className="px-3 py-2 text-right font-semibold text-blue-700">{formatCurrency(h.balance)}</td>
+                                <td className="px-3 py-2 text-gray-600">{h.description}</td>
+                                <td className="px-3 py-2 text-gray-400">{h.updatedBy || "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : !["balance_sheet","cashflow"].includes(report) ? (
               /* Standard table */

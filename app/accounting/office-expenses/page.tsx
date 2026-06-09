@@ -32,6 +32,8 @@ function lsStr(key: string, fallback = "") { try { return localStorage.getItem(k
 interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; }
 interface StaffUser { id: string; name: string; companyId: string; position?: string; department?: string; }
 interface Company { id: string; name: string; }
+interface AccountFloat { id: string; companyId: string; provider: string; accountName: string; currentBalance: number; accountType: string; }
+
 interface OfficeExpense {
   id: string; companyId: string; recordedBy: string;
   title: string; category: string; amount: number;
@@ -104,6 +106,11 @@ export default function OfficeExpensesPage() {
   const [deleteId, setDeleteId]           = useState<string | null>(null);
   const [form, setForm]                   = useState(emptyForm());
   const [formError, setFormError]         = useState("");
+  const [floats, setFloats]               = useState<AccountFloat[]>([]);
+  const [disburseTarget, setDisburseTarget] = useState<OfficeExpense | null>(null);
+  const [disburseFloatId, setDisburseFloatId] = useState("");
+  const [disburseLoading, setDisburseLoading] = useState(false);
+  const [disburseErr, setDisburseErr]     = useState("");
 
   const loadSession = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
@@ -121,6 +128,10 @@ export default function OfficeExpensesPage() {
       if (r.ok) setAllStaff(await r.json());
       else setAllStaff(lsGet<StaffUser[]>(USERS_KEY, []));
     } catch { setAllStaff(lsGet<StaffUser[]>(USERS_KEY, [])); }
+    try {
+      const rf = await fetch("/api/account-floats", { cache: "no-store" });
+      if (rf.ok) setFloats(await rf.json());
+    } catch {}
   };
 
   const fetchExpenses = async () => {
@@ -249,6 +260,46 @@ export default function OfficeExpensesPage() {
       }
       fetchExpenses();
     } catch { setFormError("Network error. Please try again."); }
+  };
+
+  const openDisburse = (exp: OfficeExpense) => {
+    const coCid = exp.companyId;
+    const available = floats.filter(f => !coCid || f.companyId === coCid || f.companyId === "group");
+    setDisburseTarget(exp);
+    setDisburseFloatId(available[0]?.id ?? "");
+    setDisburseErr("");
+  };
+
+  const confirmDisburse = async () => {
+    if (!disburseTarget) return;
+    setDisburseLoading(true);
+    setDisburseErr("");
+    try {
+      await updateStatus(disburseTarget.id, "disbursed");
+      if (disburseFloatId) {
+        const fl = floats.find(f => f.id === disburseFloatId);
+        await fetch("/api/account-floats", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            _action: "deduct",
+            id: disburseFloatId,
+            amount: disburseTarget.amount,
+            description: `Office Expense: ${disburseTarget.title}`,
+            updatedBy: session?.name ?? "",
+            reference: disburseTarget.id,
+            date: new Date().toISOString().slice(0, 10),
+          }),
+        });
+        const rf = await fetch("/api/account-floats", { cache: "no-store" });
+        if (rf.ok) setFloats(await rf.json());
+        setDisburseTarget(null);
+        setDisburseFloatId("");
+      } else {
+        setDisburseTarget(null);
+      }
+    } catch { setDisburseErr("Failed. Try again."); }
+    finally { setDisburseLoading(false); }
   };
 
   const updateStatus = async (id: string, newStatus: OfficeExpense["status"]) => {
@@ -420,7 +471,7 @@ export default function OfficeExpensesPage() {
                         )}
                         {/* Stage 3: Accountant or CEO disburses */}
                         {exp.status === "ceo_approved" && (isOEAccountant || isOECEO) && (
-                          <Button variant="ghost" size="sm" className="text-green-700 text-xs px-2" onClick={() => updateStatus(exp.id, "disbursed")}>
+                          <Button variant="ghost" size="sm" className="text-green-700 text-xs px-2" onClick={() => openDisburse(exp)}>
                             💵 Disburse
                           </Button>
                         )}
@@ -504,7 +555,7 @@ export default function OfficeExpensesPage() {
               </>
             )}
             {viewItem && viewItem.status === "ceo_approved" && (isOEAccountant || isOECEO) && (
-              <Button className="bg-green-600 hover:bg-green-700" onClick={() => { updateStatus(viewItem.id, "disbursed"); setViewItem(null); }}>💵 Disburse</Button>
+              <Button className="bg-green-600 hover:bg-green-700" onClick={() => { openDisburse(viewItem); setViewItem(null); }}>💵 Disburse</Button>
             )}
           </DialogFooter>
         </DialogContent>
@@ -588,6 +639,48 @@ export default function OfficeExpensesPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
             <Button onClick={saveForm}>{editItem ? "Save Changes" : "Record Expense"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Disburse — Select Float Account */}
+      <Dialog open={!!disburseTarget} onOpenChange={v => { if (!v) setDisburseTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Disburse: Select Payment Account</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-1">
+            {disburseErr && <p className="text-sm text-red-600">{disburseErr}</p>}
+            <div className="p-3 bg-blue-50 rounded-lg text-sm">
+              <p className="text-gray-500 mb-1">Expense</p>
+              <p className="font-semibold text-gray-900">{disburseTarget?.title}</p>
+              <p className="text-blue-700 font-bold text-base mt-1">{disburseTarget ? formatCurrency(disburseTarget.amount) : ""}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Deduct from Account Float</label>
+              <Select value={disburseFloatId} onValueChange={setDisburseFloatId}>
+                <SelectTrigger><SelectValue placeholder="Select account (optional)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No float deduction</SelectItem>
+                  {floats.filter(f => !disburseTarget?.companyId || f.companyId === disburseTarget?.companyId || f.companyId === "group").map(f => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.provider} — {f.accountName} ({formatCurrency(f.currentBalance)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {disburseFloatId && disburseFloatId !== "none" && (() => {
+              const fl = floats.find(f => f.id === disburseFloatId);
+              const remaining = (fl?.currentBalance ?? 0) - (disburseTarget?.amount ?? 0);
+              return <p className={`text-xs font-medium ${remaining < 0 ? "text-red-600" : "text-green-700"}`}>
+                Balance after deduction: {formatCurrency(remaining)}
+              </p>;
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDisburseTarget(null)}>Cancel</Button>
+            <Button className="bg-green-600 hover:bg-green-700" disabled={disburseLoading} onClick={confirmDisburse}>
+              {disburseLoading ? "Processing..." : "💵 Confirm Disburse"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

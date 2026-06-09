@@ -8,7 +8,7 @@ import {
   ChevronRight, Building2, ShoppingCart, Megaphone, Package,
   Receipt, BarChart3, FileText, Warehouse, TrendingUp, Briefcase,
   Clock, HelpCircle, X, Menu, Percent, Wrench, Activity, Scale, MapPin,
-  Users2, MessageSquarePlus, MessageSquare, Landmark, Radio, BadgeCheck, Music, Film, Wallet
+  Users2, MessageSquarePlus, MessageSquare, Landmark, Radio, BadgeCheck, Music, Film, Wallet, ClipboardList
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -55,6 +55,7 @@ const PERM_ROUTES: Record<string, string[]> = {
   inventory:         ["/inventory", "/vendors"],
   documents:         ["/documents"],
   reports:           ["/reports"],
+  daily_reports:     ["/daily-reports"],
   services:          ["/services"],
   messages:          ["/messages"],
   admin:             ["/admin", "/notifications"],
@@ -95,6 +96,7 @@ const ALL_NAV: NavGroup[] = [
     items: [
       { label: "Tasks", href: "/tasks", icon: CheckSquare },
       { label: "KPIs & Reports", href: "/kpis", icon: Target },
+      { label: "Daily Reports", href: "/daily-reports", icon: ClipboardList },
     ]
   },
   {

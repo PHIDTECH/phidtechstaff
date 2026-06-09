@@ -20,7 +20,7 @@ const COMPANIES_KEY = "phidtech_companies";
 
 interface Session { id: string; name: string; role: string; position: string; isSuperAdmin: boolean; companyId: string; }
 interface Company { id: string; name: string; }
-interface FloatUpdate { id: string; date: string; balance: number; description: string; updatedBy: string; createdAt: string; }
+interface FloatUpdate { id: string; date: string; type?: "credit" | "debit"; amount?: number; balance: number; description: string; updatedBy: string; createdAt: string; reference?: string; }
 interface AccountFloat {
   id: string; companyId: string; accountType: "mobile_money" | "bank";
   provider: string; accountName: string; accountNumber?: string;
@@ -154,6 +154,7 @@ export default function AccountFloatsPage() {
               {!cid && <TableHead>Subsidiary</TableHead>}
               <TableHead>Account No.</TableHead>
               <TableHead className="text-right">Current Balance</TableHead>
+              <TableHead>Date Added</TableHead>
               <TableHead>Last Updated</TableHead>
               <TableHead>Updated By</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -172,6 +173,7 @@ export default function AccountFloatsPage() {
                   {!cid && <TableCell className="text-xs text-gray-500">{coName(fl.companyId)}</TableCell>}
                   <TableCell className="font-mono text-xs text-gray-500">{fl.accountNumber || "—"}</TableCell>
                   <TableCell className="text-right font-bold text-blue-700 text-base">{formatCurrency(fl.currentBalance)}</TableCell>
+                  <TableCell className="text-sm text-gray-500">{fl.createdAt ? formatDate(fl.createdAt.slice(0, 10)) : "—"}</TableCell>
                   <TableCell className="text-sm text-gray-500">{fl.lastUpdatedAt ? formatDate(fl.lastUpdatedAt.slice(0, 10)) : "—"}</TableCell>
                   <TableCell className="text-sm text-gray-500">{fl.updatedBy || "—"}</TableCell>
                   <TableCell>
@@ -196,15 +198,25 @@ export default function AccountFloatsPage() {
                           <thead>
                             <tr className="text-slate-400">
                               <th className="text-left pb-1">Date</th>
+                              <th className="text-left pb-1 pl-2">Type</th>
+                              <th className="text-right pb-1">Amount</th>
                               <th className="text-right pb-1">Balance (TZS)</th>
                               <th className="text-left pb-1 pl-4">Description</th>
-                              <th className="text-left pb-1 pl-4">Updated By</th>
+                              <th className="text-left pb-1 pl-4">By</th>
                             </tr>
                           </thead>
                           <tbody>
                             {fl.history.map(h => (
                               <tr key={h.id} className="border-t border-slate-100">
-                                <td className="py-1 text-gray-600">{h.date}</td>
+                                <td className="py-1 text-gray-600 whitespace-nowrap">{h.date}</td>
+                                <td className="py-1 pl-2">
+                                  <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${h.type === "debit" ? "bg-red-50 text-red-600" : "bg-green-50 text-green-700"}`}>
+                                    {h.type === "debit" ? "▼ Debit" : "▲ Credit"}
+                                  </span>
+                                </td>
+                                <td className={`py-1 text-right font-semibold ${h.type === "debit" ? "text-red-600" : "text-green-700"}`}>
+                                  {h.type === "debit" ? "-" : "+"}{(h.amount ?? 0).toLocaleString()}
+                                </td>
                                 <td className="py-1 text-right font-semibold text-blue-700">{h.balance.toLocaleString()}</td>
                                 <td className="py-1 pl-4 text-gray-600">{h.description}</td>
                                 <td className="py-1 pl-4 text-gray-400">{h.updatedBy || "—"}</td>
