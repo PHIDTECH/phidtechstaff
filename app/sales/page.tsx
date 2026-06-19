@@ -188,7 +188,7 @@ export default function SalesPage() {
               onImport={async (rows) => {
                 const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "sales", records: rows }) });
                 const data = await res.json();
-                await reload();
+                reload();
                 return { imported: data.imported ?? 0, errors: data.errors ?? [] };
               }}
             />

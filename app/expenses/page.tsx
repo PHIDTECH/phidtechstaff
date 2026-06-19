@@ -322,7 +322,7 @@ export default function ExpensesPage() {
               onImport={async (rows) => {
                 const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "expenses", records: rows }) });
                 const data = await res.json();
-                await fetchExpenses();
+                fetchExpenses();
                 return { imported: data.imported ?? 0, errors: data.errors ?? [] };
               }}
             />

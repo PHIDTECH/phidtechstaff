@@ -314,9 +314,9 @@ export default function CustomersPage() {
               rows={customers as unknown as Record<string, unknown>[]}
               excludeColumns={["attachments", "credentials"]}
               onImport={async (rows) => {
-                const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "customers", records: rows }) });
+                const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "customers", records: rows, companyId: activeCompanyId || undefined }) });
                 const data = await res.json();
-                await fetchCustomers();
+                fetchCustomers();
                 return { imported: data.imported ?? 0, errors: data.errors ?? [] };
               }}
             />

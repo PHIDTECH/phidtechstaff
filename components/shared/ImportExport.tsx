@@ -75,7 +75,10 @@ export default function ImportExport({ label, rows, onImport, exportColumns, exc
     if (!preview.length) return;
     setImporting(true);
     try {
-      const res = await onImport(preview);
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Import timed out. Records may have been saved — please refresh the page.")), 30000)
+      );
+      const res = await Promise.race([onImport(preview), timeout]);
       setResult(res);
       setPreview([]);
       setFileName("");

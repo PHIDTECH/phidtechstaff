@@ -373,7 +373,7 @@ export default function TasksPage() {
               onImport={async (rows) => {
                 const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "tasks", records: rows }) });
                 const data = await res.json();
-                await fetchTasks();
+                fetchTasks();
                 return { imported: data.imported ?? 0, errors: data.errors ?? [] };
               }}
             />
