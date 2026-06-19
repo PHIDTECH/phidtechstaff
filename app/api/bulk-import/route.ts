@@ -8,7 +8,7 @@ const ALLOWED_KEYS = new Set([
   "media_customers", "business_customers", "licence_customers",
   "entertainment_customers", "movies_customers",
   "sales", "expenses", "office_expenses", "commissions",
-  "users", "payroll", "tasks",
+  "users", "payroll", "tasks", "assets",
 ]);
 
 export async function POST(req: NextRequest) {

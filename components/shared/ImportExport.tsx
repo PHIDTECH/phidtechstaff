@@ -75,6 +75,8 @@ export default function ImportExport({ label, rows, onImport, exportColumns, exc
       setResult(res);
       setPreview([]);
       setFileName("");
+    } catch (err) {
+      setPickErr(`Import failed: ${err instanceof Error ? err.message : "Server error. Please try again."}`);
     } finally {
       setImporting(false);
     }
