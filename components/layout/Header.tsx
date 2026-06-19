@@ -48,18 +48,17 @@ interface HeaderProps {
 }
 
 export default function Header({ onMobileMenuOpen }: HeaderProps) {
-  const _hs = readHdrSession();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showCompanySwitcher, setShowCompanySwitcher] = useState(false);
-  const [companiesList, setCompaniesList] = useState<{id:string;name:string;industry?:string}[]>(() => _hdrCoCache ?? lsGet(COMPANIES_KEY, []));
-  const [activeCompanyId, setActiveCompanyIdState] = useState(readHdrActiveCid);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(_hs.isSuperAdmin);
-  const [isGroupStaff, setIsGroupStaff] = useState(_hs.isGroupStaff);
-  const [profileName, setProfileName] = useState(_hs.name);
-  const [profileRole, setProfileRole] = useState(_hs.role);
+  const [companiesList, setCompaniesList] = useState<{id:string;name:string;industry?:string}[]>([]);
+  const [activeCompanyId, setActiveCompanyIdState] = useState("");
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isGroupStaff, setIsGroupStaff] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileRole, setProfileRole] = useState("");
   const [profilePhoto, setProfilePhoto] = useState("");
-  const [myCompanyId, setMyCompanyId] = useState(_hs.companyId);
+  const [myCompanyId, setMyCompanyId] = useState("");
   const [notifList, setNotifList] = useState<{id:string;userId:string;message:string;read:boolean;createdAt:string}[]>([]);
 
   const reloadCompanies = async () => {

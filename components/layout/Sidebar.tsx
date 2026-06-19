@@ -208,9 +208,9 @@ function readActiveCidSync(): string {
 
 export default function Sidebar({ collapsed, onToggle, mobile, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const [session, setSession] = useState<{id:string;name:string;role:string;position:string;isSuperAdmin:boolean;companyId?:string;permissions?:string[]} | null>(readSessionSync);
+  const [session, setSession] = useState<{id:string;name:string;role:string;position:string;isSuperAdmin:boolean;companyId?:string;permissions?:string[]} | null>(null);
   const [myCompanyName, setMyCompanyName] = useState("");
-  const [activeCompanyId, setActiveCompanyId] = useState(readActiveCidSync);
+  const [activeCompanyId, setActiveCompanyId] = useState("");
 
   useEffect(() => {
     const load = async () => {

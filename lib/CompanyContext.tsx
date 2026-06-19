@@ -34,12 +34,8 @@ function readLSString(key: string, fallback: string): string {
 }
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
-  const [companiesList, setCompaniesList] = useState<Company[]>(
-    () => readLS<Company[]>(STORAGE_KEY, defaultCompanies)
-  );
-  const [activeCompanyId, setActiveCompanyIdState] = useState<string>(
-    () => readLSString(ACTIVE_KEY, defaultCompanies[0]?.id ?? "c1")
-  );
+  const [companiesList, setCompaniesList] = useState<Company[]>(defaultCompanies);
+  const [activeCompanyId, setActiveCompanyIdState] = useState<string>(defaultCompanies[0]?.id ?? "c1");
   const [hydrated, setHydrated] = useState(true);
 
   useEffect(() => {
