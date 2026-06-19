@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Briefcase, Plus, Search, DollarSign, Edit, Eye, Wrench, AlertCircle, Trash2 } from "lucide-react";
+import ImportExport from "@/components/shared/ImportExport";
 import { formatDate, formatCurrency, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -166,9 +167,22 @@ export default function AssetsPage() {
         subtitle="Track company assets, depreciation and maintenance"
         icon={Briefcase}
         actions={
-          <Button size="sm" onClick={openAdd}>
-            <Plus className="w-4 h-4 mr-2" /> Add Asset
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ImportExport
+              label="Assets"
+              rows={assetList as unknown as Record<string, unknown>[]}
+              excludeColumns={[]}
+              onImport={async (rows) => {
+                const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "assets", records: rows }) });
+                const data = await res.json();
+                await reload();
+                return { imported: data.imported ?? 0, errors: data.errors ?? [] };
+              }}
+            />
+            <Button size="sm" onClick={openAdd}>
+              <Plus className="w-4 h-4 mr-2" /> Add Asset
+            </Button>
+          </div>
         }
       />
 
