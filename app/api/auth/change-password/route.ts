@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readDb, writeDb } from "@/lib/serverDb";
+export const dynamic = "force-dynamic";
 
 const ADMIN_EMAIL    = "phidtechnology@gmail.com";
 const ADMIN_PASSWORD = "Kaijage@@2023";
@@ -31,7 +32,12 @@ export async function POST(req: NextRequest) {
       if (currentPassword !== validPw) {
         return NextResponse.json({ error: "Current password is incorrect." }, { status: 401 });
       }
-      writeDb("admin_override", { password: newPassword });
+      try {
+        writeDb("admin_override", { password: newPassword });
+      } catch (we) {
+        console.error("writeDb admin_override failed:", we);
+        return NextResponse.json({ error: "Failed to save password — disk write error." }, { status: 500 });
+      }
       return NextResponse.json({ success: true });
     }
 
@@ -46,7 +52,12 @@ export async function POST(req: NextRequest) {
     }
 
     users[idx] = { ...users[idx], password: newPassword };
-    writeDb("users", users);
+    try {
+      writeDb("users", users);
+    } catch (we) {
+      console.error("writeDb users failed:", we);
+      return NextResponse.json({ error: "Failed to save password — disk write error." }, { status: 500 });
+    }
     return NextResponse.json({ success: true });
 
   } catch (err) {

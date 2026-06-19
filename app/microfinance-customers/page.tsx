@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Landmark, Plus, Search, Upload, Trash2, Edit, AlertCircle, CheckCircle, X, Download } from "lucide-react";
+import ImportExport from "@/components/shared/ImportExport";
 import { getActiveCid } from "@/lib/getActiveCid";
 
 const SESSION_KEY   = "phidtech_session";
@@ -230,10 +231,17 @@ export default function MicrofinanceCustomersPage() {
               <p className="text-sm text-gray-500">Manage microfinance permit holders and SACCO members</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setShowBulk(true); setBulkError(""); setBulkSuccess(""); setBulkPreview([]); setBulkText(""); }}>
-              <Upload className="w-4 h-4 mr-1.5" /> Bulk Import
-            </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ImportExport
+              label="Microfinance Customers"
+              rows={customers as unknown as Record<string, unknown>[]}
+              onImport={async (rows) => {
+                const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "microfinance_customers", records: rows }) });
+                const data = await res.json();
+                await load();
+                return { imported: data.imported ?? 0, errors: data.errors ?? [] };
+              }}
+            />
             <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={openAdd}>
               <Plus className="w-4 h-4 mr-1.5" /> Add Customer
             </Button>

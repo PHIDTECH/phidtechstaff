@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { TrendingUp, Plus, Search, Edit, Trash2, AlertCircle, DollarSign, Users, CheckCircle } from "lucide-react";
+import ImportExport from "@/components/shared/ImportExport";
 import { formatCurrency, getInitials } from "@/lib/utils";
 
 const ACTIVE_KEY      = "phidtech_active_company";
@@ -263,7 +264,17 @@ export default function CommissionsPage() {
         subtitle="Track staff sales commissions per customer and month"
         icon={TrendingUp}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <ImportExport
+              label="Commissions"
+              rows={commissions as unknown as Record<string, unknown>[]}
+              onImport={async (rows) => {
+                const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "commissions", records: rows }) });
+                const data = await res.json();
+                await fetchCommissions();
+                return { imported: data.imported ?? 0, errors: data.errors ?? [] };
+              }}
+            />
             {isRegularStaff && (
               <Button size="sm" variant="outline" onClick={openAdd}>
                 <Plus className="w-4 h-4 mr-2" /> Claim Commission

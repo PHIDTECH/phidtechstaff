@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readDb } from "@/lib/serverDb";
+export const dynamic = "force-dynamic";
 
 const ADMIN_EMAIL    = "phidtechnology@gmail.com";
 const ADMIN_PASSWORD = "Kaijage@@2023";

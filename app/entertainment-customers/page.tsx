@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Music, Plus, Search, Upload, Trash2, Edit, AlertCircle, CheckCircle, Download } from "lucide-react";
+import ImportExport from "@/components/shared/ImportExport";
 import { getActiveCid } from "@/lib/getActiveCid";
 
 const SESSION_KEY = "phidtech_session"; const COMPANIES_KEY = "phidtech_companies";
@@ -128,8 +129,17 @@ export default function EntertainmentCustomersPage() {
             <div className="w-10 h-10 rounded-xl bg-pink-600 flex items-center justify-center"><Music className="w-5 h-5 text-white" /></div>
             <div><h1 className="text-xl font-bold text-gray-900">Entertainment Customers</h1><p className="text-sm text-gray-500">Manage entertainment industry clients</p></div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setShowBulk(true); setBulkError(""); setBulkSuccess(""); setBulkPreview([]); setBulkText(""); }}><Upload className="w-4 h-4 mr-1.5" /> Bulk Import</Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ImportExport
+              label="Entertainment Customers"
+              rows={customers as unknown as Record<string, unknown>[]}
+              onImport={async (rows) => {
+                const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "entertainment_customers", records: rows }) });
+                const data = await res.json();
+                await load();
+                return { imported: data.imported ?? 0, errors: data.errors ?? [] };
+              }}
+            />
             <Button size="sm" className="bg-pink-600 hover:bg-pink-700 text-white" onClick={openAdd}><Plus className="w-4 h-4 mr-1.5" /> Add Customer</Button>
           </div>
         </div>

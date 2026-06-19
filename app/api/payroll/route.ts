@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readDb, writeDb } from "@/lib/serverDb";
 import { sendSms } from "@/lib/beemSms";
+export const dynamic = "force-dynamic";
 
 interface PayrollEntry {
   id: string; staffId: string; companyId: string;

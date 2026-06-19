@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { UserCheck, Plus, Search, Mail, Phone, Building2, TrendingUp, Eye, Edit, Trash2, AlertCircle, Paperclip, X, FileText, Download, KeyRound } from "lucide-react";
+import ImportExport from "@/components/shared/ImportExport";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency, getStatusColor, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -307,9 +308,22 @@ export default function CustomersPage() {
         subtitle="Manage customer profiles, history and communications"
         icon={UserCheck}
         actions={
-          <Button size="sm" onClick={openAdd}>
-            <Plus className="w-4 h-4 mr-2" /> Add Customer
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ImportExport
+              label="Customers"
+              rows={customers as unknown as Record<string, unknown>[]}
+              excludeColumns={["attachments", "credentials"]}
+              onImport={async (rows) => {
+                const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "customers", records: rows }) });
+                const data = await res.json();
+                await fetchCustomers();
+                return { imported: data.imported ?? 0, errors: data.errors ?? [] };
+              }}
+            />
+            <Button size="sm" onClick={openAdd}>
+              <Plus className="w-4 h-4 mr-2" /> Add Customer
+            </Button>
+          </div>
         }
       />
 

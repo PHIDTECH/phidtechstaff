@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { TrendingUp, Plus, Search, DollarSign, Target, Users, ArrowRight, Edit, Trash2, AlertCircle } from "lucide-react";
+import ImportExport from "@/components/shared/ImportExport";
 import { formatDate, formatCurrency, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -180,9 +181,21 @@ export default function SalesPage() {
         subtitle="Track leads, prospects, deals and forecasting"
         icon={TrendingUp}
         actions={
-          <Button size="sm" onClick={openAdd}>
-            <Plus className="w-4 h-4 mr-2" /> Add Lead
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ImportExport
+              label="Sales"
+              rows={leads as unknown as Record<string, unknown>[]}
+              onImport={async (rows) => {
+                const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "sales", records: rows }) });
+                const data = await res.json();
+                await reload();
+                return { imported: data.imported ?? 0, errors: data.errors ?? [] };
+              }}
+            />
+            <Button size="sm" onClick={openAdd}>
+              <Plus className="w-4 h-4 mr-2" /> Add Lead
+            </Button>
+          </div>
         }
       />
 

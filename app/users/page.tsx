@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { formatDate, formatCurrency, getInitials, getStatusColor } from "@/lib/utils";
 import { getActiveCid } from "@/lib/getActiveCid";
+import ImportExport from "@/components/shared/ImportExport";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Allowance {
@@ -474,6 +475,17 @@ export default function UsersPage() {
                   Remove Duplicates
                 </Button>
               )}
+              <ImportExport
+                label="Staff Users"
+                rows={usersList as unknown as Record<string, unknown>[]}
+                excludeColumns={["password"]}
+                onImport={async (rows) => {
+                  const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "users", records: rows }) });
+                  const data = await res.json();
+                  await reload();
+                  return { imported: data.imported ?? 0, errors: data.errors ?? [] };
+                }}
+              />
               <Button size="sm" onClick={openAdd}>
                 <UserPlus className="w-4 h-4 mr-2" /> Add Employee
               </Button>

@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, Plus, Search, Edit, Trash2, Eye, AlertCircle, Users, TrendingUp, CheckCircle } from "lucide-react";
+import ImportExport from "@/components/shared/ImportExport";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY  = "phidtech_session";
@@ -161,11 +162,25 @@ export default function LoansPage() {
         title="Loan Customers"
         subtitle="Manage loan records for PHIDTECH GLOBAL FINANCE LIMITED"
         icon={DollarSign}
-        actions={canManage ? (
-          <Button onClick={openAdd} className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="w-4 h-4 mr-2" /> New Loan
-          </Button>
-        ) : undefined}
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            <ImportExport
+              label="Loan Customers"
+              rows={loans as unknown as Record<string, unknown>[]}
+              onImport={async (rows) => {
+                const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "loans", records: rows }) });
+                const data = await res.json();
+                loadData();
+                return { imported: data.imported ?? 0, errors: data.errors ?? [] };
+              }}
+            />
+            {canManage && (
+              <Button onClick={openAdd} className="bg-blue-600 hover:bg-blue-700">
+                <Plus className="w-4 h-4 mr-2" /> New Loan
+              </Button>
+            )}
+          </div>
+        }
       />
 
       <div className={`grid gap-4 mb-6 ${canViewFinancials ? "grid-cols-2 lg:grid-cols-5" : "grid-cols-2"}`}>

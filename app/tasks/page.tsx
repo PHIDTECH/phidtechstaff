@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { CheckSquare, Plus, Search, Clock, AlertCircle, CheckCircle, XCircle, Edit, Eye, Paperclip, Send, MessageSquare, X, FileText, Trash2, Building2 } from "lucide-react";
+import ImportExport from "@/components/shared/ImportExport";
 import { getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -364,9 +365,22 @@ export default function TasksPage() {
         subtitle="Create, assign and track tasks across departments"
         icon={CheckSquare}
         actions={
-          <Button size="sm" onClick={() => { setForm(emptyForm()); setFormError(""); setShowAddDialog(true); }}>
-            <Plus className="w-4 h-4 mr-2" /> New Task
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ImportExport
+              label="Tasks"
+              rows={tasksList as unknown as Record<string, unknown>[]}
+              excludeColumns={["attachments", "comments"]}
+              onImport={async (rows) => {
+                const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "tasks", records: rows }) });
+                const data = await res.json();
+                await fetchTasks();
+                return { imported: data.imported ?? 0, errors: data.errors ?? [] };
+              }}
+            />
+            <Button size="sm" onClick={() => { setForm(emptyForm()); setFormError(""); setShowAddDialog(true); }}>
+              <Plus className="w-4 h-4 mr-2" /> New Task
+            </Button>
+          </div>
         }
       />
 

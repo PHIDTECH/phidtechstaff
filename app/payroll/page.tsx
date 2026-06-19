@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, Plus, Search, CheckCircle, Download, Eye, FileText, AlertCircle, Building2, Edit, Trash2, Printer, FileSpreadsheet } from "lucide-react";
+import ImportExport from "@/components/shared/ImportExport";
 import { formatCurrency, formatCompact, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -968,6 +969,16 @@ export default function PayrollPage() {
         icon={DollarSign}
         actions={
           <>
+            <ImportExport
+              label="Payroll"
+              rows={payrollEntries as unknown as Record<string, unknown>[]}
+              onImport={async (rows) => {
+                const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "payroll", records: rows }) });
+                const data = await res.json();
+                await fetchPayroll();
+                return { imported: data.imported ?? 0, errors: data.errors ?? [] };
+              }}
+            />
             <Button variant="outline" size="sm" onClick={() => { setAdvForm({ staffId: "", amount: "", reason: "", repaymentDate: "" }); setAdvError(""); setShowAdvanceDialog(true); }}>
               <Plus className="w-4 h-4 mr-2" /> Salary Advance
             </Button>
@@ -981,7 +992,7 @@ export default function PayrollPage() {
                 </Button>
               </>
             )}
-            <Button size="sm" onClick={() => setRunConfirm(true)} disabled={staffList.filter(u=>u.status==="active").length === 0}>
+            <Button size="sm" onClick={() => setRunConfirm(true)} disabled={!activeCompanyId || staffList.filter(u=>u.status==="active").length === 0} title={!activeCompanyId ? "Switch to a specific company to run payroll" : "Run Payroll"}>
               <FileText className="w-4 h-4 mr-2" /> Run Payroll
             </Button>
           </>
@@ -1038,9 +1049,17 @@ export default function PayrollPage() {
                 <p className="text-sm text-gray-400 mt-1">Click <strong>Run Payroll</strong> to generate payslips for all active staff.</p>
               </div>
               {!activeCompanyId ? (
-                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
-                  You are in <strong>Group HQ</strong> view. Switch to a specific company using the header switcher to run payroll for that company.
-                </p>
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 max-w-md text-left space-y-1.5">
+                  <p className="font-semibold text-amber-800">Payroll not yet run for {selectedMonth} {selectedYear}</p>
+                  <p>To generate payroll for this month, follow these steps for <strong>each company</strong>:</p>
+                  <ol className="list-decimal pl-4 space-y-1">
+                    <li>Click the company switcher in the top header (currently shows <strong>Group HQ</strong>)</li>
+                    <li>Select a specific company (e.g. Phid Technologies Ltd)</li>
+                    <li>Click <strong>Run Payroll</strong> to generate payslips for that month</li>
+                    <li>Repeat for each company</li>
+                  </ol>
+                  <p className="text-amber-600 mt-1">Once run per company, all records will appear here in Group HQ view.</p>
+                </div>
               ) : (
                 <>
                   <Button onClick={() => setRunConfirm(true)} disabled={staffList.filter(u=>u.status==="active").length === 0}>

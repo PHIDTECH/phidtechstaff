@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Film, Plus, Search, Upload, Trash2, Edit, AlertCircle, CheckCircle, Download } from "lucide-react";
+import ImportExport from "@/components/shared/ImportExport";
 import { getActiveCid } from "@/lib/getActiveCid";
 
 const SESSION_KEY = "phidtech_session"; const COMPANIES_KEY = "phidtech_companies";
@@ -129,8 +130,17 @@ export default function MoviesCustomersPage() {
             <div className="w-10 h-10 rounded-xl bg-amber-600 flex items-center justify-center"><Film className="w-5 h-5 text-white" /></div>
             <div><h1 className="text-xl font-bold text-gray-900">Movies Customers</h1><p className="text-sm text-gray-500">Manage movie subscription and cinema clients</p></div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setShowBulk(true); setBulkError(""); setBulkSuccess(""); setBulkPreview([]); setBulkText(""); }}><Upload className="w-4 h-4 mr-1.5" /> Bulk Import</Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ImportExport
+              label="Movies Customers"
+              rows={customers as unknown as Record<string, unknown>[]}
+              onImport={async (rows) => {
+                const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "movies_customers", records: rows }) });
+                const data = await res.json();
+                await load();
+                return { imported: data.imported ?? 0, errors: data.errors ?? [] };
+              }}
+            />
             <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={openAdd}><Plus className="w-4 h-4 mr-1.5" /> Add Customer</Button>
           </div>
         </div>

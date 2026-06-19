@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Receipt, Plus, Search, CheckCircle, Clock, XCircle, DollarSign, Edit, Trash2, Eye, AlertCircle } from "lucide-react";
+import ImportExport from "@/components/shared/ImportExport";
 import { formatDate, formatCurrency, getStatusColor, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -314,9 +315,21 @@ export default function ExpensesPage() {
         subtitle="Manage staff expense claims, approvals and reimbursements"
         icon={Receipt}
         actions={
-          <Button size="sm" onClick={openAdd}>
-            <Plus className="w-4 h-4 mr-2" /> Submit Claim
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ImportExport
+              label="Expenses"
+              rows={expenses as unknown as Record<string, unknown>[]}
+              onImport={async (rows) => {
+                const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "expenses", records: rows }) });
+                const data = await res.json();
+                await fetchExpenses();
+                return { imported: data.imported ?? 0, errors: data.errors ?? [] };
+              }}
+            />
+            <Button size="sm" onClick={openAdd}>
+              <Plus className="w-4 h-4 mr-2" /> Submit Claim
+            </Button>
+          </div>
         }
       />
 
