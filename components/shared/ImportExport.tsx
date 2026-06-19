@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Download, Upload, FileDown, FileUp, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
@@ -19,6 +19,8 @@ interface ImportExportProps {
 }
 
 export default function ImportExport({ label, rows, onImport, exportColumns, excludeColumns = [] }: ImportExportProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const fileRef          = useRef<HTMLInputElement>(null);
   const [showImport, setShowImport]   = useState(false);
   const [preview, setPreview]         = useState<Record<string, string>[]>([]);
@@ -26,6 +28,8 @@ export default function ImportExport({ label, rows, onImport, exportColumns, exc
   const [importing, setImporting]     = useState(false);
   const [result, setResult]           = useState<{ imported: number; errors: string[] } | null>(null);
   const [pickErr, setPickErr]         = useState("");
+
+  if (!mounted) return null;
 
   const safeRows = rows.map(r => {
     const copy = { ...r };
