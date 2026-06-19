@@ -213,8 +213,8 @@ export default function CustomersPage() {
 
   const filtered = visibleCustomers.filter(c => {
     const q = search.toLowerCase();
-    const matchSearch = c.name.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
+    const matchSearch = (c.name ?? "").toLowerCase().includes(q) ||
+      (c.email ?? "").toLowerCase().includes(q) ||
       (c.company || "").toLowerCase().includes(q) ||
       (c.serviceProduct || "").toLowerCase().includes(q);
     const matchType   = typeFilter === "all" || c.type === typeFilter;

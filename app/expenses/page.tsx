@@ -178,9 +178,9 @@ export default function ExpensesPage() {
 
   const filtered = companyExpenses.filter(e => {
     const emp         = companyStaff.find(u => u.id === e.userId);
-    const matchSearch = e.title.toLowerCase().includes(search.toLowerCase()) ||
+    const matchSearch = (e.title ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (emp?.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      e.category.toLowerCase().includes(search.toLowerCase());
+      (e.category ?? "").toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "all" || e.status === statusFilter;
     return matchSearch && matchStatus;
   });

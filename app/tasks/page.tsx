@@ -227,8 +227,8 @@ export default function TasksPage() {
         (!branchStaffIds || branchStaffIds.includes(t.assignedTo) || t.assignedBy === session?.id)
       );
   const filtered = companyTasks.filter(t => {
-    const matchSearch = t.title.toLowerCase().includes(search.toLowerCase()) ||
-      t.description.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = (t.title ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (t.description ?? "").toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "all" || t.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -824,7 +824,7 @@ export default function TasksPage() {
                       <SelectItem value="__none">None</SelectItem>
                       {formCustomers.filter(c =>
                         !custSearch ||
-                        c.name.toLowerCase().includes(custSearch.toLowerCase()) ||
+                        (c.name ?? "").toLowerCase().includes(custSearch.toLowerCase()) ||
                         (c.company ?? "").toLowerCase().includes(custSearch.toLowerCase()) ||
                         (c.phone ?? "").includes(custSearch)
                       ).map(c => (

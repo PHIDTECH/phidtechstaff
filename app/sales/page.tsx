@@ -94,7 +94,7 @@ export default function SalesPage() {
   const companyStaff = cid ? staff.filter(u => u.companyId === cid) : staff;
 
   const filtered = companyLeads.filter(l => {
-    const matchSearch = l.name.toLowerCase().includes(search.toLowerCase()) ||
+    const matchSearch = (l.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (l.company ?? "").toLowerCase().includes(search.toLowerCase());
     const matchStage = stageFilter === "all" || l.stage === stageFilter;
     return matchSearch && matchStage;

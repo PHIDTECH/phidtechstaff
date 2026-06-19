@@ -109,7 +109,7 @@ export default function AssetsPage() {
   const categories = [...new Set(companyAssets.map(a => a.category))];
 
   const filtered = companyAssets.filter(a => {
-    const matchSearch = a.name.toLowerCase().includes(search.toLowerCase()) ||
+    const matchSearch = (a.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (a.serialNumber ?? "").toLowerCase().includes(search.toLowerCase());
     const matchCat = categoryFilter === "all" || a.category === categoryFilter;
     return matchSearch && matchCat;
