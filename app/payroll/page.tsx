@@ -134,7 +134,9 @@ export default function PayrollPage() {
   const [advDisburseTarget, setAdvDisburseTarget] = useState<SalaryAdvance|null>(null);
   const [advDisburseFloatId, setAdvDisburseFloatId] = useState("");
   const [advDisburseLoading, setAdvDisburseLoading] = useState(false);
-  const [showGroupHQWarning, setShowGroupHQWarning] = useState(false);
+  const [showRunFromGroupDialog, setShowRunFromGroupDialog] = useState(false);
+  const [runForCompanyId, setRunForCompanyId] = useState("");
+  const [companies, setCompanies] = useState<{id:string;name:string}[]>([]);
 
   const GENERAL_ROLES_PAYROLL = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal","group_accountant"];
 
@@ -151,6 +153,7 @@ export default function PayrollPage() {
     const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
     const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+    setCompanies(companies);
     setActiveCompanyName(companies.find(c => c.id === cid)?.name ?? "");
     const gc = lsStr(GROUP_KEY) || (companies[0]?.id ?? "");
     setGroupCompanyId(gc);
@@ -269,9 +272,14 @@ export default function PayrollPage() {
 
   const alreadyRun = companyEntries.length > 0;
 
-  const runPayroll = async () => {
-    const activeStaff = staffList.filter(u => (u.status === "active") && u.salary > 0);
-    if (activeStaff.length === 0) { setRunConfirm(false); return; }
+  const runPayroll = async (targetCid?: string) => {
+    const cid = targetCid ?? activeCompanyId;
+    const isBM = !!session && !session.isSuperAdmin && !!session.branchId && !GENERAL_ROLES_PAYROLL.includes(session.position ?? session.role ?? "");
+    const targetStaff = cid
+      ? allStaffList.filter(u => u.companyId === cid && u.status === "active" && u.salary > 0 && (!isBM || u.branchId === session?.branchId))
+      : allStaffList.filter(u => u.status === "active" && u.salary > 0);
+    const activeStaff = targetStaff;
+    if (activeStaff.length === 0) { setRunConfirm(false); setShowRunFromGroupDialog(false); return; }
     let allCommissions: StoredCommission[] = [];
     try {
       const cr = await fetch("/api/commissions", { cache: "no-store" });
@@ -283,7 +291,7 @@ export default function PayrollPage() {
       const staffAllowances = (emp.allowances ?? []).filter(a => a.name.trim() && a.amount > 0);
       // Add commissions for this staff for the selected month/year
       const empCommissions = allCommissions.filter(
-        c => c.staffId === emp.id && c.companyId === activeCompanyId &&
+        c => c.staffId === emp.id && c.companyId === cid &&
              c.month === selectedMonth && c.year === selectedYear
       );
       const totalCommAmt = empCommissions.reduce((s, c) => s + c.commissionAmount, 0);
@@ -315,7 +323,7 @@ export default function PayrollPage() {
       const net       = gross - totalDed;
       return {
         id: `pr-${emp.id}-${monthKey}-${Date.now()}`,
-        staffId: emp.id, companyId: activeCompanyId,
+        staffId: emp.id, companyId: cid,
         employeeName: emp.name,
         month: selectedMonth, year: selectedYear,
         basicSalary: basic,
@@ -336,10 +344,11 @@ export default function PayrollPage() {
       };
     });
     // Delete existing entries for this company/month/year, then post new ones
-    await fetch(`/api/payroll?companyId=${activeCompanyId}&month=${encodeURIComponent(selectedMonth)}&year=${selectedYear}`, { method: "DELETE" });
+    await fetch(`/api/payroll?companyId=${cid}&month=${encodeURIComponent(selectedMonth)}&year=${selectedYear}`, { method: "DELETE" });
     await fetch("/api/payroll", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newEntries) });
     await fetchPayroll();
     setRunConfirm(false);
+    setShowRunFromGroupDialog(false);
   };
 
   const markPaid = async (id: string) => {
@@ -993,7 +1002,7 @@ export default function PayrollPage() {
                 </Button>
               </>
             )}
-            <Button size="sm" onClick={() => !activeCompanyId ? setShowGroupHQWarning(true) : setRunConfirm(true)} disabled={!!activeCompanyId && staffList.filter(u=>u.status==="active").length === 0} title={!activeCompanyId ? "Switch to a specific company to run payroll" : "Run Payroll"}>
+            <Button size="sm" onClick={() => { if (!activeCompanyId) { setRunForCompanyId(companies[0]?.id ?? ""); setShowRunFromGroupDialog(true); } else { setRunConfirm(true); } }} title={!activeCompanyId ? "Select company to run payroll" : "Run Payroll"}>
               <FileText className="w-4 h-4 mr-2" /> Run Payroll
             </Button>
           </>
@@ -1695,26 +1704,36 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
         </DialogContent>
       </Dialog>
 
-      {/* ── Group HQ Warning Dialog ── */}
-      <Dialog open={showGroupHQWarning} onOpenChange={setShowGroupHQWarning}>
+      {/* ── Run Payroll from Group HQ: Company Picker ── */}
+      <Dialog open={showRunFromGroupDialog} onOpenChange={v => { if (!v) setShowRunFromGroupDialog(false); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Switch to a Specific Company First</DialogTitle>
+            <DialogTitle>Run Payroll — Select Company</DialogTitle>
           </DialogHeader>
           <div className="py-2 space-y-3">
-            <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-sm text-amber-800">
-              <p className="font-semibold mb-1">You are currently viewing Group HQ</p>
-              <p>Payroll must be run per company. To generate payslips:</p>
-              <ol className="list-decimal pl-4 mt-2 space-y-1">
-                <li>Click the <strong>company switcher</strong> in the top header (shows "Group HQ")</li>
-                <li>Select a specific company (e.g. Phid Technologies Ltd)</li>
-                <li>Click <strong>Run Payroll</strong> again</li>
-                <li>Repeat for each company</li>
-              </ol>
-            </div>
+            <p className="text-sm text-gray-600">You are in Group HQ view. Select a company to generate payroll for:</p>
+            <Select value={runForCompanyId} onValueChange={setRunForCompanyId}>
+              <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+              <SelectContent>
+                {companies.filter(c => c.id !== "group").map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {runForCompanyId && (
+              <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 text-sm text-blue-700">
+                <strong>{allStaffList.filter(u => u.companyId === runForCompanyId && u.status === "active" && u.salary > 0).length} active staff</strong> with salary set will receive payslips for {selectedMonth} {selectedYear}.
+                {allStaffList.filter(u => u.companyId === runForCompanyId && u.status === "active" && (!u.salary || u.salary === 0)).length > 0 && (
+                  <p className="text-xs text-amber-600 mt-1">{allStaffList.filter(u => u.companyId === runForCompanyId && u.status === "active" && (!u.salary || u.salary === 0)).length} staff without salary will be skipped.</p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button onClick={() => setShowGroupHQWarning(false)}>OK, Got It</Button>
+            <Button variant="outline" onClick={() => setShowRunFromGroupDialog(false)}>Cancel</Button>
+            <Button onClick={() => runPayroll(runForCompanyId)} disabled={!runForCompanyId || allStaffList.filter(u => u.companyId === runForCompanyId && u.status === "active" && u.salary > 0).length === 0}>
+              <FileText className="w-4 h-4 mr-2" /> Run Payroll
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1739,7 +1758,7 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRunConfirm(false)}>Cancel</Button>
-            <Button onClick={runPayroll} disabled={staffList.filter(u => u.status === "active" && u.salary > 0).length === 0}>
+            <Button onClick={() => runPayroll()} disabled={staffList.filter(u => u.status === "active" && u.salary > 0).length === 0}>
               <FileText className="w-4 h-4 mr-2" /> Confirm & Run Payroll
             </Button>
           </DialogFooter>
