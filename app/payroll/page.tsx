@@ -134,6 +134,7 @@ export default function PayrollPage() {
   const [advDisburseTarget, setAdvDisburseTarget] = useState<SalaryAdvance|null>(null);
   const [advDisburseFloatId, setAdvDisburseFloatId] = useState("");
   const [advDisburseLoading, setAdvDisburseLoading] = useState(false);
+  const [showGroupHQWarning, setShowGroupHQWarning] = useState(false);
 
   const GENERAL_ROLES_PAYROLL = ["admin","accountant","hr","group_ceo","group_cfo","group_manager","group_controller","group_hr","group_it","group_auditor","group_legal","group_accountant"];
 
@@ -975,7 +976,7 @@ export default function PayrollPage() {
               onImport={async (rows) => {
                 const res = await fetch("/api/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dbKey: "payroll", records: rows }) });
                 const data = await res.json();
-                await fetchPayroll();
+                fetchPayroll();
                 return { imported: data.imported ?? 0, errors: data.errors ?? [] };
               }}
             />
@@ -992,7 +993,7 @@ export default function PayrollPage() {
                 </Button>
               </>
             )}
-            <Button size="sm" onClick={() => setRunConfirm(true)} disabled={!activeCompanyId || staffList.filter(u=>u.status==="active").length === 0} title={!activeCompanyId ? "Switch to a specific company to run payroll" : "Run Payroll"}>
+            <Button size="sm" onClick={() => !activeCompanyId ? setShowGroupHQWarning(true) : setRunConfirm(true)} disabled={!!activeCompanyId && staffList.filter(u=>u.status==="active").length === 0} title={!activeCompanyId ? "Switch to a specific company to run payroll" : "Run Payroll"}>
               <FileText className="w-4 h-4 mr-2" /> Run Payroll
             </Button>
           </>
@@ -1690,6 +1691,57 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditEntry(null); setEditForm(null); }}>Cancel</Button>
             <Button onClick={saveEditEntry}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Group HQ Warning Dialog ── */}
+      <Dialog open={showGroupHQWarning} onOpenChange={setShowGroupHQWarning}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Switch to a Specific Company First</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-sm text-amber-800">
+              <p className="font-semibold mb-1">You are currently viewing Group HQ</p>
+              <p>Payroll must be run per company. To generate payslips:</p>
+              <ol className="list-decimal pl-4 mt-2 space-y-1">
+                <li>Click the <strong>company switcher</strong> in the top header (shows "Group HQ")</li>
+                <li>Select a specific company (e.g. Phid Technologies Ltd)</li>
+                <li>Click <strong>Run Payroll</strong> again</li>
+                <li>Repeat for each company</li>
+              </ol>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowGroupHQWarning(false)}>OK, Got It</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Run Payroll Confirm Dialog ── */}
+      <Dialog open={runConfirm} onOpenChange={v => { if (!v) setRunConfirm(false); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Run Payroll — {selectedMonth} {selectedYear}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 text-sm">
+              <p className="font-semibold text-blue-800 mb-1">{activeCompanyName}</p>
+              <p className="text-blue-700">This will generate payslips for <strong>{staffList.filter(u => u.status === "active" && u.salary > 0).length} active staff</strong> for {selectedMonth} {selectedYear}.</p>
+              <p className="text-xs text-blue-500 mt-1">Any existing payroll for this period will be replaced.</p>
+            </div>
+            {staffList.filter(u => u.status === "active" && (!u.salary || u.salary === 0)).length > 0 && (
+              <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 text-sm text-amber-700">
+                <strong>{staffList.filter(u => u.status === "active" && (!u.salary || u.salary === 0)).length} active staff</strong> have no salary set and will be skipped.
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRunConfirm(false)}>Cancel</Button>
+            <Button onClick={runPayroll} disabled={staffList.filter(u => u.status === "active" && u.salary > 0).length === 0}>
+              <FileText className="w-4 h-4 mr-2" /> Confirm & Run Payroll
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
