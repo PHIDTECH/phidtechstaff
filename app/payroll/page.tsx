@@ -1360,7 +1360,7 @@ export default function PayrollPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRunConfirm(false)}>Cancel</Button>
-            <Button onClick={runPayroll}><FileText className="w-4 h-4 mr-2" />Confirm & Run</Button>
+            <Button onClick={() => runPayroll()}><FileText className="w-4 h-4 mr-2" />Confirm & Run</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
