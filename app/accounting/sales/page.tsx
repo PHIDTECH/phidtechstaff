@@ -544,9 +544,9 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
                     <div className="overflow-y-auto max-h-52">
                     {(() => {
                       const formCo = form.saleCompanyId || cid;
-                      const base = formCo
-                        ? customers.filter(c => c.companyId === formCo || c.companyId === "group" || !c.companyId)
-                        : customers;
+                      const base = (isGroupHQ || !formCo)
+                        ? customers
+                        : customers.filter(c => c.companyId === formCo || c.companyId === "group" || !c.companyId);
                       const visibleCusts = custSearch
                         ? base.filter(c =>
                             c.name.toLowerCase().includes(custSearch.toLowerCase()) ||
@@ -554,8 +554,8 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
                             (c.phone ?? "").includes(custSearch)
                           )
                         : base;
-                      if (base.length === 0) return (
-                        <div className="px-3 py-4 text-center text-sm text-gray-400">{isGroupHQ && !form.saleCompanyId ? "Select a company first" : "No customers found"}</div>
+                      if (customers.length === 0) return (
+                        <div className="px-3 py-4 text-center text-sm text-gray-400">No customers found. Add customers first.</div>
                       );
                       if (visibleCusts.length === 0) return (
                         <div className="px-3 py-4 text-center text-sm text-gray-400">No match for "{custSearch}"</div>
