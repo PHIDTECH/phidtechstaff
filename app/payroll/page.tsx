@@ -152,7 +152,17 @@ export default function PayrollPage() {
     setSession(sess);
     const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
-    const companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+    let companies = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+    try {
+      const cr = await fetch("/api/companies", { cache: "no-store" });
+      if (cr.ok) {
+        const serverCos: {id:string;name:string}[] = await cr.json();
+        if (Array.isArray(serverCos) && serverCos.length > 0) {
+          companies = serverCos;
+          try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(serverCos)); } catch {}
+        }
+      }
+    } catch {}
     setCompanies(companies);
     setActiveCompanyName(companies.find(c => c.id === cid)?.name ?? "");
     const gc = lsStr(GROUP_KEY) || (companies[0]?.id ?? "");
@@ -174,11 +184,11 @@ export default function PayrollPage() {
     // cid === "" means Group HQ / all-companies view — do NOT default to "group"
     setActiveCompanyId(cid);
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_PAYROLL.includes(sess.position ?? sess.role ?? "");
-    const ACTIVE_STATUSES = ["active"];
+    const isActive = (u: StaffUser) => (u.status ?? "").toLowerCase() === "active";
     setStaffList(
       cid
-        ? allStaff.filter(u => u.companyId === cid && ACTIVE_STATUSES.includes(u.status) && (!isBM || u.branchId === sess?.branchId))
-        : allStaff.filter(u => ACTIVE_STATUSES.includes(u.status))  // Group HQ: active staff only
+        ? allStaff.filter(u => u.companyId === cid && isActive(u) && (!isBM || u.branchId === sess?.branchId))
+        : allStaff.filter(u => isActive(u))  // Group HQ: active staff only
     );
   };
 
@@ -275,9 +285,11 @@ export default function PayrollPage() {
   const runPayroll = async (targetCid?: string) => {
     const cid = targetCid ?? activeCompanyId;
     const isBM = !!session && !session.isSuperAdmin && !!session.branchId && !GENERAL_ROLES_PAYROLL.includes(session.position ?? session.role ?? "");
+    const isActive = (u: StaffUser) => (u.status ?? "").toLowerCase() === "active";
+    const hasSalary = (u: StaffUser) => Number(u.salary) > 0;
     const targetStaff = cid
-      ? allStaffList.filter(u => u.companyId === cid && u.status === "active" && u.salary > 0 && (!isBM || u.branchId === session?.branchId))
-      : allStaffList.filter(u => u.status === "active" && u.salary > 0);
+      ? allStaffList.filter(u => u.companyId === cid && isActive(u) && hasSalary(u) && (!isBM || u.branchId === session?.branchId))
+      : allStaffList.filter(u => isActive(u) && hasSalary(u));
     const activeStaff = targetStaff;
     if (activeStaff.length === 0) { setRunConfirm(false); setShowRunFromGroupDialog(false); return; }
     let allCommissions: StoredCommission[] = [];
@@ -286,7 +298,7 @@ export default function PayrollPage() {
       if (cr.ok) allCommissions = await cr.json();
     } catch { allCommissions = lsGet<StoredCommission[]>(COMMISSIONS_KEY, []); }
     const newEntries: PayrollEntry[] = activeStaff.map(emp => {
-      const basic = emp.salary;
+      const basic = Number(emp.salary);
       // Use staff's manually set allowances; fall back to empty if none set
       const staffAllowances = (emp.allowances ?? []).filter(a => a.name.trim() && a.amount > 0);
       // Add commissions for this staff for the selected month/year
@@ -1720,18 +1732,27 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
                 ))}
               </SelectContent>
             </Select>
-            {runForCompanyId && (
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 text-sm text-blue-700">
-                <strong>{allStaffList.filter(u => u.companyId === runForCompanyId && u.status === "active" && u.salary > 0).length} active staff</strong> with salary set will receive payslips for {selectedMonth} {selectedYear}.
-                {allStaffList.filter(u => u.companyId === runForCompanyId && u.status === "active" && (!u.salary || u.salary === 0)).length > 0 && (
-                  <p className="text-xs text-amber-600 mt-1">{allStaffList.filter(u => u.companyId === runForCompanyId && u.status === "active" && (!u.salary || u.salary === 0)).length} staff without salary will be skipped.</p>
-                )}
-              </div>
-            )}
+            {runForCompanyId && (() => {
+              const forCo = allStaffList.filter(u => u.companyId === runForCompanyId);
+              const activeForCo = forCo.filter(u => (u.status ?? "").toLowerCase() === "active");
+              const withSalary = activeForCo.filter(u => Number(u.salary) > 0);
+              const noSalary = activeForCo.filter(u => !(Number(u.salary) > 0));
+              return (
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 text-sm text-blue-700 space-y-1">
+                  <p><strong>{withSalary.length} active staff</strong> with salary set will receive payslips for {selectedMonth} {selectedYear}.</p>
+                  {noSalary.length > 0 && (
+                    <p className="text-xs text-amber-600"><strong>{noSalary.length} active staff</strong> have no salary set and will be skipped. Set their salary in Staff Management first.</p>
+                  )}
+                  {forCo.length === 0 && (
+                    <p className="text-xs text-red-500">No staff found for this company. Check that staff are assigned to the correct company.</p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRunFromGroupDialog(false)}>Cancel</Button>
-            <Button onClick={() => runPayroll(runForCompanyId)} disabled={!runForCompanyId || allStaffList.filter(u => u.companyId === runForCompanyId && u.status === "active" && u.salary > 0).length === 0}>
+            <Button onClick={() => runPayroll(runForCompanyId)} disabled={!runForCompanyId || allStaffList.filter(u => u.companyId === runForCompanyId && (u.status ?? "").toLowerCase() === "active" && Number(u.salary) > 0).length === 0}>
               <FileText className="w-4 h-4 mr-2" /> Run Payroll
             </Button>
           </DialogFooter>
