@@ -111,7 +111,17 @@ export default function TasksPage() {
     setSession(sess);
     const cid = getActiveCid(sess);
     setActiveCompanyId(cid);
-    const cos = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+    let cos = lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []);
+    try {
+      const cr = await fetch("/api/companies", { cache: "no-store" });
+      if (cr.ok) {
+        const srvCos: {id:string;name:string}[] = await cr.json();
+        if (Array.isArray(srvCos) && srvCos.length > 0) {
+          cos = srvCos;
+          try { localStorage.setItem(COMPANIES_KEY, JSON.stringify(srvCos)); } catch {}
+        }
+      }
+    } catch {}
     setCompaniesList(cos);
     const gc = lsStr(GROUP_KEY) || (cos[0]?.id ?? "");
     setGroupCompanyId(gc);
@@ -889,7 +899,9 @@ export default function TasksPage() {
                   <SelectContent className="max-h-52">
                     {(() => {
                       const formCid2 = form.taskCompanyId || activeCompanyId;
-                      const baseList = formCid2 ? allStaffList.filter(u => u.companyId === formCid2) : allStaffList;
+                      const byCompany = formCid2 ? allStaffList.filter(u => u.companyId === formCid2) : allStaffList;
+                      // Fall back to all staff if company filter returns nothing (companyId mismatch)
+                      const baseList = byCompany.length > 0 ? byCompany : allStaffList;
                       const filtered = baseList.filter(u =>
                         !form.branchId || form.branchId === "__all" || u.branchId === form.branchId
                       );
@@ -946,8 +958,9 @@ export default function TasksPage() {
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Chat Participants <span className="text-gray-400 font-normal text-xs">(optional — can chat on this task)</span></label>
               {(() => {
                 const formCid3 = form.taskCompanyId || activeCompanyId;
-                const pickable = (formCid3 ? allStaffList.filter(u => u.companyId === formCid3) : allStaffList)
-                  .filter(u => u.id !== form.assignedTo && u.status === "active");
+                const byCo3 = formCid3 ? allStaffList.filter(u => u.companyId === formCid3) : allStaffList;
+                const pickable = (byCo3.length > 0 ? byCo3 : allStaffList)
+                  .filter(u => u.id !== form.assignedTo && (u.status ?? "").toLowerCase() === "active");
                 return (
                   <div className="border border-gray-200 rounded-lg p-2 max-h-36 overflow-y-auto space-y-1">
                     {pickable.length === 0 ? (
