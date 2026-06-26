@@ -1014,7 +1014,7 @@ export default function PayrollPage() {
                 </Button>
               </>
             )}
-            <Button size="sm" onClick={() => { if (!activeCompanyId) { setRunForCompanyId(companies[0]?.id ?? ""); setShowRunFromGroupDialog(true); } else { setRunConfirm(true); } }} title={!activeCompanyId ? "Select company to run payroll" : "Run Payroll"}>
+            <Button size="sm" onClick={() => { if (!activeCompanyId) { const firstStaffCo = allStaffList[0]?.companyId ?? companies.filter(c => c.id !== "group")[0]?.id ?? ""; setRunForCompanyId(firstStaffCo); setShowRunFromGroupDialog(true); } else { setRunConfirm(true); } }} title={!activeCompanyId ? "Select company to run payroll" : "Run Payroll"}>
               <FileText className="w-4 h-4 mr-2" /> Run Payroll
             </Button>
           </>
@@ -1724,14 +1724,28 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
           </DialogHeader>
           <div className="py-2 space-y-3">
             <p className="text-sm text-gray-600">You are in Group HQ view. Select a company to generate payroll for:</p>
-            <Select value={runForCompanyId} onValueChange={setRunForCompanyId}>
-              <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
-              <SelectContent>
-                {companies.filter(c => c.id !== "group").map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {(() => {
+              // Build company list from ACTUAL staff companyIds to guarantee ID match
+              const staffCoIds = [...new Set(allStaffList.map(u => u.companyId).filter(Boolean))];
+              const staffCompanies = staffCoIds.map(id => ({
+                id,
+                name: companies.find(c => c.id === id)?.name ?? id,
+              })).sort((a, b) => a.name.localeCompare(b.name));
+              // Fall back to companies from API if no staff loaded yet
+              const dropdownCos = staffCompanies.length > 0
+                ? staffCompanies
+                : companies.filter(c => c.id !== "group");
+              return (
+                <Select value={runForCompanyId} onValueChange={setRunForCompanyId}>
+                  <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+                  <SelectContent>
+                    {dropdownCos.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              );
+            })()}
             {runForCompanyId && (() => {
               const forCo = allStaffList.filter(u => u.companyId === runForCompanyId);
               const activeForCo = forCo.filter(u => (u.status ?? "").toLowerCase() === "active");
@@ -1744,7 +1758,7 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;max-widt
                     <p className="text-xs text-amber-600"><strong>{noSalary.length} active staff</strong> have no salary set and will be skipped. Set their salary in Staff Management first.</p>
                   )}
                   {forCo.length === 0 && (
-                    <p className="text-xs text-red-500">No staff found for this company. Check that staff are assigned to the correct company.</p>
+                    <p className="text-xs text-red-500">No staff found for this company ID. Check staff assignments in Staff Management.</p>
                   )}
                 </div>
               );
