@@ -41,6 +41,7 @@ const PERM_ROUTES: Record<string, string[]> = {
   pending_payments:    ["/accounting/pending-payments"],
   account_floats:      ["/accounting/account-floats"],
   debtors:             ["/accounting/debtors"],
+  projected_budget:    ["/accounting/projected"],
   accounting:          ["/accounting"],
   invoices:          ["/invoices"],
   petty_cash:        ["/petty-cash"],
@@ -118,6 +119,7 @@ const ALL_NAV: NavGroup[] = [
       { label: "Marketing Expenses",    href: "/expenses",                    icon: Receipt      },
       { label: "Promised Deal & Payments", href: "/accounting/pending-payments",  icon: Wallet       },
       { label: "Account Floats",         href: "/accounting/account-floats",   icon: Wallet       },
+      { label: "Projected Budget",       href: "/accounting/projected",        icon: BarChart3    },
       { label: "Reports",               href: "/accounting/financial-reports", icon: BarChart3    },
     ]
   },

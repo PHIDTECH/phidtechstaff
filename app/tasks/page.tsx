@@ -199,6 +199,8 @@ export default function TasksPage() {
   useEffect(() => {
     loadSession();
     fetchTasks();
+    // Trigger daily due-task SMS reminders (non-blocking)
+    fetch("/api/task-reminders", { method: "POST" }).catch(() => {});
     window.addEventListener("phidtech_companies_updated", reload);
     window.addEventListener("storage", reload);
     return () => {

@@ -10,7 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { readDb, writeDb } from "@/lib/serverDb";
-import { sendSms } from "@/lib/smsService";
+import { sendSms } from "@/lib/beemSms";
 import type { AppNotification } from "@/app/api/notifications/route";
 
 interface Sale {
@@ -99,8 +99,8 @@ export async function POST() {
       // Attempt SMS
       let smsSent = false;
       if (phone) {
-        const result = await sendSms(phone, message);
-        smsSent = result.success;
+        const result = await sendSms(phone, sale.customerName, message, "debt_reminder");
+        smsSent = result.ok;
       }
 
       // Create in-app notification
