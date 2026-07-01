@@ -41,6 +41,8 @@ interface Sale {
   items: SaleItem[]; subtotal: number; tax: number; amount: number;
   paid: number; balance: number;
   status: "paid" | "partial" | "unpaid";
+  paymentPlan?: "once" | "monthly" | "3months" | "6months" | "yearly";
+  dueDate?: string;
   notes: string; createdAt: string;
 }
 
@@ -48,6 +50,8 @@ const emptyItem = (): SaleItem => ({ description: "", quantity: 1, unitPrice: 0,
 const emptyForm = () => ({
   customerId: "", date: new Date().toISOString().slice(0, 10),
   items: [emptyItem()], paid: "", notes: "", saleCompanyId: "",
+  paymentPlan: "once" as Sale["paymentPlan"],
+  dueDate: "",
 });
 
 const statusColors: Record<string, string> = {
@@ -313,7 +317,7 @@ export default function AccountingSalesPage() {
     setEditItem(s);
     const c = customers.find(cu => cu.id === s.customerId) ?? null;
     setSelCustomer(c);
-    setForm({ customerId: s.customerId, date: s.date, items: s.items.length ? s.items : [emptyItem()], paid: String(s.paid), notes: s.notes, saleCompanyId: s.companyId });
+    setForm({ customerId: s.customerId, date: s.date, items: s.items.length ? s.items : [emptyItem()], paid: String(s.paid), notes: s.notes, saleCompanyId: s.companyId, paymentPlan: s.paymentPlan ?? "once", dueDate: s.dueDate ?? "" });
     setFormError(""); setShowDialog(true);
   };
 
@@ -331,7 +335,8 @@ export default function AccountingSalesPage() {
         customerName: cust?.name ?? editItem.customerName,
         customerPhone: cust?.phone ?? editItem.customerPhone,
         customerAddress: cust?.address ?? editItem.customerAddress,
-        items: filled, subtotal, tax, amount, paid, balance, status, notes: form.notes };
+        items: filled, subtotal, tax, amount, paid, balance, status, notes: form.notes,
+        paymentPlan: form.paymentPlan, dueDate: form.dueDate || undefined };
       await fetch("/api/accounting/sales", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updated) });
     } else {
       const saleNum = `SAL-${Date.now().toString().slice(-6)}`;
@@ -341,7 +346,8 @@ export default function AccountingSalesPage() {
         customerName: cust?.name ?? "", customerPhone: cust?.phone ?? "",
         customerAddress: cust?.address ?? "",
         items: filled, subtotal, tax, amount, paid, balance, status,
-        notes: form.notes, createdAt: new Date().toISOString(),
+        notes: form.notes, paymentPlan: form.paymentPlan, dueDate: form.dueDate || undefined,
+        createdAt: new Date().toISOString(),
       };
       await fetch("/api/accounting/sales", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newSale) });
     }
@@ -780,6 +786,37 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
                     <span className={`px-2 py-0.5 rounded-full font-medium ${statusColors[previewCalc.status]}`}>{previewCalc.status}</span>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Payment Plan</label>
+                <Select value={form.paymentPlan ?? "once"} onValueChange={v => sf({ paymentPlan: v as Sale["paymentPlan"] })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="once">One-time Payment</SelectItem>
+                    <SelectItem value="monthly">Monthly Installments</SelectItem>
+                    <SelectItem value="3months">Every 3 Months</SelectItem>
+                    <SelectItem value="6months">Every 6 Months</SelectItem>
+                    <SelectItem value="yearly">Annual Payment</SelectItem>
+                  </SelectContent>
+                </Select>
+                {form.paymentPlan !== "once" && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    {form.paymentPlan === "monthly" ? "Reminders sent on 25th, 27th, 30th each month" :
+                     form.paymentPlan === "3months" ? "Reminders 3 days before each quarterly due date" :
+                     form.paymentPlan === "6months" ? "Reminders 3 days before each semi-annual due date" :
+                     "Reminders 3 days before annual due date"}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Due Date</label>
+                <Input type="date" value={form.dueDate} onChange={e => sf({ dueDate: e.target.value })} />
+                <p className="text-xs text-gray-400 mt-1">
+                  {form.paymentPlan === "once" ? "Date full payment is expected" : "First payment due date"}
+                </p>
               </div>
             </div>
 

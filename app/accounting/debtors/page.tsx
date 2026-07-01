@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, Search, RefreshCw, Download, Upload, AlertCircle, CheckCircle, Clock, TrendingUp } from "lucide-react";
+import { Users, Search, RefreshCw, Download, Upload, AlertCircle, CheckCircle, Clock, TrendingUp, Bell } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
@@ -75,7 +75,15 @@ export default function DebtorsPage() {
   const [expanded, setExpanded]     = useState<string | null>(null);
   const [importing, setImporting]   = useState(false);
   const [importMsg, setImportMsg]   = useState<{type:"success"|"error";text:string}|null>(null);
+  const [remindersToday, setRemindersToday] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const runReminders = async () => {
+    try {
+      const r = await fetch("/api/debt-reminders", { method: "POST" });
+      if (r.ok) { const d = await r.json(); setRemindersToday(d.reminders ?? 0); }
+    } catch {}
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -150,7 +158,7 @@ export default function DebtorsPage() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); runReminders(); }, []);
 
   const isGroupView = !cid || cid === groupCid;
   const filtered = debtors
@@ -242,6 +250,11 @@ export default function DebtorsPage() {
             <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />Refresh
             </Button>
+            {remindersToday > 0 && (
+              <span className="flex items-center gap-1 bg-orange-100 text-orange-700 text-xs font-semibold px-3 py-1.5 rounded-full border border-orange-200">
+                <Bell className="w-3.5 h-3.5" />{remindersToday} reminder{remindersToday !== 1 ? "s" : ""} sent today
+              </span>
+            )}
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
             <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importing}>
               <Upload className={`w-4 h-4 mr-2 ${importing ? "animate-pulse" : ""}`} />{importing ? "Importing..." : "Import CSV"}
