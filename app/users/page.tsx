@@ -309,6 +309,15 @@ export default function UsersPage() {
     _ur.includes("ceo") || _up.includes("ceo") ||
     _ur.includes("manager") || _up.includes("manager") ||
     GENERAL_ROLES_USERS.some(r => _ur === r || _up === r);
+  // Who can reset/change passwords: superAdmin, admin, CEO, GM, group_operation_manager (group_controller), accountant
+  const canResetPassword = sessionData?.isSuperAdmin ||
+    _ur === "admin"              || _up === "admin"              ||
+    _ur.includes("ceo")          || _up.includes("ceo")          ||
+    _ur.includes("manager")      || _up.includes("manager")      ||
+    _ur === "group_controller"   || _up === "group_controller"   ||
+    _ur.includes("accountant")   || _up.includes("accountant")   ||
+    // also allow users to always reset their own password (handled separately)
+    false;
   const isGroupManagerUser = sessionData?.isSuperAdmin ||
     _ur.includes("manager") || _up.includes("manager") ||
     _ur.includes("admin")   || _up.includes("admin")   ||
@@ -627,12 +636,18 @@ export default function UsersPage() {
                           <Button variant="ghost" size="icon" onClick={() => setSelectedUser(user)}>
                             <Eye className="w-4 h-4 text-gray-400" />
                           </Button>
+                          {/* Self-reset: always show for own record */}
+                          {!canEditUser && user.id === sessionData?.id && (
+                            <Button variant="ghost" size="icon" title="Change My Password" onClick={() => { setResetPwUser(user); setResetPwVal(""); setResetPwMsg(""); }}>
+                              <Lock className="w-4 h-4 text-orange-400" />
+                            </Button>
+                          )}
                           {canEditUser && (
                             <>
                               <Button variant="ghost" size="icon" title="Edit user" onClick={() => openEdit(user)}>
                                 <Edit className="w-4 h-4 text-blue-400" />
                               </Button>
-                              {sessionData?.isSuperAdmin && (
+                              {(canResetPassword || user.id === sessionData?.id) && (
                                 <Button variant="ghost" size="icon" title="Reset Password" onClick={() => { setResetPwUser(user); setResetPwVal(""); setResetPwMsg(""); }}>
                                   <Lock className="w-4 h-4 text-orange-400" />
                                 </Button>
@@ -719,6 +734,11 @@ export default function UsersPage() {
                               <Button variant="ghost" size="icon" onClick={() => openEdit(user)}>
                                 <Edit className="w-4 h-4 text-blue-400" />
                               </Button>
+                              {(canResetPassword || user.id === sessionData?.id) && (
+                                <Button variant="ghost" size="icon" title="Reset Password" onClick={() => { setResetPwUser(user); setResetPwVal(""); setResetPwMsg(""); }}>
+                                  <Lock className="w-4 h-4 text-orange-400" />
+                                </Button>
+                              )}
                               <Button variant="ghost" size="icon" onClick={() => setDeleteId(user.id)}>
                                 <Trash2 className="w-4 h-4 text-red-400" />
                               </Button>
