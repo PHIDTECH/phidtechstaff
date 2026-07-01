@@ -700,13 +700,17 @@ export default function ReportsPage() {
                     <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Assets</h3>
                     <div className="divide-y divide-gray-50">
                       {[
-                        { label: "Fixed Assets (Book Value)", value: totalAssetValue  },
-                        { label: "Loan Portfolio (Active)",   value: activeLoanAmt    },
-                        { label: "Sales Receivable",          value: salesReceivable  },
-                        { label: "Cash / Petty Cash Fund",    value: pettyCashBal     },
+                        { label: "Fixed Assets (Book Value)", value: totalAssetValue, href: null },
+                        { label: "Loan Portfolio (Active)",   value: activeLoanAmt,   href: null },
+                        { label: "Accounts Receivable (Debtors)", value: salesReceivable, href: "/accounting/debtors" },
+                        { label: "Cash / Petty Cash Fund",    value: pettyCashBal,    href: null },
                       ].map(r => (
                         <div key={r.label} className="flex justify-between py-2.5">
-                          <span className="text-sm text-gray-700">{r.label}</span>
+                          {r.href ? (
+                            <a href={r.href} className="text-sm text-blue-600 hover:underline font-medium">{r.label} ↗</a>
+                          ) : (
+                            <span className="text-sm text-gray-700">{r.label}</span>
+                          )}
                           <span className="text-sm font-medium text-gray-900">{formatCurrency(r.value)}</span>
                         </div>
                       ))}
