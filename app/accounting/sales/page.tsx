@@ -94,7 +94,7 @@ export default function AccountingSalesPage() {
   const [custSearch, setCustSearch]   = useState("");
 
   const [loading, setLoading]       = useState(true);
-  const [statPeriod, setStatPeriod] = useState<"daily"|"weekly"|"monthly"|"all">("daily");
+  const [statPeriod, setStatPeriod] = useState<"daily"|"weekly"|"monthly"|"yearly"|"all">("daily");
   const [statDate, setStatDate]     = useState(new Date().toISOString().slice(0,10));
   const [importing, setImporting]   = useState(false);
   const [importMsg, setImportMsg]   = useState<{type:"success"|"error";text:string}|null>(null);
@@ -171,18 +171,10 @@ export default function AccountingSalesPage() {
   const coSales   = (co ? sales.filter(s => s.companyId === co) : sales).sort((a,b) => b.date.localeCompare(a.date));
   const coCusts   = co ? customers.filter(c => c.companyId === co) : customers;
 
-  const filtered  = coSales.filter(s => {
-    const ms = s.customerName.toLowerCase().includes(search.toLowerCase()) || s.id.toLowerCase().includes(search.toLowerCase());
-    const mf = statusFilter === "all" || s.status === statusFilter;
-    return ms && mf;
-  });
-
-  const today    = new Date().toISOString().slice(0,10);
+  const today     = new Date().toISOString().slice(0,10);
   const thisMonth = today.slice(0,7);
   const totalRev  = coSales.reduce((s,e) => s + e.amount, 0);
   const totalPaid = coSales.reduce((s,e) => s + e.paid, 0);
-  const dailyRev  = coSales.filter(s => s.date === today).reduce((s,e) => s + e.amount, 0);
-  const monthRev  = coSales.filter(s => s.date.startsWith(thisMonth)).reduce((s,e) => s + e.amount, 0);
 
   const getWeekStart = (d: string) => {
     const dt = new Date(d); dt.setDate(dt.getDate() - dt.getDay() + 1); return dt.toISOString().slice(0,10);
@@ -190,12 +182,21 @@ export default function AccountingSalesPage() {
   const getWeekEnd = (d: string) => {
     const dt = new Date(d); dt.setDate(dt.getDate() - dt.getDay() + 7); return dt.toISOString().slice(0,10);
   };
-  const periodSales = coSales.filter(s => {
+  const periodFilter = (s: Sale) => {
     if (statPeriod === "daily")   return s.date === statDate;
     if (statPeriod === "weekly")  return s.date >= getWeekStart(statDate) && s.date <= getWeekEnd(statDate);
     if (statPeriod === "monthly") return s.date.startsWith(statDate.slice(0,7));
+    if (statPeriod === "yearly")  return s.date.startsWith(statDate.slice(0,4));
     return true;
+  };
+
+  const filtered  = coSales.filter(s => {
+    const ms = s.customerName.toLowerCase().includes(search.toLowerCase()) || s.id.toLowerCase().includes(search.toLowerCase());
+    const mf = statusFilter === "all" || s.status === statusFilter;
+    return ms && mf && periodFilter(s);
   });
+
+  const periodSales = coSales.filter(periodFilter);
   const periodRev  = periodSales.reduce((s,e) => s + e.amount, 0);
   const periodPaid = periodSales.reduce((s,e) => s + e.paid, 0);
   const periodOut  = periodRev - periodPaid;
@@ -429,25 +430,44 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
 
       {/* Period filter */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        {(["daily","weekly","monthly","all"] as const).map(p => (
+        {(["daily","weekly","monthly","yearly","all"] as const).map(p => (
           <button key={p} onClick={() => setStatPeriod(p)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
               statPeriod === p ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
             }`}>
-            {p === "daily" ? "Daily" : p === "weekly" ? "Weekly" : p === "monthly" ? "Monthly" : "All Time"}
+            {p === "daily" ? "Today" : p === "weekly" ? "This Week" : p === "monthly" ? "Monthly" : p === "yearly" ? "Yearly" : "All Time"}
           </button>
         ))}
-        {statPeriod !== "all" && (
-          <input type={statPeriod === "monthly" ? "month" : "date"}
-            value={statPeriod === "monthly" ? statDate.slice(0,7) : statDate}
-            onChange={e => setStatDate(statPeriod === "monthly" ? e.target.value + "-01" : e.target.value)}
+        {statPeriod === "daily" && (
+          <input type="date" value={statDate}
+            onChange={e => setStatDate(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+        )}
+        {statPeriod === "weekly" && (
+          <input type="date" value={statDate}
+            onChange={e => setStatDate(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+        )}
+        {statPeriod === "monthly" && (
+          <input type="month" value={statDate.slice(0,7)}
+            onChange={e => setStatDate(e.target.value + "-01")}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+        )}
+        {statPeriod === "yearly" && (
+          <input type="number" min="2020" max="2099" value={statDate.slice(0,4)}
+            onChange={e => setStatDate(e.target.value + "-01-01")}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 w-24 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+        )}
+        {statPeriod !== "all" && (
+          <span className="text-xs text-gray-500 ml-1">
+            {filtered.length} record{filtered.length !== 1 ? "s" : ""}
+          </span>
         )}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard title="Revenue" value={formatCurrency(periodRev)} icon={DollarSign} iconBg="bg-blue-50" iconColor="text-blue-600"
-          subtitle={statPeriod === "daily" ? statDate : statPeriod === "weekly" ? `${getWeekStart(statDate)} – ${getWeekEnd(statDate)}` : statPeriod === "monthly" ? statDate.slice(0,7) : "All time"} />
+          subtitle={statPeriod === "daily" ? statDate : statPeriod === "weekly" ? `${getWeekStart(statDate)} – ${getWeekEnd(statDate)}` : statPeriod === "monthly" ? statDate.slice(0,7) : statPeriod === "yearly" ? statDate.slice(0,4) : "All time"} />
         <StatCard title="Amount Paid" value={formatCurrency(periodPaid)} icon={CheckCircle} iconBg="bg-green-50" iconColor="text-green-600"
           subtitle={`${periodSales.filter(s=>s.status==="paid").length} fully paid`} />
         <StatCard title="Outstanding" value={formatCurrency(periodOut)} icon={Clock} iconBg="bg-red-50" iconColor="text-red-500"
@@ -457,7 +477,12 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <h3 className="font-semibold text-gray-900">Sales Register</h3>
+          <h3 className="font-semibold text-gray-900">
+            Sales Register
+            {statPeriod !== "all" && <span className="ml-2 text-xs font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+              {statPeriod === "daily" ? statDate : statPeriod === "weekly" ? `${getWeekStart(statDate)} – ${getWeekEnd(statDate)}` : statPeriod === "monthly" ? statDate.slice(0,7) : statDate.slice(0,4)}
+            </span>}
+          </h3>
           <div className="flex items-center gap-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
