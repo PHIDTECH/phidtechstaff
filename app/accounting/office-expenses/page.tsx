@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Building2, Plus, Search, CheckCircle, Clock, XCircle, DollarSign, Edit, Trash2, Eye, AlertCircle } from "lucide-react";
+import { Building2, Plus, Search, CheckCircle, Clock, XCircle, DollarSign, Edit, Trash2, Eye, AlertCircle, Download, Upload } from "lucide-react";
 import { formatDate, formatCurrency, getStatusColor, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -111,6 +111,9 @@ export default function OfficeExpensesPage() {
   const [disburseFloatId, setDisburseFloatId] = useState("");
   const [disburseLoading, setDisburseLoading] = useState(false);
   const [disburseErr, setDisburseErr]     = useState("");
+  const [importing, setImporting]         = useState(false);
+  const [importMsg, setImportMsg]         = useState<{type:"success"|"error";text:string}|null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const loadSession = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
@@ -156,6 +159,78 @@ export default function OfficeExpensesPage() {
   };
 
   const reload = () => { loadSession(); fetchExpenses(); };
+
+  const downloadCSV = () => {
+    const co = cidRef.current || activeCompanyId;
+    const list = (co ? expenses.filter(e => e.companyId === co) : expenses)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    const header = "Date,Title,Category,Amount,Status,Payment Mode,Reference,Recorded By";
+    const rows = list.map(e =>
+      `"${e.date}","${e.title}","${e.category}","${e.amount}","${e.status}","${e.paymentMode || ""}","${e.referenceNo || ""}","${e.recordedBy || ""}"`
+    ).join("\n");
+    const blob = new Blob([`${header}\n${rows}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url;
+    a.download = `Office_Expenses_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true); setImportMsg(null);
+    try {
+      let cos = companies;
+      if (cos.length === 0) {
+        const cr = await fetch("/api/companies", { cache: "no-store" });
+        if (cr.ok) cos = await cr.json();
+      }
+      const validCos = cos.filter(c => c.id && c.id !== "group");
+      const targetCid = cidRef.current || activeCompanyId || validCos[0]?.id || "";
+      if (!targetCid) throw new Error("No company found. Switch to a specific company first.");
+      const text = await file.text();
+      const allLines = text.trim().split(/\r?\n/);
+      if (allLines.length < 2) throw new Error("No data rows found in CSV");
+      const hdrs = (allLines[0].match(/("([^"]*)"|[^,]*)/g) || []).map(h => h.replace(/^"|"$/g, "").trim().toLowerCase());
+      const col = (n: string) => hdrs.findIndex(h => h.includes(n));
+      const iDate = col("date"); const iTitle = col("title"); const iCat = col("categ");
+      const iAmt = col("amount"); const iStatus = col("status"); const iMode = col("mode");
+      const iRef = col("ref"); const iRec = col("recorded");
+      let imported = 0; let lastError = "";
+      for (const line of allLines.slice(1)) {
+        if (!line.trim()) continue;
+        const vals = line.match(/("([^"]*)"|[^,]*)/g) || [];
+        const clean = (i: number) => i >= 0 ? (vals[i] || "").replace(/^"|"$/g, "").trim() : "";
+        const rawDate = clean(iDate);
+        const date = rawDate ? (rawDate.includes("-") ? rawDate : (() => { const d = new Date(rawDate); return isNaN(d.getTime()) ? new Date().toISOString().slice(0,10) : d.toISOString().slice(0,10); })()) : new Date().toISOString().slice(0,10);
+        const entry: OfficeExpense = {
+          id: `imp_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
+          companyId: targetCid,
+          date, title: clean(iTitle) || "Imported Expense",
+          category: clean(iCat) || OFFICE_EXPENSE_CATEGORIES[0],
+          amount: Number(clean(iAmt).replace(/[^0-9.-]/g, "")) || 0,
+          status: (clean(iStatus) || "pending") as OfficeExpense["status"],
+          paymentMode: clean(iMode) || "cash",
+          referenceNo: clean(iRef), recordedBy: clean(iRec) || session?.name || "",
+          description: "", createdAt: new Date().toISOString(),
+        };
+        const res = await fetch("/api/office-expenses", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(entry),
+        });
+        if (res.ok) imported++;
+        else { const err = await res.json().catch(() => ({})); lastError = err.error || res.statusText; }
+      }
+      if (imported === 0 && lastError) throw new Error(lastError);
+      setImportMsg({ type: "success", text: `Imported ${imported} records` });
+      await fetchExpenses();
+    } catch (err) {
+      setImportMsg({ type: "error", text: err instanceof Error ? err.message : "Import failed" });
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+      setTimeout(() => setImportMsg(null), 5000);
+    }
+  };
 
   useEffect(() => {
     loadSession();
@@ -324,14 +399,28 @@ export default function OfficeExpensesPage() {
 
   return (
     <MainLayout>
+      {importMsg && (
+        <div className={`mb-4 rounded-lg px-4 py-3 text-sm font-medium ${importMsg.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+          {importMsg.text}
+        </div>
+      )}
       <PageHeader
         title="Office Expenses"
         subtitle="Record and track business operating expenses — advertisement, TRA, licences, rent, utilities and more"
         icon={Building2}
         actions={
-          <Button size="sm" onClick={openAdd}>
-            <Plus className="w-4 h-4 mr-2" /> Record Expense
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+            <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importing}>
+              <Upload className={`w-4 h-4 mr-2 ${importing ? "animate-pulse" : ""}`} />{importing ? "Importing..." : "Import CSV"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={downloadCSV}>
+              <Download className="w-4 h-4 mr-2" />Export CSV
+            </Button>
+            <Button size="sm" onClick={openAdd}>
+              <Plus className="w-4 h-4 mr-2" /> Record Expense
+            </Button>
+          </div>
         }
       />
 
