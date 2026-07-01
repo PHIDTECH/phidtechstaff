@@ -1,12 +1,12 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BarChart3, Printer, Download, RefreshCw, Users, ShoppingCart, Receipt, DollarSign, TrendingUp, Activity, FileText, Wallet, CreditCard, Landmark, UserCheck, Briefcase, Scale, Megaphone } from "lucide-react";
+import { BarChart3, Printer, Download, Upload, RefreshCw, Users, ShoppingCart, Receipt, DollarSign, TrendingUp, Activity, FileText, Wallet, CreditCard, Landmark, UserCheck, Briefcase, Scale, Megaphone } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
@@ -113,6 +113,9 @@ export default function ReportsPage() {
   const [mfCusts,    setMfCusts]    = useState<Row[]>([]);
   const [mktCusts,   setMktCusts]   = useState<Row[]>([]);
   const [floats,     setFloats]     = useState<AccountFloat[]>([]);
+  const [importing,  setImporting]  = useState(false);
+  const [importMsg,  setImportMsg]  = useState<{type:"success"|"error";text:string}|null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -525,6 +528,93 @@ export default function ReportsPage() {
     a.click(); URL.revokeObjectURL(url);
   };
 
+  const API_ENDPOINTS: Record<string, string> = {
+    customers: "/api/customers",
+    sales: "/api/accounting/sales",
+    marketing_expenses: "/api/expenses",
+    office_expenses: "/api/office-expenses",
+    staff_claims: "/api/expenses",
+    payroll: "/api/payroll",
+    invoices: "/api/invoices",
+    petty_cash: "/api/petty-cash",
+    loan_customers: "/api/loans",
+    loan_interest: "/api/loan-interest",
+    assets: "/api/assets",
+    microfinance_customers: "/api/microfinance-customers",
+    marketing_customers: "/api/marketing-customers",
+  };
+
+  const parseCSV = (text: string): Row[] => {
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
+    const keyMap: Record<string, string> = {
+      "#": "_rowNum", "Customer Name": "name", "Customer": "customerName",
+      "Company": "company", "Customer Type": "customerType", "Phone": "phone",
+      "Email": "email", "Service / Product": "serviceProduct", "Status": "status",
+      "Date": "date", "Date Registered": "date", "Amount": "amount", "Paid": "paid",
+      "Balance": "balance", "Notes": "notes", "Employee": "userName", "Title": "title",
+      "Category": "category", "Payment Mode": "paymentMode", "Description": "description",
+      "Staff Name": "staffName", "Month": "month", "Year": "year", "Basic Salary": "basicSalary",
+      "Gross Salary": "grossSalary", "Net Salary": "netSalary", "Generated": "generatedAt",
+      "Invoice No": "invoiceNumber", "Due Date": "dueDate", "Type": "type", "Recorded By": "createdBy",
+      "Loan Amount": "amountOfLoan", "Rate/Mo": "interestPerMonth", "Period": "loanPeriod",
+      "Interest Revenue": "interestRevenue", "Asset Name": "name", "Location": "location",
+      "Purchase Date": "purchaseDate", "Purchase Cost": "purchaseCost", "Current Value": "currentValue",
+    };
+    return lines.slice(1).map(line => {
+      const vals = line.match(/("([^"]*)"|[^,]*)/g) || [];
+      const row: Row = {};
+      headers.forEach((h, i) => {
+        const key = keyMap[h] || h.toLowerCase().replace(/\s+/g, "_");
+        let val = (vals[i] || "").replace(/^"|"$/g, "").trim();
+        if (val.startsWith("TSh ")) val = val.replace(/TSh\s*/g, "").replace(/,/g, "");
+        if (val.endsWith("%")) val = val.replace(/%$/, "");
+        if (val.endsWith(" mo.")) val = val.replace(/ mo\.$/, "");
+        row[key] = val;
+      });
+      if (!row.id) row.id = `imp_${Date.now()}_${Math.random().toString(36).slice(2,9)}`;
+      if (!row.companyId && cid) row.companyId = cid;
+      if (!row.createdAt) row.createdAt = new Date().toISOString();
+      return row;
+    });
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const endpoint = API_ENDPOINTS[report];
+    if (!endpoint) {
+      setImportMsg({ type: "error", text: `Import not supported for ${cfg.label}` });
+      setTimeout(() => setImportMsg(null), 4000);
+      return;
+    }
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const text = await file.text();
+      const rows = parseCSV(text);
+      if (rows.length === 0) throw new Error("No valid rows found in CSV");
+      let imported = 0;
+      for (const row of rows) {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(row),
+        });
+        if (res.ok) imported++;
+      }
+      setImportMsg({ type: "success", text: `Successfully imported ${imported} of ${rows.length} records` });
+      await loadData();
+    } catch (err) {
+      setImportMsg({ type: "error", text: err instanceof Error ? err.message : "Import failed" });
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+      setTimeout(() => setImportMsg(null), 5000);
+    }
+  };
+
   return (
     <MainLayout>
       <div className="space-y-4">
@@ -537,9 +627,13 @@ export default function ReportsPage() {
               <p className="text-sm text-gray-500">Print and download reports • {companyName}</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
             <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
               <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importing || !API_ENDPOINTS[report]}>
+              <Upload className={`w-4 h-4 mr-1.5 ${importing ? "animate-pulse" : ""}`} /> {importing ? "Importing..." : "Import CSV"}
             </Button>
             <Button variant="outline" size="sm" onClick={downloadCSV}>
               <Download className="w-4 h-4 mr-1.5" /> Download CSV
@@ -549,6 +643,11 @@ export default function ReportsPage() {
             </Button>
           </div>
         </div>
+        {importMsg && (
+          <div className={`rounded-lg px-4 py-3 text-sm font-medium ${importMsg.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+            {importMsg.text}
+          </div>
+        )}
 
         <div className="flex flex-col lg:flex-row gap-4">
           {/* Report type list */}
