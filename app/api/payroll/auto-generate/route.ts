@@ -87,11 +87,15 @@ export async function POST() {
     const currentYear  = now.getFullYear();
     const startYear    = currentYear;        // auto-generate from January of current year
 
+    interface Exclusion { staffId: string; month: string; year: number; }
     const allStaff   = readDb<StaffUser[]>("users", []);
     const existing   = readDb<PayrollEntry[]>("payroll", []);
+    const exclusions = readDb<Exclusion[]>("payroll_exclusions", []);
 
-    // Build lookup: "staffId|month|year" → true
+    // Build lookup: "staffId|month|year" → true (existing entries)
     const existingKeys = new Set(existing.map(p => `${p.staffId}|${p.month}|${p.year}`));
+    // Build exclusion lookup: entries manually deleted by user — never recreate
+    const excludedKeys = new Set(exclusions.map(e => `${e.staffId}|${e.month}|${e.year}`));
 
     const newEntries: PayrollEntry[] = [];
 
@@ -104,7 +108,8 @@ export async function POST() {
         if ((emp.status ?? "").toLowerCase() !== "active") continue;
         if (!Number(emp.salary)) continue;
         const key = `${emp.id}|${month}|${year}`;
-        if (existingKeys.has(key)) continue; // already has entry — skip
+        if (existingKeys.has(key)) continue;  // already has entry — skip
+        if (excludedKeys.has(key)) continue;  // manually deleted — never recreate
 
         const entry = buildEntry(emp, month, year);
         newEntries.push(entry);

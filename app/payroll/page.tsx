@@ -299,7 +299,15 @@ export default function PayrollPage() {
     const targetStaff = cid
       ? allStaffList.filter(u => u.companyId === cid && isActive(u) && hasSalary(u) && (!isBM || u.branchId === session?.branchId))
       : allStaffList.filter(u => isActive(u) && hasSalary(u));
-    const activeStaff = targetStaff;
+    if (targetStaff.length === 0) { setRunConfirm(false); setShowRunFromGroupDialog(false); return; }
+    // Exclude staff who already have a PAID entry for this month — never overwrite paid status
+    const paidStaffIds = new Set(
+      payrollEntries
+        .filter(p => p.companyId === cid && p.month === selectedMonth && p.year === selectedYear && p.status === "paid")
+        .map(p => p.staffId)
+    );
+    const activeStaff = targetStaff.filter(emp => !paidStaffIds.has(emp.id));
+    // If every staff member is already paid, nothing to do
     if (activeStaff.length === 0) { setRunConfirm(false); setShowRunFromGroupDialog(false); return; }
     let allCommissions: StoredCommission[] = [];
     try {

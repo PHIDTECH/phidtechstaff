@@ -79,15 +79,27 @@ export async function DELETE(req: NextRequest) {
     const companyId = url.searchParams.get("companyId");
     const month = url.searchParams.get("month");
     const year = url.searchParams.get("year");
-    // Delete single by id
+    // Delete single by id — also record exclusion so auto-generate never recreates it
     if (id) {
-      writeDb("payroll", readDb<PayrollEntry[]>("payroll", []).filter(x => x.id !== id));
+      const list = readDb<PayrollEntry[]>("payroll", []);
+      const target = list.find(x => x.id === id);
+      writeDb("payroll", list.filter(x => x.id !== id));
+      if (target) {
+        interface Exclusion { staffId: string; month: string; year: number; }
+        const excl = readDb<Exclusion[]>("payroll_exclusions", []);
+        const key = `${target.staffId}|${target.month}|${target.year}`;
+        if (!excl.some(e => `${e.staffId}|${e.month}|${e.year}` === key)) {
+          excl.push({ staffId: target.staffId, month: target.month, year: target.year });
+          writeDb("payroll_exclusions", excl);
+        }
+      }
       return NextResponse.json({ success: true });
     }
-    // Delete all for a company/month/year (re-run payroll)
+    // Delete all DRAFT entries for a company/month/year (re-run payroll)
+    // PAID entries are always preserved so re-running never loses paid status
     if (companyId && month && year) {
       writeDb("payroll", readDb<PayrollEntry[]>("payroll", []).filter(x =>
-        !(x.companyId === companyId && x.month === month && x.year === Number(year))
+        !(x.companyId === companyId && x.month === month && x.year === Number(year) && x.status !== "paid")
       ));
       return NextResponse.json({ success: true });
     }
