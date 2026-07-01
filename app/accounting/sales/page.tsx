@@ -56,6 +56,22 @@ const statusColors: Record<string, string> = {
   unpaid:  "bg-red-100 text-red-800",
 };
 
+const MONTHS: Record<string,string> = { jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12" };
+const parseFlexDate = (s: string): string => {
+  // Handle "09 May 2026" or "May 09, 2026" etc.
+  const m = s.match(/(\d{1,2})\s+(\w+)\s+(\d{4})/i) || s.match(/(\w+)\s+(\d{1,2}),?\s+(\d{4})/i);
+  if (m) {
+    const isFirst = /^\d/.test(m[1]);
+    const day = isFirst ? m[1].padStart(2,"0") : m[2].padStart(2,"0");
+    const mon = MONTHS[(isFirst ? m[2] : m[1]).slice(0,3).toLowerCase()] || "01";
+    const year = isFirst ? m[3] : m[3];
+    return `${year}-${mon}-${day}`;
+  }
+  // Fallback: try native Date parsing
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? new Date().toISOString().slice(0,10) : d.toISOString().slice(0,10);
+};
+
 export default function AccountingSalesPage() {
   const [sales, setSales]           = useState<Sale[]>([]);
   const [customers, setCustomers]   = useState<Customer[]>([]);
@@ -215,20 +231,29 @@ export default function AccountingSalesPage() {
         throw new Error("No company available. Please switch to a specific company first.");
       }
       const text = await file.text();
-      const lines = text.trim().split(/\r?\n/).slice(1); // skip header
-      if (lines.length === 0) throw new Error("No data rows found in CSV");
+      const allLines = text.trim().split(/\r?\n/);
+      if (allLines.length < 2) throw new Error("No data rows found in CSV");
+      // Parse header to find column indices
+      const headerLine = allLines[0];
+      const headers = (headerLine.match(/("([^"]*)"|[^,]*)/g) || []).map(h => h.replace(/^"|"$/g, "").trim().toLowerCase());
+      const col = (name: string) => headers.findIndex(h => h.includes(name));
+      const iCustomer = col("customer"); const iDate = col("date"); const iAmount = col("amount");
+      const iPaid = col("paid"); const iBalance = col("balance"); const iStatus = col("status"); const iNotes = col("note");
+      const lines = allLines.slice(1);
       let imported = 0;
       let lastError = "";
       for (const line of lines) {
+        if (!line.trim()) continue;
         const vals = line.match(/("([^"]*)"|[^,]*)/g) || [];
-        const clean = (i: number) => (vals[i] || "").replace(/^"|"$/g, "").trim();
-        const date = clean(0) || new Date().toISOString().slice(0,10);
-        const customerName = clean(1);
-        const amount = Number(clean(2).replace(/[^0-9.-]/g, "")) || 0;
-        const paid = Number(clean(3).replace(/[^0-9.-]/g, "")) || 0;
+        const clean = (i: number) => i >= 0 ? (vals[i] || "").replace(/^"|"$/g, "").trim() : "";
+        const customerName = clean(iCustomer) || "Unknown Customer";
+        const rawDate = clean(iDate);
+        const date = rawDate ? (rawDate.includes("-") ? rawDate : parseFlexDate(rawDate)) : new Date().toISOString().slice(0,10);
+        const amount = Number(clean(iAmount).replace(/[^0-9.-]/g, "")) || 0;
+        const paid = Number(clean(iPaid).replace(/[^0-9.-]/g, "")) || 0;
         const balance = amount - paid;
-        const status: Sale["status"] = paid >= amount ? "paid" : paid > 0 ? "partial" : "unpaid";
-        const notes = clean(6);
+        const status: Sale["status"] = paid >= amount && amount > 0 ? "paid" : paid > 0 ? "partial" : "unpaid";
+        const notes = clean(iNotes);
         const newSale: Sale = {
           id: `imp_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
           companyId: targetCid,
