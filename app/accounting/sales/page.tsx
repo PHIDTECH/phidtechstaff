@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ShoppingCart, Plus, Search, DollarSign, CheckCircle, Clock, AlertCircle, Edit, Trash2, Eye, X, BookOpen, Printer } from "lucide-react";
+import { ShoppingCart, Plus, Search, DollarSign, CheckCircle, Clock, AlertCircle, Edit, Trash2, Eye, X, BookOpen, Printer, Download, Upload } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
@@ -76,6 +76,9 @@ export default function AccountingSalesPage() {
   const [loading, setLoading]       = useState(true);
   const [statPeriod, setStatPeriod] = useState<"daily"|"weekly"|"monthly"|"all">("daily");
   const [statDate, setStatDate]     = useState(new Date().toISOString().slice(0,10));
+  const [importing, setImporting]   = useState(false);
+  const [importMsg, setImportMsg]   = useState<{type:"success"|"error";text:string}|null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
@@ -180,6 +183,60 @@ export default function AccountingSalesPage() {
   const save = async (list: Sale[]) => {
     setSales(list);
     lsSet(SALES_KEY, list); // local fallback
+  };
+
+  const downloadCSV = () => {
+    const header = "Date,Customer,Amount,Paid,Balance,Status,Notes";
+    const rows = coSales.map(s =>
+      `"${s.date}","${s.customerName}","${s.amount}","${s.paid}","${s.balance}","${s.status}","${(s.notes || "").replace(/"/g, '""')}"`
+    ).join("\n");
+    const blob = new Blob([`${header}\n${rows}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url;
+    a.download = `Sales_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true); setImportMsg(null);
+    try {
+      const text = await file.text();
+      const lines = text.trim().split(/\r?\n/).slice(1); // skip header
+      if (lines.length === 0) throw new Error("No data rows found");
+      let imported = 0;
+      for (const line of lines) {
+        const vals = line.match(/("([^"]*)"|[^,]*)/g) || [];
+        const clean = (i: number) => (vals[i] || "").replace(/^"|"$/g, "").trim();
+        const date = clean(0) || new Date().toISOString().slice(0,10);
+        const customerName = clean(1);
+        const amount = Number(clean(2).replace(/[^0-9.-]/g, "")) || 0;
+        const paid = Number(clean(3).replace(/[^0-9.-]/g, "")) || 0;
+        const balance = amount - paid;
+        const status: Sale["status"] = paid >= amount ? "paid" : paid > 0 ? "partial" : "unpaid";
+        const notes = clean(6);
+        const newSale: Sale = {
+          id: `imp_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
+          companyId: cid || cidRef.current || "",
+          date, customerId: "", customerName, customerPhone: "", customerAddress: "",
+          items: [{ description: "Imported Sale", quantity: 1, unitPrice: amount, total: amount }],
+          subtotal: amount, tax: 0, amount, paid, balance, status, notes, createdAt: new Date().toISOString(),
+        };
+        const res = await fetch("/api/accounting/sales", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newSale),
+        });
+        if (res.ok) imported++;
+      }
+      setImportMsg({ type: "success", text: `Imported ${imported} of ${lines.length} sales` });
+      await reload();
+    } catch (err) {
+      setImportMsg({ type: "error", text: err instanceof Error ? err.message : "Import failed" });
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+      setTimeout(() => setImportMsg(null), 5000);
+    }
   };
 
   const sf = (f: Partial<typeof form>) => setForm(p => ({ ...p, ...f }));
@@ -303,9 +360,23 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
         subtitle="Record sales, track payments and outstanding balances"
         icon={ShoppingCart}
         actions={
-          <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4 mr-2" />New Sale</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+            <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importing}>
+              <Upload className={`w-4 h-4 mr-2 ${importing ? "animate-pulse" : ""}`} />{importing ? "Importing..." : "Import CSV"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={downloadCSV}>
+              <Download className="w-4 h-4 mr-2" />Export CSV
+            </Button>
+            <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4 mr-2" />New Sale</Button>
+          </div>
         }
       />
+      {importMsg && (
+        <div className={`mb-4 rounded-lg px-4 py-3 text-sm font-medium ${importMsg.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+          {importMsg.text}
+        </div>
+      )}
 
       {/* Period filter */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
