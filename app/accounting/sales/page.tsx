@@ -202,10 +202,23 @@ export default function AccountingSalesPage() {
     if (!file) return;
     setImporting(true); setImportMsg(null);
     try {
+      // Fetch fresh companies list to ensure we have valid companyId
+      let cos = companies;
+      if (cos.length === 0) {
+        const cr = await fetch("/api/companies", { cache: "no-store" });
+        if (cr.ok) cos = await cr.json();
+      }
+      // Get companyId - use active company or fall back to first non-group company
+      const validCos = cos.filter(c => c.id && c.id !== "group");
+      const targetCid = cid || cidRef.current || validCos[0]?.id || "";
+      if (!targetCid) {
+        throw new Error("No company available. Please switch to a specific company first.");
+      }
       const text = await file.text();
       const lines = text.trim().split(/\r?\n/).slice(1); // skip header
-      if (lines.length === 0) throw new Error("No data rows found");
+      if (lines.length === 0) throw new Error("No data rows found in CSV");
       let imported = 0;
+      let lastError = "";
       for (const line of lines) {
         const vals = line.match(/("([^"]*)"|[^,]*)/g) || [];
         const clean = (i: number) => (vals[i] || "").replace(/^"|"$/g, "").trim();
@@ -218,7 +231,7 @@ export default function AccountingSalesPage() {
         const notes = clean(6);
         const newSale: Sale = {
           id: `imp_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
-          companyId: cid || cidRef.current || "",
+          companyId: targetCid,
           date, customerId: "", customerName, customerPhone: "", customerAddress: "",
           items: [{ description: "Imported Sale", quantity: 1, unitPrice: amount, total: amount }],
           subtotal: amount, tax: 0, amount, paid, balance, status, notes, createdAt: new Date().toISOString(),
@@ -227,7 +240,9 @@ export default function AccountingSalesPage() {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newSale),
         });
         if (res.ok) imported++;
+        else { const err = await res.json().catch(() => ({})); lastError = err.error || res.statusText; }
       }
+      if (imported === 0 && lastError) throw new Error(lastError);
       setImportMsg({ type: "success", text: `Imported ${imported} of ${lines.length} sales` });
       await reload();
     } catch (err) {
