@@ -1,6 +1,6 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, Search, RefreshCw, Download, AlertCircle, CheckCircle, Clock, TrendingUp } from "lucide-react";
+import { Users, Search, RefreshCw, Download, Upload, AlertCircle, CheckCircle, Clock, TrendingUp } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
@@ -73,6 +73,9 @@ export default function DebtorsPage() {
   const [search, setSearch]         = useState("");
   const [agingFilter, setAgingFilter] = useState("all");
   const [expanded, setExpanded]     = useState<string | null>(null);
+  const [importing, setImporting]   = useState(false);
+  const [importMsg, setImportMsg]   = useState<{type:"success"|"error";text:string}|null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -160,6 +163,56 @@ export default function DebtorsPage() {
   const overdue30     = filtered.filter(d => d.aging !== "current").reduce((s, d) => s + d.balance, 0);
   const critical      = filtered.filter(d => d.aging === "90+").reduce((s, d) => s + d.balance, 0);
 
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true); setImportMsg(null);
+    try {
+      let cos = companies;
+      if (cos.length === 0) { const cr = await fetch("/api/companies", { cache: "no-store" }); if (cr.ok) cos = await cr.json(); }
+      const validCos = cos.filter(c => c.id && c.id !== "group");
+      const targetCid = cid || validCos[0]?.id || "";
+      if (!targetCid) throw new Error("No company found. Switch to a specific company first.");
+      const text = await file.text();
+      const allLines = text.trim().split(/\r?\n/);
+      if (allLines.length < 2) throw new Error("No data rows found in CSV");
+      const hdrs = (allLines[0].match(/("([^"]*)"|[^,]*)/g) || []).map(h => h.replace(/^"|"$/g, "").trim().toLowerCase());
+      const col = (n: string) => hdrs.findIndex(h => h.includes(n));
+      const iCust = col("customer"); const iPhone = col("phone"); const iTotal = col("total"); const iPaid = col("paid"); const iBalance = col("balance"); const iDate = col("last");
+      let imported = 0; let lastError = "";
+      for (const line of allLines.slice(1)) {
+        if (!line.trim()) continue;
+        const vals = line.match(/("([^"]*)"|[^,]*)/g) || [];
+        const clean = (i: number) => i >= 0 ? (vals[i] || "").replace(/^"|"$/g, "").trim() : "";
+        const amount = Number(clean(iTotal).replace(/[^0-9.-]/g, "")) || 0;
+        const paid   = Number(clean(iPaid).replace(/[^0-9.-]/g, ""))  || 0;
+        const balance = iBalance >= 0 ? Number(clean(iBalance).replace(/[^0-9.-]/g, "")) : amount - paid;
+        const sale = {
+          id: `imp_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
+          companyId: targetCid,
+          date: clean(iDate) || new Date().toISOString().slice(0,10),
+          customerId: "", customerName: clean(iCust) || "Unknown", customerPhone: clean(iPhone), customerAddress: "",
+          items: [{ description: "Imported Debtor", quantity: 1, unitPrice: amount, total: amount }],
+          subtotal: amount, tax: 0, amount, paid, balance,
+          status: paid >= amount && amount > 0 ? "paid" : paid > 0 ? "partial" : "unpaid",
+          notes: "", createdAt: new Date().toISOString(),
+        };
+        const res = await fetch("/api/accounting/sales", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sale) });
+        if (res.ok) imported++;
+        else { const err = await res.json().catch(() => ({})); lastError = err.error || res.statusText; }
+      }
+      if (imported === 0 && lastError) throw new Error(lastError);
+      setImportMsg({ type: "success", text: `Imported ${imported} debtor records` });
+      await loadData();
+    } catch (err) {
+      setImportMsg({ type: "error", text: err instanceof Error ? err.message : "Import failed" });
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+      setTimeout(() => setImportMsg(null), 5000);
+    }
+  };
+
   const downloadCSV = () => {
     const header = "Customer,Phone,Company,Total Sales,Total Paid,Balance,Last Transaction,Days Since,Aging";
     const rows = filtered.map(d => {
@@ -175,6 +228,11 @@ export default function DebtorsPage() {
 
   return (
     <MainLayout>
+      {importMsg && (
+        <div className={`mb-4 rounded-lg px-4 py-3 text-sm font-medium ${importMsg.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+          {importMsg.text}
+        </div>
+      )}
       <PageHeader
         title="Debtors"
         subtitle="Accounts receivable — customers with outstanding balances"
@@ -183,6 +241,10 @@ export default function DebtorsPage() {
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />Refresh
+            </Button>
+            <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+            <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importing}>
+              <Upload className={`w-4 h-4 mr-2 ${importing ? "animate-pulse" : ""}`} />{importing ? "Importing..." : "Import CSV"}
             </Button>
             <Button variant="outline" size="sm" onClick={downloadCSV}>
               <Download className="w-4 h-4 mr-2" />Export CSV

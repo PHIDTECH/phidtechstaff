@@ -21,7 +21,7 @@ interface Session { id: string; name: string; role: string; position?: string; i
 interface Company { id: string; name: string; }
 interface FloatUpdate { id: string; date: string; type?: "credit" | "debit"; amount?: number; balance: number; description: string; updatedBy: string; createdAt: string; }
 interface AccountFloat { id: string; companyId: string; accountType: string; provider: string; accountName: string; accountNumber?: string; currency: string; currentBalance: number; lastUpdatedAt: string; createdAt: string; history: FloatUpdate[]; }
-type ReportType = "customers" | "sales" | "marketing_expenses" | "office_expenses" | "staff_claims" | "payroll" | "invoices" | "petty_cash" | "loan_customers" | "loan_interest" | "revenue_summary" | "profit_loss" | "assets" | "balance_sheet" | "cashflow" | "microfinance_customers" | "marketing_customers" | "account_floats";
+type ReportType = "customers" | "sales" | "marketing_expenses" | "office_expenses" | "staff_claims" | "payroll" | "invoices" | "petty_cash" | "loan_customers" | "loan_interest" | "revenue_summary" | "profit_loss" | "assets" | "balance_sheet" | "cashflow" | "microfinance_customers" | "marketing_customers" | "account_floats" | "debtors";
 type DatePreset  = "all" | "today" | "week" | "month" | "year" | "custom";
 
 const REPORT_TYPES: { key: ReportType; label: string; icon: React.ElementType; color: string; bg: string }[] = [
@@ -43,6 +43,7 @@ const REPORT_TYPES: { key: ReportType; label: string; icon: React.ElementType; c
   { key: "microfinance_customers",label: "Microfinance Customers",icon: Landmark,  color: "text-fuchsia-600", bg: "bg-fuchsia-50" },
   { key: "marketing_customers",   label: "Marketing Customers",   icon: Megaphone, color: "text-rose-600",    bg: "bg-rose-50"    },
   { key: "account_floats",        label: "Account Floats",         icon: Wallet,    color: "text-teal-700",    bg: "bg-teal-50"    },
+  { key: "debtors",               label: "Debtors (Receivables)",  icon: Users,     color: "text-red-600",     bg: "bg-red-50"     },
 ];
 
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
@@ -380,6 +381,15 @@ export default function ReportsPage() {
       { key: "email",        label: "Email"          },
       { key: "createdAt",    label: "Date Added",    render: r => formatDate(String(r.createdAt || "")) },
     ],
+    debtors: [
+      { key: "_rowNum",      label: "#"                                                                  },
+      { key: "customerName", label: "Customer"                                                           },
+      { key: "date",         label: "Date",         render: r => formatDate(String(r.date || ""))        },
+      { key: "amount",       label: "Total Sale",   render: r => formatCurrency(Number(r.amount || 0))  },
+      { key: "paid",         label: "Paid",         render: r => formatCurrency(Number(r.paid || 0))    },
+      { key: "balance",      label: "Balance Due",  render: r => formatCurrency(Number(r.balance || 0)) },
+      { key: "status",       label: "Status"                                                             },
+    ],
   };
 
   const DATA: Record<ReportType, Row[]> = {
@@ -401,6 +411,7 @@ export default function ReportsPage() {
     account_floats:          [],
     microfinance_customers:  fMfCusts,
     marketing_customers:     fMktCusts,
+    debtors: fSales.filter(s => Number(s.balance) > 0),
   };
 
   const cfg  = REPORT_TYPES.find(r => r.key === report)!;
@@ -531,6 +542,7 @@ export default function ReportsPage() {
   const API_ENDPOINTS: Record<string, string> = {
     customers: "/api/customers",
     sales: "/api/accounting/sales",
+    debtors: "/api/accounting/sales",
     marketing_expenses: "/api/expenses",
     office_expenses: "/api/office-expenses",
     staff_claims: "/api/expenses",
