@@ -215,10 +215,19 @@ export default function PayrollPage() {
 
   const reload = () => { setDataLoading(true); loadSession(); fetchPayroll(); fetchAdvances(); };
 
+  const autoGeneratePayroll = async () => {
+    try {
+      await fetch("/api/payroll/auto-generate", { method: "POST" });
+    } catch {}
+  };
+
   useEffect(() => {
-    loadSession();
-    fetchPayroll();
-    fetchAdvances();
+    // Auto-generate draft payroll for all missing months (Jan → current)
+    autoGeneratePayroll().then(() => {
+      loadSession();
+      fetchPayroll();
+      fetchAdvances();
+    });
     window.addEventListener("phidtech_companies_updated", reload);
     window.addEventListener("storage", reload);
     return () => {
