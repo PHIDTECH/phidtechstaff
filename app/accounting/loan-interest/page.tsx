@@ -86,8 +86,43 @@ export default function LoanInterestPage() {
         fetch("/api/loan-interest", { cache: "no-store" }),
         fetch("/api/loans", { cache: "no-store" }),
       ]);
-      if (r1.ok) setRecords(await r1.json());
-      if (r2.ok) setLoans(await r2.json());
+      const interestList: LoanInterest[] = r1.ok ? await r1.json() : [];
+      const loanList: LoanCustomer[]     = r2.ok ? await r2.json() : [];
+      setLoans(loanList);
+
+      // Auto-create interest records for active/completed loans that don't have one yet
+      const existingLoanIds = new Set(interestList.map(r => r.loanId).filter(Boolean));
+      const autoLoans = loanList.filter(l =>
+        ["active", "completed", "paid"].includes((l.status ?? "").toLowerCase()) &&
+        !existingLoanIds.has(l.id)
+      );
+      const created: LoanInterest[] = [];
+      for (const loan of autoLoans) {
+        const interestRevenue = calcInterest(loan.amountOfLoan, loan.interestPerMonth, loan.loanPeriod);
+        const payload: LoanInterest = {
+          id: `lint-auto-${loan.id}`,
+          loanId: loan.id,
+          companyId: loan.companyId,
+          customerName: loan.customerName,
+          date: loan.date,
+          amountOfLoan: loan.amountOfLoan,
+          interestPerMonth: loan.interestPerMonth,
+          loanPeriod: loan.loanPeriod,
+          interestRevenue,
+          processingFeeType: loan.processingFeeType,
+          processingFee: loan.processingFee,
+          penaltyFeeType: loan.penaltyFeeType,
+          penaltyFee: loan.penaltyFee,
+          status: loan.status === "completed" || loan.status === "paid" ? "paid" : "active",
+          createdAt: new Date().toISOString(),
+        };
+        const res = await fetch("/api/loan-interest", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+        if (res.ok) created.push(await res.json());
+        else created.push(payload); // show locally even if save failed
+      }
+      setRecords([...interestList, ...created]);
     } catch {}
   };
 

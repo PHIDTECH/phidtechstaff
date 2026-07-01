@@ -18,6 +18,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     if (!body.companyId) return NextResponse.json({ error: "companyId required." }, { status: 400 });
     const list = readDb<LoanInterest[]>("loan_interest", []);
+    // Prevent duplicates: check by id and by loanId
+    if (body.id && list.find(x => x.id === body.id)) return NextResponse.json(list.find(x => x.id === body.id), { status: 200 });
+    if (body.loanId && list.find(x => x.loanId === body.loanId)) return NextResponse.json(list.find(x => x.loanId === body.loanId), { status: 200 });
     const item: LoanInterest = { ...body, id: body.id ?? `lint-${Date.now()}` };
     list.push(item);
     writeDb("loan_interest", list);
