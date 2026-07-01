@@ -97,8 +97,9 @@ export default function DashboardPage() {
     setLoanInt(lsGet<LoanInterest[]>(LOANINT_KEY, []));
     setLoans(lsGet<Loan[]>(LOANS_KEY, []));
 
-    // ── Step 2: single batch request replaces 11 individual calls ──
-    setDataLoading(true);
+    // ── Step 2: background refresh — only show spinner when there is no cached data ──
+    const hasCached = lsGet<Sale[]>(SALES_KEY, []).length > 0 || lsGet<PayrollEntry[]>(PAYROLL_KEY, []).length > 0;
+    if (!hasCached) setDataLoading(true);
     try {
       const r = await fetch("/api/dashboard-summary", { cache: "no-store" });
       if (r.ok) {
@@ -163,7 +164,7 @@ export default function DashboardPage() {
     const PAID_S = ["paid","approved","disbursed","ceo_approved"];
     const coExp     = expenses.filter(e => e.companyId === co.id && PAID_S.includes(e.status));
     const coOE      = officeExp.filter(e => e.companyId === co.id && PAID_S.includes(e.status));
-    const coPay     = payroll.filter(p => p.companyId === co.id);
+    const coPay     = payroll.filter(p => p.companyId === co.id && p.status === "paid");
     const coLInt    = loanInt.filter(l => l.companyId === co.id && LINT_PAID.includes(l.status));
     const isFinance = (co.industry ?? "").toLowerCase().includes("finance");
     // Finance companies: also include loans that were saved under the group HQ ID (created from Group HQ mode)
@@ -197,7 +198,7 @@ export default function DashboardPage() {
   const PAID_STATUSES = ["paid","approved","disbursed","ceo_approved"];
   const groupExpClaims  = expenses.filter(e => PAID_STATUSES.includes(e.status)).reduce((s, e) => s + e.amount, 0);
   const groupOfficeExp  = officeExp.filter(e => PAID_STATUSES.includes(e.status)).reduce((s, e) => s + e.amount, 0);
-  const groupPayroll    = payroll.reduce((s, p) => s + p.netSalary, 0);
+  const groupPayroll    = payroll.filter(p => p.status === "paid").reduce((s, p) => s + p.netSalary, 0);
   const groupExp        = groupExpClaims + groupOfficeExp + groupPayroll;
   const groupProfit     = groupRevenue - groupExp;
   const groupTasks   = tasks.length;
@@ -214,7 +215,7 @@ export default function DashboardPage() {
   const _PAID = ["paid","approved","disbursed","ceo_approved"];
   const coExp      = _effCid ? expenses.filter(e => e.companyId === _effCid && _PAID.includes(e.status)) : expenses.filter(e => _PAID.includes(e.status));
   const coOE       = _effCid ? officeExp.filter(e => e.companyId === _effCid && _PAID.includes(e.status)) : officeExp.filter(e => _PAID.includes(e.status));
-  const coPay      = _effCid ? payroll.filter(p => p.companyId === _effCid) : payroll;
+  const coPay      = _effCid ? payroll.filter(p => p.companyId === _effCid && p.status === "paid") : payroll.filter(p => p.status === "paid");
   const coLoanInt  = _effCid
     ? loanInt.filter(l => l.companyId === _effCid && LINT_PAID.includes(l.status))
     : loanInt.filter(l => LINT_PAID.includes(l.status));
