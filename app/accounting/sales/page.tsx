@@ -268,7 +268,10 @@ export default function AccountingSalesPage() {
         else { const err = await res.json().catch(() => ({})); lastError = err.error || res.statusText; }
       }
       if (imported === 0 && lastError) throw new Error(lastError);
-      setImportMsg({ type: "success", text: `Imported ${imported} of ${lines.length} sales` });
+      // Verify data was persisted by re-fetching
+      const verify = await fetch("/api/accounting/sales", { cache: "no-store" });
+      const savedCount = verify.ok ? ((await verify.json()) as Sale[]).length : 0;
+      setImportMsg({ type: "success", text: `Imported ${imported} of ${lines.length} sales (${savedCount} total on server)` });
       await reload();
     } catch (err) {
       setImportMsg({ type: "error", text: err instanceof Error ? err.message : "Import failed" });
