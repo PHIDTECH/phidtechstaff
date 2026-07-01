@@ -67,7 +67,7 @@ const STAFF_POSITIONS = [
   { value: "group_ceo",         label: "Group CEO",                  color: "red",    group: true },
   { value: "group_cfo",         label: "Group CFO",                  color: "red",    group: true },
   { value: "group_manager",     label: "Group Manager",              color: "indigo", group: true },
-  { value: "group_controller",  label: "Group Controller",           color: "purple", group: true },
+  { value: "group_controller",  label: "Group Operation Manager",    color: "purple", group: true },
   { value: "group_auditor",     label: "Group Internal Auditor",     color: "orange", group: true },
   { value: "group_hr",          label: "Group HR Director",          color: "teal",   group: true },
   { value: "group_legal",       label: "Group Legal Counsel",        color: "indigo", group: true },
