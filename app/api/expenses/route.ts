@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
     const list = readDb<Expense[]>("expenses", []);
     const item: Expense = { ...body, id: body.id ?? `exp-${Date.now()}` };
     list.push(item);
+    console.log(`[POST /api/expenses] Adding expense ${item.id}, list size before write: ${list.length}`);
     writeDb("expenses", list);
     return NextResponse.json(item, { status: 201 });
   } catch (e) { console.error(e); return NextResponse.json({ error: "Server error." }, { status: 500 }); }

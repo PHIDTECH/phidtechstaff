@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
       createdAt: body.createdAt ?? new Date().toISOString().slice(0, 10),
     };
     customers.push(newCustomer);
+    console.log(`[POST /api/customers] Adding customer ${newCustomer.id}, list size before write: ${customers.length}`);
     writeDb("customers", customers);
     return NextResponse.json(newCustomer, { status: 201 });
   } catch (err) {

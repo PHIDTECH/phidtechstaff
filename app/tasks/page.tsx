@@ -904,13 +904,11 @@ export default function TasksPage() {
                       const byCompany = formCid2 ? allStaffList.filter(u => u.companyId === formCid2) : allStaffList;
                       // Fall back to all staff if company filter returns nothing (companyId mismatch)
                       const baseList = byCompany.length > 0 ? byCompany : allStaffList;
-                      const filtered = baseList.filter(u =>
-                        !form.branchId || form.branchId === "__all" || u.branchId === form.branchId
-                      );
-                      if (filtered.length === 0) return (
+                      // Show ALL staff for task assignment (no branch filter)
+                      if (baseList.length === 0) return (
                         <div className="px-3 py-4 text-center text-sm text-gray-400">No staff found</div>
                       );
-                      return filtered.map(u => {
+                      return baseList.map(u => {
                         const br = branches.find(b => b.id === u.branchId);
                         return (
                           <SelectItem key={u.id} value={u.id}>
