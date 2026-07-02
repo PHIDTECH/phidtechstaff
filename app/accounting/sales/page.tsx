@@ -101,6 +101,7 @@ export default function AccountingSalesPage() {
   const [session, setSession]       = useState<Session | null>(null);
   const [clearConfirm, setClearConfirm] = useState(false);
   const [clearing, setClearing]     = useState(false);
+  const [saving, setSaving]           = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const reload = async () => {
@@ -343,35 +344,42 @@ export default function AccountingSalesPage() {
   const isGroupHQ = !cidRef.current && !cid;
 
   const saveForm = async () => {
+    if (saving) return;                  // block re-entry while in-flight
     if (!form.customerId) { setFormError("Select a customer."); return; }
     if (isGroupHQ && !form.saleCompanyId) { setFormError("Select which company this sale belongs to."); return; }
     const filled = form.items.filter(it => it.description.trim());
     if (filled.length === 0) { setFormError("Add at least one item."); return; }
-    const cust   = customers.find(c => c.id === form.customerId);
-    const { subtotal, tax, amount, paid, balance, status } = recalc(filled, form.paid);
-    if (editItem) {
-      const updated = { ...editItem, date: form.date, customerId: form.customerId,
-        customerName: cust?.name ?? editItem.customerName,
-        customerPhone: cust?.phone ?? editItem.customerPhone,
-        customerAddress: cust?.address ?? editItem.customerAddress,
-        items: filled, subtotal, tax, amount, paid, balance, status, notes: form.notes,
-        paymentPlan: form.paymentPlan, dueDate: form.dueDate || undefined };
-      await fetch("/api/accounting/sales", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updated) });
-    } else {
-      const saleNum = `SAL-${Date.now().toString().slice(-6)}`;
-      const newSale: Sale = {
-        id: saleNum, companyId: form.saleCompanyId || cidRef.current || cid,
-        date: form.date, customerId: form.customerId,
-        customerName: cust?.name ?? "", customerPhone: cust?.phone ?? "",
-        customerAddress: cust?.address ?? "",
-        items: filled, subtotal, tax, amount, paid, balance, status,
-        notes: form.notes, paymentPlan: form.paymentPlan, dueDate: form.dueDate || undefined,
-        createdAt: new Date().toISOString(),
-      };
-      await fetch("/api/accounting/sales", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newSale) });
-    }
-    setShowDialog(false);
-    await reload();
+    setSaving(true);
+    try {
+      const cust   = customers.find(c => c.id === form.customerId);
+      const { subtotal, tax, amount, paid, balance, status } = recalc(filled, form.paid);
+      if (editItem) {
+        const updated = { ...editItem, date: form.date, customerId: form.customerId,
+          customerName: cust?.name ?? editItem.customerName,
+          customerPhone: cust?.phone ?? editItem.customerPhone,
+          customerAddress: cust?.address ?? editItem.customerAddress,
+          items: filled, subtotal, tax, amount, paid, balance, status, notes: form.notes,
+          paymentPlan: form.paymentPlan, dueDate: form.dueDate || undefined };
+        const r = await fetch("/api/accounting/sales", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updated) });
+        if (!r.ok) { setFormError("Save failed. Please try again."); return; }
+      } else {
+        const saleNum = `SAL-${Date.now().toString().slice(-6)}`;
+        const newSale: Sale = {
+          id: saleNum, companyId: form.saleCompanyId || cidRef.current || cid,
+          date: form.date, customerId: form.customerId,
+          customerName: cust?.name ?? "", customerPhone: cust?.phone ?? "",
+          customerAddress: cust?.address ?? "",
+          items: filled, subtotal, tax, amount, paid, balance, status,
+          notes: form.notes, paymentPlan: form.paymentPlan, dueDate: form.dueDate || undefined,
+          createdAt: new Date().toISOString(),
+        };
+        const r = await fetch("/api/accounting/sales", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newSale) });
+        if (!r.ok) { setFormError("Save failed. Please try again."); return; }
+      }
+      setShowDialog(false);
+      await reload();
+    } catch { setFormError("Network error. Please try again."); }
+    finally { setSaving(false); }
   };
 
   const previewCalc = recalc(form.items, form.paid);
@@ -897,7 +905,7 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button onClick={saveForm}>{editItem ? "Save Changes" : "Save Sale"}</Button>
+            <Button onClick={saveForm} disabled={saving}>{saving ? "Saving..." : editItem ? "Save Changes" : "Save Sale"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

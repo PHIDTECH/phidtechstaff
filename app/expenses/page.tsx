@@ -213,10 +213,12 @@ export default function ExpensesPage() {
   };
 
   const saveForm = async () => {
+    if (saving) return;
     if (!form.userId)        { setFormError("Select an employee."); return; }
     if (!form.title.trim())  { setFormError("Enter a claim title."); return; }
     if (!form.amount)        { setFormError("Enter an amount."); return; }
-
+    setSaving(true);
+    try {
     const selectedStaff = allStaff.find(u => u.id === form.userId);
     const resolvedName = selectedStaff?.name ?? session?.name ?? "";
     if (editItem) {
@@ -245,6 +247,8 @@ export default function ExpensesPage() {
     }
     setShowDialog(false);
     await fetchExpenses();
+    } catch { setFormError("Network error. Please try again."); }
+    finally { setSaving(false); }
   };
 
   const updateStatus = async (id: string, newStatus: Expense["status"]) => {
@@ -689,7 +693,7 @@ export default function ExpensesPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button onClick={saveForm}>{editItem ? "Save Changes" : "Submit Claim"}</Button>
+            <Button onClick={saveForm} disabled={saving}>{saving ? "Saving..." : editItem ? "Save Changes" : "Submit Claim"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

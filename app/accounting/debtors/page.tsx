@@ -118,9 +118,10 @@ export default function DebtorsPage() {
         d.transactions.push(tx);
       };
 
-      // Sales with outstanding balance
+      // Sales with outstanding balance — skip if paid status OR zero/negative balance
       for (const s of sales) {
-        const bal = Number(s.balance || 0);
+        if (String(s.status) === "paid") continue;
+        const bal = Number(s.balance ?? 0);
         if (bal <= 0) continue;
         const key = String(s.customerId || s.customerName || "unknown");
         const txDate = String(s.date || s.createdAt || "");
