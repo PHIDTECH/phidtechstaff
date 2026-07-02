@@ -87,8 +87,12 @@ export async function sendSms(
 
     // Parse Beem response — success code is 100 (or 200 in some versions)
     let body: Record<string, unknown> = {};
-    try { body = await res.json(); } catch {}
-    console.log("[beemSms] HTTP", res.status, JSON.stringify(body));
+    let rawText = "";
+    try {
+      rawText = await res.text();
+      if (rawText.trim()) body = JSON.parse(rawText);
+    } catch { /* rawText captured above */ }
+    console.log("[beemSms] HTTP", res.status, rawText || "(empty)");
 
     const beemOk =
       res.ok &&
@@ -96,8 +100,9 @@ export async function sendSms(
        (typeof body.message === "string" && body.message.toLowerCase().includes("success")));
 
     if (!beemOk) {
-      const reason = (body.message as string) || (body.error as string) || `HTTP ${res.status}`;
-      log.error = `Beem: ${reason} (code ${body.code ?? res.status})`;
+      const reason = (body.message as string) || (body.error as string) ||
+        rawText.slice(0, 300) || `HTTP ${res.status}`;
+      log.error = `HTTP ${res.status}: ${reason}`;
     }
     log.status = beemOk ? "sent" : "failed";
     appendLog(log);
