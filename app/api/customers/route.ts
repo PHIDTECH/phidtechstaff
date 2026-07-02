@@ -94,7 +94,13 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
+    const id    = searchParams.get("id");
+    const clear = searchParams.get("clear");
+    if (clear === "all") {
+      const count = readDb<Customer[]>("customers", []).length;
+      writeDb("customers", []);
+      return NextResponse.json({ success: true, deleted: count });
+    }
     if (!id) return NextResponse.json({ error: "Missing id." }, { status: 400 });
 
     const customers = readDb<Customer[]>("customers", []);

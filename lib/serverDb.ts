@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import os from "os";
 
 // DATA_PATH env var explicitly pins the storage location.
 // Falls back to a path that is NEVER inside .next/standalone/ (wiped on every build).
@@ -91,14 +90,22 @@ export function writeDb(name: string, data: unknown): void {
       const existing = fs.readFileSync(fp, "utf-8").trim();
       if (existing.length > 10) backupFile(name);
     }
-    const tmp = path.join(os.tmpdir(), `phid_${name}_${Date.now()}.tmp`);
+    // Write temp file in the SAME directory as the destination so that
+    // fs.renameSync is always within one filesystem (avoids EXDEV cross-device error
+    // that silently fails when os.tmpdir() is on a different mount, e.g. /tmp on Linux).
+    const tmp = path.join(DATA_DIR, `_tmp_${name}_${Date.now()}.tmp`);
     const content = JSON.stringify(data, null, 2);
-    // Write to a temp file first, then atomically rename → prevents partial writes
-    // from corrupting the live JSON file if the server crashes mid-write.
     fs.writeFileSync(tmp, content, "utf-8");
     fs.renameSync(tmp, fp);
     console.log(`[serverDb] writeDb("${name}") saved ${Array.isArray(data) ? data.length : 1} items to ${fp}`);
   } catch (err) {
     console.error(`[serverDb] writeDb("${name}") failed:`, err);
+    // Last-resort direct write (no atomicity) so data is never silently lost
+    try {
+      fs.writeFileSync(filePath(name), JSON.stringify(data, null, 2), "utf-8");
+      console.warn(`[serverDb] writeDb("${name}") used fallback direct write`);
+    } catch (e2) {
+      console.error(`[serverDb] writeDb("${name}") fallback also failed:`, e2);
+    }
   }
 }

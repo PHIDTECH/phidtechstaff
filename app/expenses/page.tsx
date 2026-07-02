@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Receipt, Plus, Search, CheckCircle, Clock, XCircle, DollarSign, Edit, Trash2, Eye, AlertCircle } from "lucide-react";
+import { Receipt, Plus, Search, CheckCircle, Clock, XCircle, DollarSign, Edit, Trash2, Eye, AlertCircle, OctagonX } from "lucide-react";
 import ImportExport from "@/components/shared/ImportExport";
 import { formatDate, formatCurrency, getStatusColor, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -308,6 +308,19 @@ export default function ExpensesPage() {
 
   const sf = (f: Partial<typeof form>) => setForm(p => ({ ...p, ...f }));
 
+  const isAdmin = session?.isSuperAdmin || ["admin","superadmin","group_ceo"].includes((session?.role ?? "").toLowerCase());
+  const [clearConfirm, setClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const clearAllExpenses = async () => {
+    setClearing(true);
+    try {
+      await fetch("/api/expenses?clear=all", { method: "DELETE" });
+      setExpenses([]);
+      lsSet(EXPENSES_KEY, []);
+      setClearConfirm(false);
+    } finally { setClearing(false); }
+  };
+
   return (
     <MainLayout>
       <PageHeader
@@ -329,9 +342,35 @@ export default function ExpensesPage() {
             <Button size="sm" onClick={openAdd}>
               <Plus className="w-4 h-4 mr-2" /> Submit Claim
             </Button>
+            {isAdmin && expenses.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setClearConfirm(true)} className="text-red-600 border-red-200 hover:bg-red-50">
+                <OctagonX className="w-4 h-4 mr-1.5" />Clear All
+              </Button>
+            )}
           </div>
         }
       />
+      {clearConfirm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-7 max-w-sm w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <OctagonX className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Delete ALL Expenses?</p>
+                <p className="text-sm text-gray-500">This will permanently remove all {expenses.length} expense records. This cannot be undone.</p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setClearConfirm(false)} disabled={clearing}>Cancel</Button>
+              <Button size="sm" onClick={clearAllExpenses} disabled={clearing} className="bg-red-600 hover:bg-red-700 text-white">
+                {clearing ? "Deleting..." : "Yes, Delete All"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
         <StatCard title="Total Claims"    value={companyExpenses.length}            icon={Receipt}      iconBg="bg-blue-50"    iconColor="text-blue-600" />

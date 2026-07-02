@@ -68,7 +68,14 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const id = new URL(req.url).searchParams.get("id");
+    const { searchParams } = new URL(req.url);
+    const id    = searchParams.get("id");
+    const clear = searchParams.get("clear");
+    if (clear === "all") {
+      const count = readDb<Sale[]>("accounting_sales", []).length;
+      writeDb("accounting_sales", []);
+      return NextResponse.json({ success: true, deleted: count });
+    }
     if (!id) return NextResponse.json({ error: "Missing id." }, { status: 400 });
     writeDb("accounting_sales", readDb<Sale[]>("accounting_sales", []).filter(x => x.id !== id));
     return NextResponse.json({ success: true });

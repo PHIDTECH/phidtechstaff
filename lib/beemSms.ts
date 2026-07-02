@@ -18,10 +18,15 @@ interface SmsLog {
 
 /** Normalise a phone number to 255XXXXXXXXX format */
 function normalisePhone(phone: string): string {
-  return phone
-    .replace(/[\s\-\(\)]/g, "")
-    .replace(/^\+/, "")
-    .replace(/^0/, "255");
+  // Strip all non-digit characters except leading +
+  let p = phone.trim().replace(/[\s\-\(\)\.]/g, "");
+  // Remove leading +
+  if (p.startsWith("+")) p = p.slice(1);
+  // Replace leading 0 with 255
+  if (p.startsWith("0")) p = "255" + p.slice(1);
+  // If it doesn't start with 255, prepend it (handles bare 7XXXXXXXX format)
+  if (!p.startsWith("255")) p = "255" + p;
+  return p;
 }
 
 /**

@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ShoppingCart, Plus, Search, DollarSign, CheckCircle, Clock, AlertCircle, Edit, Trash2, Eye, X, BookOpen, Printer, Download, Upload } from "lucide-react";
+import { ShoppingCart, Plus, Search, DollarSign, CheckCircle, Clock, AlertCircle, Edit, Trash2, Eye, X, BookOpen, Printer, Download, Upload, OctagonX } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
@@ -98,10 +98,14 @@ export default function AccountingSalesPage() {
   const [statDate, setStatDate]     = useState(new Date().toISOString().slice(0,10));
   const [importing, setImporting]   = useState(false);
   const [importMsg, setImportMsg]   = useState<{type:"success"|"error";text:string}|null>(null);
+  const [session, setSession]       = useState<Session | null>(null);
+  const [clearConfirm, setClearConfirm] = useState(false);
+  const [clearing, setClearing]     = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const reload = async () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
+    setSession(sess);
     const c = getActiveCid(sess);
     setCid(c); cidRef.current = c;
     setCompanies(lsGet<{id:string;name:string}[]>(COMPANIES_KEY, []));
@@ -205,6 +209,18 @@ export default function AccountingSalesPage() {
     setSales(list);
     lsSet(SALES_KEY, list); // local fallback
   };
+
+  const clearAllSales = async () => {
+    setClearing(true);
+    try {
+      await fetch("/api/accounting/sales?clear=all", { method: "DELETE" });
+      setSales([]);
+      lsSet(SALES_KEY, []);
+      setClearConfirm(false);
+    } finally { setClearing(false); }
+  };
+
+  const isAdmin = session?.isSuperAdmin || ["admin","superadmin","group_ceo"].includes((session?.role ?? "").toLowerCase());
 
   const downloadCSV = () => {
     const header = "Date,Customer,Amount,Paid,Balance,Status,Notes";
@@ -419,9 +435,36 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
               <Download className="w-4 h-4 mr-2" />Export CSV
             </Button>
             <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4 mr-2" />New Sale</Button>
+            {isAdmin && sales.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setClearConfirm(true)} className="text-red-600 border-red-200 hover:bg-red-50">
+                <OctagonX className="w-4 h-4 mr-1.5" />Clear All
+              </Button>
+            )}
           </div>
         }
       />
+      {/* Clear-all confirmation dialog */}
+      {clearConfirm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-7 max-w-sm w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <OctagonX className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Delete ALL Sales Data?</p>
+                <p className="text-sm text-gray-500">This will permanently remove all {sales.length} sales records. This cannot be undone.</p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setClearConfirm(false)} disabled={clearing}>Cancel</Button>
+              <Button size="sm" onClick={clearAllSales} disabled={clearing} className="bg-red-600 hover:bg-red-700 text-white">
+                {clearing ? "Deleting..." : "Yes, Delete All"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       {importMsg && (
         <div className={`mb-4 rounded-lg px-4 py-3 text-sm font-medium ${importMsg.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
           {importMsg.text}
