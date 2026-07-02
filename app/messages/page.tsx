@@ -13,7 +13,7 @@ interface LoanCustomer { id: string; customerName: string; contactPhone?: string
 interface MfCustomer   { id: string; name: string; phone: string; companyId: string; }
 interface MktCustomer  { id: string; name: string; phone: string; companyId: string; }
 interface GenCustomer  { id: string; name: string; phone: string; companyId: string; }
-interface SmsLog       { id: string; to: string; recipientName: string; message: string; status: string; sentAt: string; trigger?: string; }
+interface SmsLog       { id: string; to: string; recipientName: string; message: string; status: string; sentAt: string; trigger?: string; error?: string; }
 
 interface PendingCustomer { id: string; name: string; phone: string; companyId: string; amountNegotiated?: number; promisedDate?: string; }
 type SendMode = "single" | "staff" | "customer" | "loan_customer" | "microfinance" | "marketing_customer" | "media_customer" | "business_customer" | "licence_customer" | "entertainment_customer" | "movies_customer" | "pending_payment";
@@ -39,8 +39,9 @@ export default function MessagesPage() {
   const [moviesCusts,           setMoviesCusts]           = useState<Customer[]>([]);
   const [pendingCusts,          setPendingCusts]          = useState<PendingCustomer[]>([]);
   const [logs,           setLogs]           = useState<SmsLog[]>([]);
-  const [balance,   setBalance]   = useState<number | null>(null);
-  const [senderId,  setSenderId]  = useState("INFO");
+  const [balance,      setBalance]      = useState<number | null>(null);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+  const [senderId,     setSenderId]     = useState("INFO");
 
   const [mode,            setMode]            = useState<SendMode>("single");
   const [singlePhone,     setSinglePhone]     = useState("");
@@ -134,6 +135,8 @@ export default function MessagesPage() {
       const d = await br.value.json();
       setBalance(d.balance ?? null);
       if (d.senderId) setSenderId(d.senderId);
+      if (d.error) setBalanceError(d.error);
+      else setBalanceError(null);
     }
   };
 
@@ -231,6 +234,17 @@ export default function MessagesPage() {
             </p>
           </div>
         </div>
+
+        {/* ── Beem config error warning ── */}
+        {balanceError && (
+          <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm border bg-amber-50 border-amber-200 text-amber-800">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">SMS Gateway Warning</p>
+              <p className="text-xs mt-0.5">{balanceError} — <a href="/admin" className="underline">Go to Admin → SMS Settings</a> to fix.</p>
+            </div>
+          </div>
+        )}
 
         {/* ── Alert ── */}
         {result && (
@@ -471,6 +485,9 @@ export default function MessagesPage() {
                     </div>
                     <p className="text-xs text-gray-400 mb-1">{log.to}</p>
                     <p className="text-sm text-gray-700 line-clamp-2">{log.message}</p>
+                    {log.error && (
+                      <p className="text-[11px] text-red-500 mt-0.5 font-mono">{log.error}</p>
+                    )}
                     <div className="flex items-center gap-2 mt-1.5">
                       <span className="text-[11px] text-gray-400">{fmtDate(log.sentAt)}</span>
                       {log.trigger && log.trigger !== "manual" && (

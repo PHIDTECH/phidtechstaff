@@ -14,6 +14,7 @@ interface SmsLog {
   status: "sent" | "failed" | "no_config";
   sentAt: string;
   trigger?: string;
+  error?: string;
 }
 
 /** Normalise a phone number to 255XXXXXXXXX format */
@@ -55,15 +56,17 @@ export async function sendSms(
 
   try {
     if (!settings.apiKey || !settings.secretKey) {
+      log.error = "Beem credentials not configured — go to Admin → SMS Settings";
       appendLog(log);
-      return { ok: false, error: "Beem API credentials not configured. Go to Admin → SMS Settings." };
+      return { ok: false, error: log.error };
     }
 
     const normalised = normalisePhone(phone);
     if (normalised.length < 9) {
       log.status = "failed";
+      log.error = `Invalid phone number: ${phone}`;
       appendLog(log);
-      return { ok: false, error: `Invalid phone number: ${phone}` };
+      return { ok: false, error: log.error };
     }
 
     const credentials = Buffer.from(`${settings.apiKey}:${settings.secretKey}`).toString("base64");
@@ -92,19 +95,23 @@ export async function sendSms(
       (body.code === 100 || body.code === 200 ||
        (typeof body.message === "string" && body.message.toLowerCase().includes("success")));
 
+    if (!beemOk) {
+      const reason = (body.message as string) || (body.error as string) || `HTTP ${res.status}`;
+      log.error = `Beem: ${reason} (code ${body.code ?? res.status})`;
+    }
     log.status = beemOk ? "sent" : "failed";
     appendLog(log);
 
     if (!beemOk) {
-      const reason = (body.message as string) || (body.error as string) || `HTTP ${res.status}`;
-      return { ok: false, error: `Beem error: ${reason}` };
+      return { ok: false, error: log.error };
     }
     return { ok: true };
   } catch (err) {
     console.error("[beemSms] sendSms error:", err);
     log.status = "failed";
+    log.error = String(err);
     appendLog(log);
-    return { ok: false, error: String(err) };
+    return { ok: false, error: log.error };
   }
 }
 

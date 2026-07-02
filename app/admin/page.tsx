@@ -187,6 +187,9 @@ export default function AdminPage() {
   const [beemSettings, setBeemSettings] = useState({ apiKey: "", secretKey: "", senderId: "INFO" });
   const [beemSaving, setBeemSaving] = useState(false);
   const [beemMsg, setBeemMsg] = useState<{ok:boolean;text:string}|null>(null);
+  const [testPhone, setTestPhone] = useState("");
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{ok:boolean;detail:string}|null>(null);
   const [seedingBranches, setSeedingBranches] = useState(false);
   const [seedMsg, setSeedMsg] = useState<{ok:boolean;text:string}|null>(null);
 
@@ -353,6 +356,25 @@ export default function AdminPage() {
       setBeemMsg(res.ok ? { ok: true, text: "Settings saved successfully!" } : { ok: false, text: "Failed to save settings." });
     } catch { setBeemMsg({ ok: false, text: "Network error." }); }
     setBeemSaving(false);
+  };
+
+  const testSms = async () => {
+    if (!testPhone.trim()) return;
+    setTestLoading(true); setTestResult(null);
+    try {
+      const res = await fetch("/api/settings/beem/test", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: testPhone.trim() }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        setTestResult({ ok: true, detail: `✓ Sent! HTTP ${d.httpStatus}, Beem code ${d.beemCode}, Sender: ${d.senderId}, Phone: ${d.normalisedPhone}` });
+      } else {
+        const detail = d.beemMessage || d.error || `HTTP ${d.httpStatus ?? "?"}, code ${d.beemCode ?? "?"}`;
+        setTestResult({ ok: false, detail: `✗ Failed: ${detail}` });
+      }
+    } catch (e) { setTestResult({ ok: false, detail: `Network error: ${e}` }); }
+    setTestLoading(false);
   };
 
   const systemStats = [
@@ -954,6 +976,31 @@ export default function AdminPage() {
                 {beemSaving ? "Saving…" : "Save SMS Settings"}
               </Button>
             </div>
+
+            {/* Test SMS */}
+            <div className="pt-4 border-t border-gray-100 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Test SMS</p>
+                <p className="text-xs text-gray-400 mt-0.5">Send a test message to verify your credentials are working.</p>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={testPhone}
+                  onChange={e => setTestPhone(e.target.value)}
+                  placeholder="e.g. 0765849729 or 255765849729"
+                  className="flex-1"
+                />
+                <Button onClick={testSms} disabled={testLoading || !testPhone.trim()} variant="outline">
+                  {testLoading ? "Sending…" : "Send Test"}
+                </Button>
+              </div>
+              {testResult && (
+                <div className={`px-3 py-2 rounded-lg text-xs border font-mono break-all ${testResult.ok ? "bg-green-50 text-green-800 border-green-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+                  {testResult.detail}
+                </div>
+              )}
+            </div>
+
             <div className="rounded-lg bg-blue-50 border border-blue-100 p-4 text-xs text-blue-800 space-y-1">
               <p className="font-semibold">Auto-SMS Triggers (sent when Beem is configured):</p>
               <ul className="list-disc ml-4 space-y-0.5">

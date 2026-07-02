@@ -152,18 +152,20 @@ export default function AccountingSalesPage() {
       const sr = await fetch("/api/accounting/sales", { cache: "no-store" });
       if (sr.ok) {
         const d: Sale[] = await sr.json();
-        setSales(Array.isArray(d) ? d : []);
+        const list = Array.isArray(d) ? d : [];
+        setSales(list);
+        lsSet(SALES_KEY, list); // keep dashboard cache in sync
         // Migrate local-only sales
-        const local = lsGet<Sale[]>(SALES_KEY, []);
+        const local = lsGet<Sale[]>("_accounting_sales_local", []);
         if (local.length > 0) {
           const srvIds = new Set(d.map(s => s.id));
           const toMigrate = local.filter(s => !srvIds.has(s.id));
           if (toMigrate.length > 0) {
             await fetch("/api/accounting/sales", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toMigrate) });
             const r2 = await fetch("/api/accounting/sales", { cache: "no-store" });
-            if (r2.ok) setSales(await r2.json());
+            if (r2.ok) { const d2 = await r2.json(); setSales(d2); lsSet(SALES_KEY, d2); }
           }
-          lsSet(SALES_KEY, []);
+          lsSet("_accounting_sales_local", []);
         }
       } else setSales(lsGet<Sale[]>(SALES_KEY, []));
     } catch { setSales(lsGet<Sale[]>(SALES_KEY, [])); }
