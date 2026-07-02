@@ -13,6 +13,7 @@ export interface AppNotification {
   customerPhone?: string;
   companyId?: string;
   amount?: number;
+  urgency?: string;
   smsSent?: boolean;
   read?: boolean;
   createdAt: string;
