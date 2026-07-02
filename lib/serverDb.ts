@@ -3,16 +3,47 @@ import path from "path";
 import os from "os";
 
 // DATA_PATH env var explicitly pins the storage location.
-// Falls back to process.cwd()/data.  Set DATA_PATH in ecosystem.config.js to
-// /var/www/boms/data so it is NEVER inside .next/standalone/ (wiped on build).
-const DATA_DIR = process.env.DATA_PATH
-  ? path.resolve(process.env.DATA_PATH)
-  : path.join(process.cwd(), "data");
+// Falls back to a path that is NEVER inside .next/standalone/ (wiped on every build).
+const DATA_DIR = (() => {
+  if (process.env.DATA_PATH) return path.resolve(process.env.DATA_PATH);
+  const cwd = process.cwd().replace(/\\/g, "/");
+  // If running from inside .next/standalone (Next.js standalone mode), go up to project root
+  const nextIdx = cwd.indexOf("/.next/");
+  if (nextIdx >= 0) {
+    const projectRoot = cwd.slice(0, nextIdx);
+    return path.join(projectRoot, "data");
+  }
+  return path.join(cwd, "data");
+})();
 
 const BACKUP_DIR = path.join(DATA_DIR, "backups");
 
 // Log data directory on first load
 console.log(`[serverDb] Using DATA_DIR: ${DATA_DIR}`);
+
+// One-time migration: recover any .json files that were previously written into
+// .next/standalone/data/ (wiped on each build) and copy them to DATA_DIR.
+// Safe to run on every startup — skips files that already exist in DATA_DIR.
+(function migrateStandaloneData() {
+  try {
+    const cwd = process.cwd().replace(/\\/g, "/");
+    const nextIdx = cwd.indexOf("/.next/");
+    const projectRoot = nextIdx >= 0 ? cwd.slice(0, nextIdx) : cwd;
+    const standaloneData = path.join(projectRoot, ".next", "standalone", "data");
+    if (!fs.existsSync(standaloneData)) return;
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    const files = fs.readdirSync(standaloneData).filter(f => f.endsWith(".json") && !f.startsWith("_"));
+    for (const file of files) {
+      const src = path.join(standaloneData, file);
+      const dst = path.join(DATA_DIR, file);
+      if (fs.existsSync(dst)) continue; // already migrated — skip
+      try {
+        fs.copyFileSync(src, dst);
+        console.log(`[serverDb] migrated ${file} from standalone → ${dst}`);
+      } catch {}
+    }
+  } catch {}
+})();
 
 function ensureDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });

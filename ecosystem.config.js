@@ -14,6 +14,8 @@ module.exports = {
         // which is wiped on every `npm run build`.
         DATA_PATH: "/var/www/boms/data",
       },
+      // IMPORTANT: always restart with --update-env so DATA_PATH is applied:
+      //   pm2 restart ecosystem.config.js --update-env
       // Restart if it uses more than 1.5 GB RAM
       max_memory_restart: "1500M",
       // Restart on crash
