@@ -94,7 +94,7 @@ export default function AccountingSalesPage() {
   const [custSearch, setCustSearch]   = useState("");
 
   const [loading, setLoading]       = useState(true);
-  const [statPeriod, setStatPeriod] = useState<"daily"|"weekly"|"monthly"|"yearly"|"all">("daily");
+  const [statPeriod, setStatPeriod] = useState<"daily"|"weekly"|"monthly"|"yearly"|"all">("all");
   const [statDate, setStatDate]     = useState(new Date().toISOString().slice(0,10));
   const [importing, setImporting]   = useState(false);
   const [importMsg, setImportMsg]   = useState<{type:"success"|"error";text:string}|null>(null);
@@ -346,7 +346,7 @@ export default function AccountingSalesPage() {
   const saveForm = async () => {
     if (saving) return;                  // block re-entry while in-flight
     if (!form.customerId) { setFormError("Select a customer."); return; }
-    if (isGroupHQ && !form.saleCompanyId) { setFormError("Select which company this sale belongs to."); return; }
+    if (isGroupHQ && !editItem && !form.saleCompanyId) { setFormError("Select which company this sale belongs to."); return; }
     const filled = form.items.filter(it => it.description.trim());
     if (filled.length === 0) { setFormError("Add at least one item."); return; }
     setSaving(true);
