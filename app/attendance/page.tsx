@@ -181,6 +181,8 @@ export default function AttendancePage() {
     loadSession();
     fetchRecords();
     loadBranches();
+    // Trigger late check-in reminder (API guards weekday + 08:00 EAT condition)
+    fetch("/api/attendance/late-reminder", { method: "POST" }).catch(() => {});
     window.addEventListener("phidtech_companies_updated", reload);
     window.addEventListener("storage", reload);
     return () => {

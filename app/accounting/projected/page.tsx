@@ -24,10 +24,13 @@ function lsGet<T>(key: string, fb: T): T {
 
 interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; }
 interface Company { id: string; name: string; }
+type ViewPeriod = "weekly" | "monthly" | "3months" | "4months" | "6months" | "12months" | "custom";
+type EntryPeriod = "once" | "weekly" | "monthly" | "3months" | "4months" | "6months" | "yearly";
+
 interface Projection {
   id: string; companyId: string; type: "expense" | "income";
   title: string; category: string; amount: number;
-  period: "monthly" | "once"; month: string; year: number;
+  period: EntryPeriod; month: string; year: number;
   priority?: "high" | "medium" | "low"; status: "draft" | "confirmed" | "done";
   notes?: string; createdAt: string;
 }
@@ -39,10 +42,47 @@ const MONTHS_LIST = ["January","February","March","April","May","June","July","A
 const currentYear  = new Date().getFullYear();
 const currentMonth = MONTHS_LIST[new Date().getMonth()];
 
+const VIEW_PERIOD_LABELS: Record<ViewPeriod, string> = {
+  weekly:   "This Week",
+  monthly:  "This Month",
+  "3months":"3 Months",
+  "4months":"4 Months",
+  "6months":"6 Months",
+  "12months":"12 Months",
+  custom:   "Custom Range",
+};
+
+/** Returns list of {month, year} pairs covered by the chosen view period starting from today */
+function getViewMonths(vp: ViewPeriod, customStart: string, customEnd: string): {month: string; year: number}[] {
+  const now = new Date();
+  const results: {month: string; year: number}[] = [];
+  let count = 1;
+  if (vp === "3months")  count = 3;
+  else if (vp === "4months")  count = 4;
+  else if (vp === "6months")  count = 6;
+  else if (vp === "12months") count = 12;
+  else if (vp === "weekly" || vp === "monthly") count = 1;
+  else if (vp === "custom") {
+    const s = customStart ? new Date(customStart) : new Date();
+    const e = customEnd   ? new Date(customEnd)   : new Date();
+    const cur = new Date(s.getFullYear(), s.getMonth(), 1);
+    while (cur <= e) {
+      results.push({ month: MONTHS_LIST[cur.getMonth()], year: cur.getFullYear() });
+      cur.setMonth(cur.getMonth() + 1);
+    }
+    return results;
+  }
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    results.push({ month: MONTHS_LIST[d.getMonth()], year: d.getFullYear() });
+  }
+  return results;
+}
+
 const emptyForm = () => ({
   type: "expense" as Projection["type"],
   title: "", category: "", amount: "",
-  period: "monthly" as Projection["period"],
+  period: "monthly" as EntryPeriod,
   month: currentMonth, year: String(currentYear),
   priority: "medium" as Projection["priority"],
   status: "draft" as Projection["status"],
@@ -68,9 +108,12 @@ export default function ProjectedPage() {
   const [cid,         setCid]         = useState("");
   const [groupCid,    setGroupCid]    = useState("");
   const [loading,     setLoading]     = useState(true);
-  const [activeTab,   setActiveTab]   = useState<"expense" | "income">("expense");
-  const [filterMonth, setFilterMonth] = useState(currentMonth);
-  const [filterYear,  setFilterYear]  = useState(String(currentYear));
+  const [activeTab,     setActiveTab]   = useState<"expense" | "income">("expense");
+  const [viewPeriod,    setViewPeriod]   = useState<ViewPeriod>("monthly");
+  const [customStart,   setCustomStart]  = useState("");
+  const [customEnd,     setCustomEnd]    = useState("");
+  const [filterMonth,   setFilterMonth]  = useState(currentMonth);
+  const [filterYear,    setFilterYear]   = useState(String(currentYear));
   const [showDialog,  setShowDialog]  = useState(false);
   const [editItem,    setEditItem]    = useState<Projection | null>(null);
   const [deleteId,    setDeleteId]    = useState<string | null>(null);
@@ -97,10 +140,14 @@ export default function ProjectedPage() {
   useEffect(() => { loadData(); }, []);
 
   const isGroupView = !cid || cid === groupCid;
+
+  // Build the set of (month,year) pairs for current view
+  const viewMonths = getViewMonths(viewPeriod, customStart, customEnd);
+  const viewMonthKeys = new Set(viewMonths.map(m => `${m.month}|${m.year}`));
+
   const allFiltered = projections
     .filter(p => isGroupView || p.companyId === cid)
-    .filter(p => !filterMonth || p.month === filterMonth)
-    .filter(p => !filterYear  || String(p.year) === filterYear);
+    .filter(p => viewMonths.length === 0 || viewMonthKeys.has(`${p.month}|${p.year}`));
 
   const expenses = allFiltered.filter(p => p.type === "expense");
   const incomes  = allFiltered.filter(p => p.type === "income");
@@ -112,6 +159,13 @@ export default function ProjectedPage() {
 
   const confirmedIncome  = incomes.filter(p  => p.status === "confirmed" || p.status === "done").reduce((s, p) => s + p.amount, 0);
   const confirmedExpense = expenses.filter(p => p.status === "confirmed" || p.status === "done").reduce((s, p) => s + p.amount, 0);
+
+  // Per-month breakdown for timeline view
+  const monthBreakdown = viewMonths.map(({ month, year }) => {
+    const mInc = incomes.filter(p => p.month === month && p.year === year).reduce((s,p) => s+p.amount, 0);
+    const mExp = expenses.filter(p => p.month === month && p.year === year).reduce((s,p) => s+p.amount, 0);
+    return { label: `${month.slice(0,3)} ${year}`, income: mInc, expense: mExp, net: mInc - mExp };
+  });
 
   const openAdd = () => {
     setEditItem(null);
@@ -217,6 +271,54 @@ export default function ProjectedPage() {
         </div>
       </div>
 
+      {/* Period Selector */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide mr-1">View Period:</span>
+          {(Object.keys(VIEW_PERIOD_LABELS) as ViewPeriod[]).map(vp => (
+            <button key={vp} onClick={() => setViewPeriod(vp)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
+                viewPeriod === vp ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
+              }`}>
+              {VIEW_PERIOD_LABELS[vp]}
+            </button>
+          ))}
+        </div>
+        {viewPeriod === "custom" && (
+          <div className="flex items-center gap-3 flex-wrap">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">From</label>
+              <input type="month" value={customStart} onChange={e => setCustomStart(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">To</label>
+              <input type="month" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Month Breakdown Timeline (only when multi-month period) */}
+      {viewMonths.length > 1 && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4 overflow-x-auto">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Month-by-Month Breakdown</p>
+          <div className="flex gap-3 min-w-max">
+            {monthBreakdown.map(m => (
+              <div key={m.label} className="min-w-[120px] border border-gray-100 rounded-xl p-3 bg-gray-50">
+                <p className="text-xs font-bold text-gray-700 mb-2">{m.label}</p>
+                <p className="text-xs text-green-600">↑ {formatCurrency(m.income)}</p>
+                <p className="text-xs text-red-600">↓ {formatCurrency(m.expense)}</p>
+                <p className={`text-xs font-semibold mt-1 ${m.net >= 0 ? "text-green-700" : "text-red-700"}`}>
+                  Net: {formatCurrency(m.net)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Filters + Tabs */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4 flex flex-wrap items-center gap-3">
         <div className="flex bg-gray-100 rounded-lg p-1">
@@ -227,15 +329,7 @@ export default function ProjectedPage() {
             <TrendingUp className="w-4 h-4" />Income
           </button>
         </div>
-        <Select value={filterMonth} onValueChange={setFilterMonth}>
-          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-          <SelectContent>{MONTHS_LIST.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={filterYear} onValueChange={setFilterYear}>
-          <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-          <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
-        </Select>
-        <span className="ml-auto text-xs text-gray-400">{displayed.length} records</span>
+        <span className="ml-auto text-xs text-gray-400">{displayed.length} records · {viewMonths.map(m => `${m.month.slice(0,3)} ${m.year}`).join(", ")}</span>
       </div>
 
       {/* Table */}
@@ -339,12 +433,17 @@ export default function ProjectedPage() {
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Period</label>
-                <Select value={form.period} onValueChange={v => sf({ period: v as Projection["period"] })}>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Period Type</label>
+                <Select value={form.period} onValueChange={v => sf({ period: v as EntryPeriod })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="monthly">Monthly</SelectItem>
                     <SelectItem value="once">One-time</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="3months">Every 3 Months</SelectItem>
+                    <SelectItem value="4months">Every 4 Months</SelectItem>
+                    <SelectItem value="6months">Every 6 Months</SelectItem>
+                    <SelectItem value="yearly">Yearly</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

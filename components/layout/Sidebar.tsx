@@ -8,7 +8,7 @@ import {
   ChevronRight, Building2, ShoppingCart, Megaphone, Package,
   Receipt, BarChart3, FileText, Warehouse, TrendingUp, Briefcase,
   Clock, HelpCircle, X, Menu, Percent, Wrench, Activity, Scale, MapPin,
-  Users2, MessageSquarePlus, MessageSquare, Landmark, Radio, BadgeCheck, Music, Film, Wallet, ClipboardList
+  Users2, MessageSquarePlus, MessageSquare, Landmark, Radio, BadgeCheck, Music, Film, Wallet, ClipboardList, CreditCard
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -41,6 +41,7 @@ const PERM_ROUTES: Record<string, string[]> = {
   pending_payments:    ["/accounting/pending-payments"],
   account_floats:      ["/accounting/account-floats"],
   debtors:             ["/accounting/debtors"],
+  creditors:           ["/accounting/creditors"],
   projected_budget:    ["/accounting/projected"],
   accounting:          ["/accounting"],
   invoices:          ["/invoices"],
@@ -112,6 +113,7 @@ const ALL_NAV: NavGroup[] = [
       { label: "Balance Sheet",        href: "/accounting/balance-sheet",   icon: Scale        },
       { label: "Cash Flow",            href: "/accounting/cashflow",        icon: Activity     },
       { label: "Debtors",             href: "/accounting/debtors",        icon: Users2       },
+      { label: "Creditors",            href: "/accounting/creditors",      icon: CreditCard   },
       { label: "Invoices",             href: "/invoices",                   icon: FileText     },
       { label: "Petty Cash",           href: "/petty-cash",                 icon: DollarSign   },
       { label: "Interest from Loans",  href: "/accounting/loan-interest",   icon: TrendingUp   },
