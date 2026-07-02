@@ -900,22 +900,19 @@ export default function TasksPage() {
                   <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
                   <SelectContent className="max-h-52">
                     {(() => {
-                      const formCid2 = form.taskCompanyId || activeCompanyId;
-                      const byCompany = formCid2 ? allStaffList.filter(u => u.companyId === formCid2) : allStaffList;
-                      // Fall back to all staff if company filter returns nothing (companyId mismatch)
-                      const baseList = byCompany.length > 0 ? byCompany : allStaffList;
-                      // Show ALL staff for task assignment (no branch filter)
+                      // Always show ALL active staff for task assignment
+                      const baseList = allStaffList;
                       if (baseList.length === 0) return (
                         <div className="px-3 py-4 text-center text-sm text-gray-400">No staff found</div>
                       );
                       return baseList.map(u => {
-                        const br = branches.find(b => b.id === u.branchId);
+                        const co = companiesList.find(c => c.id === u.companyId);
                         return (
                           <SelectItem key={u.id} value={u.id}>
                             <div className="flex items-center gap-2">
                               <span>{u.name}</span>
                               <span className="text-gray-400 text-xs">· {u.position || u.department}</span>
-                              {br && <span className="text-blue-500 text-xs font-medium">· {br.name}</span>}
+                              {co && <span className="text-purple-500 text-xs font-medium">· {co.name}</span>}
                             </div>
                           </SelectItem>
                         );
@@ -957,9 +954,8 @@ export default function TasksPage() {
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1.5 block">Chat Participants <span className="text-gray-400 font-normal text-xs">(optional — can chat on this task)</span></label>
               {(() => {
-                const formCid3 = form.taskCompanyId || activeCompanyId;
-                const byCo3 = formCid3 ? allStaffList.filter(u => u.companyId === formCid3) : allStaffList;
-                const pickable = (byCo3.length > 0 ? byCo3 : allStaffList)
+                // Always show ALL active staff as potential chat participants
+                const pickable = allStaffList
                   .filter(u => u.id !== form.assignedTo && (u.status ?? "").toLowerCase() === "active");
                 return (
                   <div className="border border-gray-200 rounded-lg p-2 max-h-36 overflow-y-auto space-y-1">
