@@ -197,7 +197,7 @@ export async function POST() {
       reminders: created.length,
       details: created.map(n => ({
         customer: n.customerName,
-        urgency: (n as Record<string,unknown>).urgency,
+        urgency: n.urgency,
         smsSent: n.smsSent,
         amount: n.amount,
       })),
