@@ -194,12 +194,14 @@ export default function AccountingSalesPage() {
     return true;
   };
 
+  // Table always shows ALL records (search + status only — NOT period-filtered)
   const filtered  = coSales.filter(s => {
     const ms = s.customerName.toLowerCase().includes(search.toLowerCase()) || s.id.toLowerCase().includes(search.toLowerCase());
     const mf = statusFilter === "all" || s.status === statusFilter;
-    return ms && mf && periodFilter(s);
+    return ms && mf;
   });
 
+  // Period-specific data for stat cards only
   const periodSales = coSales.filter(periodFilter);
   const periodRev  = periodSales.reduce((s,e) => s + e.amount, 0);
   const periodPaid = periodSales.reduce((s,e) => s + e.paid, 0);
@@ -503,7 +505,7 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
         )}
         {statPeriod !== "all" && (
           <span className="text-xs text-gray-500 ml-1">
-            {filtered.length} record{filtered.length !== 1 ? "s" : ""}
+            {periodSales.length} record{periodSales.length !== 1 ? "s" : ""} in period
           </span>
         )}
       </div>
