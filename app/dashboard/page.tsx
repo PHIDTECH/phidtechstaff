@@ -123,6 +123,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     reload();
+    // Backup trigger for late check-in reminders (API only acts Mon-Fri after 08:00 EAT)
+    fetch("/api/attendance/late-reminder", { method: "POST" }).catch(() => {});
     const onUpdate = () => reload();
     window.addEventListener("phidtech_companies_updated", onUpdate);
     window.addEventListener("phidtech_session_updated", onUpdate);
