@@ -44,63 +44,80 @@ console.log(`[serverDb] Using DATA_DIR: ${DATA_DIR}`);
   } catch {}
 })();
 
+// ── In-process read cache ──────────────────────────────────────────────────
+// Eliminates repeated disk reads for the same file within a short window.
+// Safe because PM2 runs a single process (instances: 1).
+// Invalidated immediately on every writeDb call.
+const _cache = new Map<string, { data: unknown; ts: number }>();
+const CACHE_TTL_MS = 30_000; // 30 seconds
+
+// ── Directory existence flag ───────────────────────────────────────────────
+let _dirReady = false;
 function ensureDir() {
+  if (_dirReady) return;
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  _dirReady = true;
 }
 
 function filePath(name: string) {
   return path.join(DATA_DIR, `${name}.json`);
 }
 
-function backupFile(name: string) {
-  try {
-    const fp = filePath(name);
-    if (!fs.existsSync(fp)) return;
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const backupPath = path.join(BACKUP_DIR, `${name}_${timestamp}.json`);
-    fs.copyFileSync(fp, backupPath);
-    // Keep only last 5 backups per file
-    const backups = fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith(`${name}_`)).sort().reverse();
-    backups.slice(5).forEach(f => fs.unlinkSync(path.join(BACKUP_DIR, f)));
-  } catch (err) {
-    console.error(`[serverDb] backup("${name}") failed:`, err);
-  }
+// Run backup asynchronously so it never blocks the write hot-path.
+function backupFileAsync(name: string) {
+  setImmediate(() => {
+    try {
+      const fp = filePath(name);
+      if (!fs.existsSync(fp)) return;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const backupPath = path.join(BACKUP_DIR, `${name}_${timestamp}.json`);
+      fs.copyFileSync(fp, backupPath);
+      const backups = fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith(`${name}_`)).sort().reverse();
+      backups.slice(5).forEach(f => { try { fs.unlinkSync(path.join(BACKUP_DIR, f)); } catch {} });
+    } catch {}
+  });
 }
 
 export function readDb<T>(name: string, fallback: T): T {
+  // Serve from cache when still fresh
+  const hit = _cache.get(name);
+  if (hit && Date.now() - hit.ts < CACHE_TTL_MS) return hit.data as T;
   try {
     ensureDir();
     const fp = filePath(name);
     if (!fs.existsSync(fp)) return fallback;
     const raw = fs.readFileSync(fp, "utf-8").trim();
     if (!raw) return fallback;
-    return JSON.parse(raw) as T;
+    const data = JSON.parse(raw) as T;
+    _cache.set(name, { data, ts: Date.now() });
+    return data;
   } catch {
     return fallback;
   }
 }
 
 export function writeDb(name: string, data: unknown): void {
+  // Warm the cache immediately so the next readDb is instant
+  _cache.set(name, { data, ts: Date.now() });
   try {
     ensureDir();
-    const fp  = filePath(name);
-    // Create backup before overwriting (only if file exists and has data)
+    const fp = filePath(name);
+    // Backup asynchronously — never blocks the write
     if (fs.existsSync(fp)) {
       const existing = fs.readFileSync(fp, "utf-8").trim();
-      if (existing.length > 10) backupFile(name);
+      if (existing.length > 10) backupFileAsync(name);
     }
     // Write temp file in the SAME directory as the destination so that
-    // fs.renameSync is always within one filesystem (avoids EXDEV cross-device error
-    // that silently fails when os.tmpdir() is on a different mount, e.g. /tmp on Linux).
+    // fs.renameSync is always within one filesystem (avoids EXDEV cross-device error).
     const tmp = path.join(DATA_DIR, `_tmp_${name}_${Date.now()}.tmp`);
     const content = JSON.stringify(data, null, 2);
     fs.writeFileSync(tmp, content, "utf-8");
     fs.renameSync(tmp, fp);
-    console.log(`[serverDb] writeDb("${name}") saved ${Array.isArray(data) ? data.length : 1} items to ${fp}`);
+    console.log(`[serverDb] writeDb("${name}") saved ${Array.isArray(data) ? data.length : 1} items`);
   } catch (err) {
     console.error(`[serverDb] writeDb("${name}") failed:`, err);
-    // Last-resort direct write (no atomicity) so data is never silently lost
+    // Last-resort direct write so data is never silently lost
     try {
       fs.writeFileSync(filePath(name), JSON.stringify(data, null, 2), "utf-8");
       console.warn(`[serverDb] writeDb("${name}") used fallback direct write`);

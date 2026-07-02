@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Settings, Users, Building2, Activity, RefreshCw, Download,
-  CheckCircle, AlertTriangle, Database, Pencil, ArrowLeftRight, X, Plus, MapPin, Trash2, Wifi, Copy
+  CheckCircle, AlertTriangle, Database, Pencil, ArrowLeftRight, X, Plus, MapPin, Trash2, Wifi, Copy, OctagonX
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { auditLogs } from "@/lib/data";
@@ -74,6 +74,94 @@ function MigrateButton({ label, lsKey, endpoint }: { label: string; lsKey: strin
 
 interface Branch { id: string; companyId: string; name: string; location: string; managerId: string; allowedIPs?: string; }
 const emptyBranch = (): Omit<Branch, "id"> => ({ companyId: "", name: "", location: "", managerId: "", allowedIPs: "" });
+
+// ── Data Management sub-component ────────────────────────────────────────────
+function DataManagement() {
+  const DATASETS: { label: string; endpoint: string; color: string }[] = [
+    { label: "Customer Sales",  endpoint: "/api/accounting/sales?clear=all", color: "blue"   },
+    { label: "Customers",       endpoint: "/api/customers?clear=all",        color: "green"  },
+    { label: "Expenses",        endpoint: "/api/expenses?clear=all",         color: "orange" },
+  ];
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{text:string;ok:boolean}|null>(null);
+
+  const doClear = async (endpoint: string) => {
+    setBusy(true);
+    try {
+      const r = await fetch(endpoint, { method: "DELETE" });
+      const d = await r.json();
+      setMsg({ text: `Deleted ${d.deleted ?? 0} records successfully.`, ok: true });
+    } catch { setMsg({ text: "Failed. Please try again.", ok: false }); }
+    finally { setBusy(false); setConfirm(null); setTimeout(() => setMsg(null), 4000); }
+  };
+
+  const colorMap: Record<string, string> = {
+    blue:   "bg-blue-50 border-blue-200 text-blue-800",
+    green:  "bg-green-50 border-green-200 text-green-800",
+    orange: "bg-orange-50 border-orange-200 text-orange-800",
+  };
+  const iconMap: Record<string, string> = {
+    blue: "bg-blue-100", green: "bg-green-100", orange: "bg-orange-100",
+  };
+
+  return (
+    <div className="space-y-4">
+      {msg && (
+        <div className={`rounded-lg px-4 py-3 text-sm font-medium ${msg.ok ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+          {msg.text}
+        </div>
+      )}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 flex gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+        <div>
+          <p className="font-semibold text-amber-800 text-sm">Danger Zone</p>
+          <p className="text-xs text-amber-700 mt-0.5">These actions permanently delete all records in the selected dataset. Use this only to fix a bad CSV import. Data cannot be recovered.</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {DATASETS.map(ds => (
+          <div key={ds.label} className={`rounded-xl border p-5 ${colorMap[ds.color]}`}>
+            <div className={`w-10 h-10 rounded-full ${iconMap[ds.color]} flex items-center justify-center mb-3`}>
+              <Database className="w-5 h-5" />
+            </div>
+            <p className="font-semibold text-gray-900 mb-1">{ds.label}</p>
+            <p className="text-xs text-gray-500 mb-4">Remove all records from this dataset on the server.</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-red-600 border-red-200 hover:bg-red-50 w-full"
+              onClick={() => setConfirm(ds.endpoint)}
+            >
+              <OctagonX className="w-4 h-4 mr-1.5" />Clear All {ds.label}
+            </Button>
+          </div>
+        ))}
+      </div>
+      {confirm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-7 max-w-sm w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <OctagonX className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Delete ALL Records?</p>
+                <p className="text-sm text-gray-500">All data in this dataset will be permanently removed. This cannot be undone.</p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setConfirm(null)} disabled={busy}>Cancel</Button>
+              <Button size="sm" onClick={() => doClear(confirm)} disabled={busy} className="bg-red-600 hover:bg-red-700 text-white">
+                {busy ? "Deleting..." : "Yes, Delete All"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AdminPage() {
   usePermissionGuard("admin");
@@ -347,6 +435,7 @@ export default function AdminPage() {
           <TabsTrigger value="backup">Backup</TabsTrigger>
           <TabsTrigger value="sms">SMS Settings</TabsTrigger>
           <TabsTrigger value="audit">Audit Logs</TabsTrigger>
+          <TabsTrigger value="data">Data Management</TabsTrigger>
         </TabsList>
 
         {/* Companies Tab */}
@@ -877,6 +966,11 @@ export default function AdminPage() {
               </ul>
             </div>
           </div>
+        </TabsContent>
+
+        {/* Data Management Tab */}
+        <TabsContent value="data">
+          <DataManagement />
         </TabsContent>
 
         {/* Audit Logs Tab */}
