@@ -3,10 +3,11 @@ import { readDb, writeDb } from "@/lib/serverDb";
 
 export interface AppNotification {
   id: string;
-  type: "debt_reminder" | "info" | "warning" | "success";
+  type: "debt_reminder" | "late_checkin" | "info" | "warning" | "success";
   title: string;
   message: string;
   saleId?: string;
+  userId?: string;
   customerId?: string;
   customerName?: string;
   customerPhone?: string;
