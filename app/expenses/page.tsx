@@ -315,6 +315,7 @@ export default function ExpensesPage() {
   const isAdmin = session?.isSuperAdmin || ["admin","superadmin","group_ceo"].includes((session?.role ?? "").toLowerCase());
   const [clearConfirm, setClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const clearAllExpenses = async () => {
     setClearing(true);
     try {
