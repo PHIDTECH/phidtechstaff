@@ -82,7 +82,7 @@ export async function POST() {
     const timeStr = `${String(eatNow.getHours()).padStart(2,"0")}:${String(eatNow.getMinutes()).padStart(2,"0")}`;
 
     for (const user of lateStaff) {
-      const msg = `Dear ${user.name}, you have not checked in today (${todayStr}) by 08:00 AM. Please clock in immediately or contact your supervisor. — PHIDTECH`;
+      const msg = `Dear ${user.name}, you have not checked in today (${todayStr}) by 08:00 AM. Please clock in immediately or contact your supervisor. - PHIDTECH`;
 
       // Send SMS
       let smsSent = false;

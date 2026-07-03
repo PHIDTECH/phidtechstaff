@@ -98,21 +98,21 @@ function getReminderInfo(dueStr: string, today: Date, customerName: string, bala
     return {
       shouldNotify: true,
       urgency: "warning",
-      message: `Dear ${customerName}, your payment of ${fmt(balance)} is due in 3 days (${dueStr}). Please prepare. — PHIDTECH`,
+      message: `Dear ${customerName}, your payment of ${fmt(balance)} is due in 3 days (${dueStr}). Please prepare. - PHIDTECH`,
     };
   }
   if (diff === 0) {
     return {
       shouldNotify: true,
       urgency: "due_today",
-      message: `Dear ${customerName}, your payment of ${fmt(balance)} is DUE TODAY (${dueStr}). Please settle now. — PHIDTECH`,
+      message: `Dear ${customerName}, your payment of ${fmt(balance)} is DUE TODAY (${dueStr}). Please settle now. - PHIDTECH`,
     };
   }
   if (diff > 0 && diff % 3 === 0) {
     return {
       shouldNotify: true,
       urgency: "overdue",
-      message: `Dear ${customerName}, your payment of ${fmt(balance)} was due on ${dueStr} (${diff} days overdue). Please settle immediately. — PHIDTECH`,
+      message: `Dear ${customerName}, your payment of ${fmt(balance)} was due on ${dueStr} (${diff} days overdue). Please settle immediately. - PHIDTECH`,
     };
   }
   return { shouldNotify: false, message: "", urgency: "" };
