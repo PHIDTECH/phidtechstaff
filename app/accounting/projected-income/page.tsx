@@ -22,7 +22,7 @@ function lsGet<T>(key: string, fb: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fb; } catch { return fb; }
 }
 
-interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; }
+interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; branchId?: string | null; }
 interface Company { id: string; name: string; }
 interface Service { id: string; name: string; price: number; unit: string; category: string; companyId: string; status: string; }
 
@@ -33,7 +33,23 @@ interface ProjectedIncome {
   period: "once" | "weekly" | "monthly" | "3months" | "6months" | "yearly";
   month: string; year: number;
   status: "draft" | "confirmed" | "done";
-  notes?: string; createdAt: string;
+  notes?: string; createdAt: string; branchId?: string | null;
+}
+
+const GROUP_PROJ_ROLES = ["group_ceo","group_cfo","group_manager","group_controller","group_accountant","group_auditor","general_manager","general manager","manager of operations","manager_of_operations"];
+
+function projectionScope(sess: Session | null, cid: string) {
+  if (!sess) return { canSeeGroup: false, canSeeBranch: false, branchId: null as string|null, strictCid: "" };
+  const pos = (sess.position ?? "").toLowerCase();
+  const role = (sess.role ?? "").toLowerCase();
+  const isGroupRole = sess.isSuperAdmin || sess.companyId === "group" || GROUP_PROJ_ROLES.includes(pos) || GROUP_PROJ_ROLES.includes(role);
+  const isBranchMgr = !isGroupRole && !!sess.branchId;
+  return {
+    canSeeGroup: isGroupRole,
+    canSeeBranch: isBranchMgr,
+    branchId: sess.branchId ?? null,
+    strictCid: isGroupRole ? "" : (cid || sess.companyId || ""),
+  };
 }
 
 const MONTHS_LIST = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -107,10 +123,15 @@ export default function ProjectedIncomePage() {
 
   useEffect(() => { loadData(); }, []);
 
-  const isGroupView = !cid || cid === groupCid;
+  const scope = projectionScope(session, cid);
+  const isGroupView = scope.canSeeGroup;
 
   const displayed = items
-    .filter(p => isGroupView || p.companyId === cid)
+    .filter(p => {
+      if (scope.canSeeGroup) return true;
+      if (scope.canSeeBranch) return p.branchId === scope.branchId;
+      return p.companyId === scope.strictCid && p.companyId !== "group";
+    })
     .filter(p => p.month === filterMonth && String(p.year) === filterYear);
 
   const totalProjected  = displayed.reduce((s, p) => s + p.amount, 0);
@@ -188,6 +209,7 @@ export default function ProjectedIncomePage() {
       year: Number(form.year),
       status: form.status,
       notes: form.notes,
+      branchId: session?.branchId ?? null,
     };
     try {
       if (editItem) {
@@ -358,11 +380,24 @@ export default function ProjectedIncomePage() {
       />
 
       {/* Planning only notice */}
-      <div className="mb-5 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+      <div className="mb-3 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
         <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
         <p className="text-sm text-amber-800">
           <strong>Planning Tool Only:</strong> Projected income records are for budgeting purposes only — they do <strong>not</strong> affect actual books of accounts.
         </p>
+      </div>
+
+      {/* Scope Banner */}
+      <div className={`mb-5 flex items-center gap-3 rounded-xl px-4 py-3 border text-sm font-medium ${
+        scope.canSeeGroup  ? "bg-blue-50 border-blue-200 text-blue-800" :
+        scope.canSeeBranch ? "bg-teal-50 border-teal-200 text-teal-800" :
+                             "bg-gray-50 border-gray-200 text-gray-700"
+      }`}>
+        <span>{
+          scope.canSeeGroup  ? "👁️ You are viewing GROUP-LEVEL projected income (all companies)" :
+          scope.canSeeBranch ? `🏢 You are viewing projected income for your branch only` :
+                               `🏬 You are viewing projected income for your company only`
+        }</span>
       </div>
 
       {/* Summary Cards */}

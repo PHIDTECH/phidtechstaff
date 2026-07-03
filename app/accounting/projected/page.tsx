@@ -22,8 +22,24 @@ function lsGet<T>(key: string, fb: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fb; } catch { return fb; }
 }
 
-interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; }
+interface Session { id: string; name: string; role: string; position?: string; isSuperAdmin: boolean; companyId: string; branchId?: string | null; }
 interface Company { id: string; name: string; }
+
+const GROUP_PROJ_ROLES = ["group_ceo","group_cfo","group_manager","group_controller","group_accountant","group_auditor","general_manager","general manager","manager of operations","manager_of_operations"];
+
+function projectionScope(sess: Session | null, groupCid: string, cid: string) {
+  if (!sess) return { canSeeGroup: false, canSeeBranch: false, branchId: null as string|null, strictCid: "" };
+  const pos = (sess.position ?? "").toLowerCase();
+  const role = (sess.role ?? "").toLowerCase();
+  const isGroupRole = sess.isSuperAdmin || sess.companyId === "group" || GROUP_PROJ_ROLES.includes(pos) || GROUP_PROJ_ROLES.includes(role);
+  const isBranchMgr = !isGroupRole && !!sess.branchId;
+  return {
+    canSeeGroup: isGroupRole,
+    canSeeBranch: isBranchMgr,
+    branchId: sess.branchId ?? null,
+    strictCid: isGroupRole ? "" : (cid || sess.companyId || ""),
+  };
+}
 type ViewPeriod = "weekly" | "monthly" | "3months" | "4months" | "6months" | "12months" | "custom";
 type EntryPeriod = "once" | "weekly" | "monthly" | "3months" | "4months" | "6months" | "yearly";
 
@@ -32,7 +48,7 @@ interface Projection {
   title: string; category: string; amount: number;
   period: EntryPeriod; month: string; year: number;
   priority?: "high" | "medium" | "low"; status: "draft" | "confirmed" | "done";
-  notes?: string; createdAt: string;
+  notes?: string; createdAt: string; branchId?: string | null;
 }
 
 const EXPENSE_CATEGORIES = ["Salaries & Wages","Rent & Utilities","Marketing & Advertising","Transport & Logistics","IT & Software","Maintenance & Repairs","Office Supplies","Professional Fees","Insurance","Other"];
@@ -139,14 +155,19 @@ export default function ProjectedPage() {
 
   useEffect(() => { loadData(); }, []);
 
-  const isGroupView = !cid || cid === groupCid;
+  const scope = projectionScope(session, groupCid, cid);
+  const isGroupView = scope.canSeeGroup;
 
   // Build the set of (month,year) pairs for current view
   const viewMonths = getViewMonths(viewPeriod, customStart, customEnd);
   const viewMonthKeys = new Set(viewMonths.map(m => `${m.month}|${m.year}`));
 
   const allFiltered = projections
-    .filter(p => isGroupView || p.companyId === cid)
+    .filter(p => {
+      if (scope.canSeeGroup) return true;
+      if (scope.canSeeBranch) return p.branchId === scope.branchId;
+      return p.companyId === scope.strictCid && p.companyId !== "group";
+    })
     .filter(p => viewMonths.length === 0 || viewMonthKeys.has(`${p.month}|${p.year}`));
 
   const expenses = allFiltered.filter(p => p.type === "expense");
@@ -188,6 +209,7 @@ export default function ProjectedPage() {
       amount: Number(form.amount), period: form.period, month: form.month,
       year: Number(form.year), priority: form.priority, status: form.status,
       notes: form.notes, companyId: activeCid,
+      branchId: session?.branchId ?? null,
     };
     try {
       if (editItem) {
@@ -240,11 +262,24 @@ export default function ProjectedPage() {
       />
 
       {/* Note Banner */}
-      <div className="mb-5 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+      <div className="mb-3 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
         <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
         <p className="text-sm text-amber-800">
           <strong>Planning Tool Only:</strong> Records here are for budgeting and forecasting purposes only. They do <strong>not</strong> appear in Profit & Loss, Balance Sheet, or any other financial report.
         </p>
+      </div>
+
+      {/* Scope Banner */}
+      <div className={`mb-5 flex items-center gap-3 rounded-xl px-4 py-3 border text-sm font-medium ${
+        scope.canSeeGroup  ? "bg-blue-50 border-blue-200 text-blue-800" :
+        scope.canSeeBranch ? "bg-teal-50 border-teal-200 text-teal-800" :
+                             "bg-gray-50 border-gray-200 text-gray-700"
+      }`}>
+        <span>{
+          scope.canSeeGroup  ? "👁️ You are viewing GROUP-LEVEL projections (all companies)" :
+          scope.canSeeBranch ? `🏢 You are viewing projections for your branch only` :
+                               `🏬 You are viewing projections for your company only`
+        }</span>
       </div>
 
       {/* Summary Cards */}

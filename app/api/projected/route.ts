@@ -6,7 +6,7 @@ export interface Projection {
   title: string; category: string; amount: number;
   period: "monthly" | "once"; month: string; year: number;
   priority?: "high" | "medium" | "low"; status: "draft" | "confirmed" | "done";
-  notes?: string; createdAt: string;
+  notes?: string; createdAt: string; branchId?: string | null;
 }
 
 export async function GET(req: NextRequest) {
