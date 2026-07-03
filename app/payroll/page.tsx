@@ -78,10 +78,10 @@ const MONTHS = ["January","February","March","April","May","June",
   "July","August","September","October","November","December"];
 
 // ── Tanzania Statutory Deductions ─────────────────────────────────────────
-// NSSF Employee: 10% of gross, capped at TZS 10,000/month (Tanzania NSSF old scheme)
-function calcNSSF_employee(gross: number): number { return Math.min(Math.round(gross * 0.10), 10000); }
-// NSSF Employer: 10% of gross, capped at TZS 10,000/month (employer cost, not deducted from employee)
-function calcNSSF_employer(gross: number): number { return Math.min(Math.round(gross * 0.10), 10000); }
+// NSSF Employee: 10% of gross, NO CAP (Tanzania NSSF Act 2018)
+function calcNSSF_employee(gross: number): number { return Math.round(gross * 0.10); }
+// NSSF Employer: 10% of gross, NO CAP (employer cost, not deducted from employee)
+function calcNSSF_employer(gross: number): number { return Math.round(gross * 0.10); }
 // SDL: Skills & Development Levy — 3.5% of gross, employer only
 function calcSDL(gross: number): number { return Math.round(gross * 0.035); }
 // WCF: Workers Compensation Fund — 0.5% of gross, employer only

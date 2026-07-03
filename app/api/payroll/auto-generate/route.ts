@@ -33,8 +33,8 @@ const MONTHS = ["January","February","March","April","May","June",
   "July","August","September","October","November","December"];
 
 // ── Tanzania statutory deductions ──────────────────────────────────────────
-function calcNSSF_employee(gross: number) { return Math.min(Math.round(gross * 0.10), 10000); }
-function calcNSSF_employer(gross: number) { return Math.min(Math.round(gross * 0.10), 10000); }
+function calcNSSF_employee(gross: number) { return Math.round(gross * 0.10); }
+function calcNSSF_employer(gross: number) { return Math.round(gross * 0.10); }
 function calcSDL(gross: number)           { return Math.round(gross * 0.035); }
 function calcWCF(gross: number)           { return Math.round(gross * 0.005); }
 function calcPAYE(gross: number): number {
