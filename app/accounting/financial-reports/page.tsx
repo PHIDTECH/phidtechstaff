@@ -21,7 +21,7 @@ interface Session { id: string; name: string; role: string; position?: string; i
 interface Company { id: string; name: string; }
 interface FloatUpdate { id: string; date: string; type?: "credit" | "debit"; amount?: number; balance: number; description: string; updatedBy: string; createdAt: string; }
 interface AccountFloat { id: string; companyId: string; accountType: string; provider: string; accountName: string; accountNumber?: string; currency: string; currentBalance: number; lastUpdatedAt: string; createdAt: string; history: FloatUpdate[]; }
-type ReportType = "customers" | "sales" | "marketing_expenses" | "office_expenses" | "staff_claims" | "payroll" | "invoices" | "petty_cash" | "loan_customers" | "loan_interest" | "revenue_summary" | "profit_loss" | "assets" | "balance_sheet" | "cashflow" | "microfinance_customers" | "marketing_customers" | "account_floats" | "debtors";
+type ReportType = "customers" | "sales" | "marketing_expenses" | "office_expenses" | "staff_claims" | "payroll" | "invoices" | "petty_cash" | "loan_customers" | "loan_interest" | "revenue_summary" | "profit_loss" | "assets" | "balance_sheet" | "cashflow" | "microfinance_customers" | "marketing_customers" | "account_floats" | "debtors" | "creditors" | "projected_budget";
 type DatePreset  = "all" | "today" | "week" | "month" | "year" | "custom";
 
 const REPORT_TYPES: { key: ReportType; label: string; icon: React.ElementType; color: string; bg: string }[] = [
@@ -44,6 +44,8 @@ const REPORT_TYPES: { key: ReportType; label: string; icon: React.ElementType; c
   { key: "marketing_customers",   label: "Marketing Customers",   icon: Megaphone, color: "text-rose-600",    bg: "bg-rose-50"    },
   { key: "account_floats",        label: "Account Floats",         icon: Wallet,    color: "text-teal-700",    bg: "bg-teal-50"    },
   { key: "debtors",               label: "Debtors (Receivables)",  icon: Users,     color: "text-red-600",     bg: "bg-red-50"     },
+  { key: "creditors",             label: "Creditors (Payables)",   icon: CreditCard,color: "text-orange-700",  bg: "bg-orange-50"  },
+  { key: "projected_budget",      label: "Projected Budget",       icon: BarChart3,  color: "text-blue-700",   bg: "bg-blue-50"    },
 ];
 
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
@@ -114,6 +116,8 @@ export default function ReportsPage() {
   const [mfCusts,    setMfCusts]    = useState<Row[]>([]);
   const [mktCusts,   setMktCusts]   = useState<Row[]>([]);
   const [floats,     setFloats]     = useState<AccountFloat[]>([]);
+  const [creditors,  setCreditors]  = useState<Row[]>([]);
+  const [projected,  setProjected]  = useState<Row[]>([]);
   const [importing,  setImporting]  = useState(false);
   const [importMsg,  setImportMsg]  = useState<{type:"success"|"error";text:string}|null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -148,16 +152,20 @@ export default function ReportsPage() {
       setPayroll((d7 as Row[]).map(p => ({ ...p, staffName: userMap.get(String(p.staffId)) || String(p.staffId) })));
       // Fetch assets separately
       try {
-        const [ar, mfr, mktr, flr] = await Promise.all([
+        const [ar, mfr, mktr, flr, crr, prr] = await Promise.all([
           fetch("/api/assets",                 { cache: "no-store" }),
           fetch("/api/microfinance-customers", { cache: "no-store" }),
           fetch("/api/marketing-customers",    { cache: "no-store" }),
           fetch("/api/account-floats",         { cache: "no-store" }),
+          fetch("/api/creditors",              { cache: "no-store" }),
+          fetch("/api/projected",              { cache: "no-store" }),
         ]);
         if (ar.ok)   setAssets(await ar.json());
         if (mfr.ok)  setMfCusts(await mfr.json());
         if (mktr.ok) setMktCusts(await mktr.json());
         if (flr.ok)  setFloats(await flr.json());
+        if (crr.ok)  setCreditors(await crr.json());
+        if (prr.ok)  setProjected(await prr.json());
       } catch {}
     } catch {}
     setLoading(false);
@@ -390,6 +398,29 @@ export default function ReportsPage() {
       { key: "balance",      label: "Balance Due",  render: r => formatCurrency(Number(r.balance || 0)) },
       { key: "status",       label: "Status"                                                             },
     ],
+    creditors: [
+      { key: "_rowNum",    label: "#"                                                                        },
+      { key: "name",       label: "Creditor Name"                                                            },
+      { key: "category",   label: "Category"                                                                 },
+      { key: "amount",     label: "Amount Owed",   render: r => formatCurrency(Number(r.amount || 0))       },
+      { key: "amountPaid", label: "Amount Paid",   render: r => formatCurrency(Number(r.amountPaid || 0))   },
+      { key: "balance",    label: "Balance",       render: r => formatCurrency(Number(r.balance || r.amount || 0)) },
+      { key: "dueDate",    label: "Due Date",       render: r => r.dueDate ? formatDate(String(r.dueDate)) : "-" },
+      { key: "status",     label: "Status"                                                                   },
+      { key: "notes",      label: "Notes"                                                                    },
+    ],
+    projected_budget: [
+      { key: "_rowNum",   label: "#"                                                                    },
+      { key: "type",      label: "Type",       render: r => String(r.type || "").charAt(0).toUpperCase() + String(r.type || "").slice(1) },
+      { key: "title",     label: "Title"                                                                },
+      { key: "category",  label: "Category"                                                             },
+      { key: "amount",    label: "Amount",     render: r => formatCurrency(Number(r.amount || 0))      },
+      { key: "period",    label: "Period Type"                                                          },
+      { key: "month",     label: "Month"                                                                },
+      { key: "year",      label: "Year"                                                                 },
+      { key: "status",    label: "Status"                                                               },
+      { key: "notes",     label: "Notes"                                                                },
+    ],
   };
 
   const DATA: Record<ReportType, Row[]> = {
@@ -411,7 +442,9 @@ export default function ReportsPage() {
     account_floats:          [],
     microfinance_customers:  fMfCusts,
     marketing_customers:     fMktCusts,
-    debtors: fSales.filter(s => Number(s.balance) > 0),
+    debtors:          fSales.filter(s => Number(s.balance) > 0).map((r,i) => ({...r, _rowNum: i+1})),
+    creditors:        filterByCo(creditors).map((r,i) => ({...r, _rowNum: i+1})),
+    projected_budget: filterByCo(projected).map((r,i) => ({...r, _rowNum: i+1})),
   };
 
   const cfg  = REPORT_TYPES.find(r => r.key === report)!;

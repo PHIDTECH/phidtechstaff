@@ -125,6 +125,9 @@ const ALL_PERMISSIONS = [
   { key: "movies_customers",         label: "Movies Customers" },
   { key: "admin",                    label: "Admin Panel" },
   { key: "account_floats",            label: "Account Floats" },
+  { key: "debtors",                   label: "Debtors (Receivables)" },
+  { key: "creditors",                 label: "Creditors (Payables)" },
+  { key: "projected_budget",          label: "Projected Budget" },
 ];
 
 const GROUP_ALL = ALL_PERMISSIONS.map(p => p.key);
@@ -135,15 +138,15 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
   group_cfo:        GROUP_ALL,
   group_manager:    GROUP_ALL,
   group_controller: GROUP_ALL,
-  group_auditor:    ["dashboard","accounting","invoices","expenses","office_expenses","payroll","reports","financial_reports","kpis","documents","notifications","messages","media_customers","business_customers","licence_customers","entertainment_customers","movies_customers"],
+  group_auditor:    ["dashboard","accounting","invoices","expenses","office_expenses","payroll","reports","financial_reports","kpis","documents","notifications","messages","media_customers","business_customers","licence_customers","entertainment_customers","movies_customers","debtors","creditors","projected_budget"],
   group_hr:         ["dashboard","users","attendance","leave","payroll","reports","kpis","notifications","messages"],
   group_legal:      ["dashboard","documents","reports","notifications","messages"],
   group_it:         ["dashboard","users","tasks","assets","documents","reports","notifications","messages"],
-  group_accountant: ["dashboard","accounting","invoices","expenses","office_expenses","payroll","reports","financial_reports","kpis","documents","notifications","petty_cash","messages"],
+  group_accountant: ["dashboard","accounting","invoices","expenses","office_expenses","payroll","reports","financial_reports","kpis","documents","notifications","petty_cash","messages","debtors","creditors","projected_budget"],
   // Company-level
   admin:            GROUP_ALL,
   manager:          ["dashboard","attendance","leave","payroll","tasks","kpis","expenses","office_expenses","customers","reports","services","commissions","notifications","petty_cash","messages","media_customers","business_customers","licence_customers","entertainment_customers","movies_customers"],
-  accountant:       ["dashboard","accounting","invoices","expenses","office_expenses","payroll","reports","financial_reports","services","commissions","notifications","petty_cash","messages","account_floats"],
+  accountant:       ["dashboard","accounting","invoices","expenses","office_expenses","payroll","reports","financial_reports","services","commissions","notifications","petty_cash","messages","account_floats","debtors","creditors","projected_budget"],
   hr:               ["dashboard","users","attendance","leave","payroll","reports","services","notifications","messages"],
   sales:            ["dashboard","sales","customers","invoices","tasks","reports","services","commissions","notifications","messages","media_customers","business_customers","licence_customers","entertainment_customers","movies_customers"],
   it:               ["dashboard","tasks","assets","documents","reports","services","notifications","messages"],
