@@ -1,6 +1,6 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePermissionGuard } from "@/lib/usePermissionGuard";
 import { getActiveCid } from "@/lib/getActiveCid";
 import MainLayout from "@/components/layout/MainLayout";
@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, TrendingDown, Plus, Edit, Trash2, Download, RefreshCw, Target, BarChart2, AlertTriangle } from "lucide-react";
+import { TrendingUp, TrendingDown, Plus, Edit, Trash2, Download, Upload, RefreshCw, Target, BarChart2, AlertTriangle, Printer } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
@@ -101,7 +101,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function ProjectedPage() {
-  usePermissionGuard("accounting");
+  usePermissionGuard("projected_budget");
   const [projections, setProjections] = useState<Projection[]>([]);
   const [companies,   setCompanies]   = useState<Company[]>([]);
   const [session,     setSession]     = useState<Session | null>(null);
@@ -221,8 +221,8 @@ export default function ProjectedPage() {
   return (
     <MainLayout>
       <PageHeader
-        title="Projected Expenses & Income"
-        subtitle="Plan and track projected expenses and income — does not affect books of accounts"
+        title="Projected Expenses"
+        subtitle="Plan and track projected expenses — does not affect books of accounts"
         icon={Target}
         actions={
           <div className="flex items-center gap-2">

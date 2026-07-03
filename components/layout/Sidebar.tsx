@@ -8,7 +8,7 @@ import {
   ChevronRight, Building2, ShoppingCart, Megaphone, Package,
   Receipt, BarChart3, FileText, Warehouse, TrendingUp, Briefcase,
   Clock, HelpCircle, X, Menu, Percent, Wrench, Activity, Scale, MapPin,
-  Users2, MessageSquarePlus, MessageSquare, Landmark, Radio, BadgeCheck, Music, Film, Wallet, ClipboardList, CreditCard
+  Users2, MessageSquarePlus, MessageSquare, Landmark, Radio, BadgeCheck, Music, Film, Wallet, ClipboardList, CreditCard, TrendingDown
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -43,6 +43,7 @@ const PERM_ROUTES: Record<string, string[]> = {
   debtors:             ["/accounting/debtors"],
   creditors:           ["/accounting/creditors"],
   projected_budget:    ["/accounting/projected"],
+  projected_income:     ["/accounting/projected-income"],
   accounting:          ["/accounting"],
   invoices:          ["/invoices"],
   petty_cash:        ["/petty-cash"],
@@ -121,7 +122,8 @@ const ALL_NAV: NavGroup[] = [
       { label: "Marketing Expenses",    href: "/expenses",                    icon: Receipt      },
       { label: "Promised Deal & Payments", href: "/accounting/pending-payments",  icon: Wallet       },
       { label: "Account Floats",         href: "/accounting/account-floats",   icon: Wallet       },
-      { label: "Projected Budget",       href: "/accounting/projected",        icon: BarChart3    },
+      { label: "Projected Expenses",     href: "/accounting/projected",        icon: TrendingDown },
+      { label: "Projected Income",       href: "/accounting/projected-income",  icon: TrendingUp   },
       { label: "Reports",               href: "/accounting/financial-reports", icon: BarChart3    },
     ]
   },
