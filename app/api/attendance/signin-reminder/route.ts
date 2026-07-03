@@ -16,7 +16,7 @@ import type { AppNotification } from "@/app/api/notifications/route";
 
 interface User {
   id: string; name: string; phone?: string; companyId: string;
-  status?: string; role?: string;
+  status?: string; role?: string; exitDate?: string;
   [key: string]: unknown;
 }
 interface AttendanceRecord {
@@ -83,10 +83,11 @@ export async function POST() {
         .map(a => a.userId)
     );
 
-    // Active staff only
+    // Active staff only (exclude those who have exited on or before today)
     const activeStaff = users.filter(u => {
       if (!u.id) return false;
       if (INACTIVE_STATUSES.has((u.status ?? "").toLowerCase())) return false;
+      if (u.exitDate && todayStr >= u.exitDate) return false;
       return true;
     });
 

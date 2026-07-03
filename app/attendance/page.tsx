@@ -32,7 +32,7 @@ function lsSet(key: string, val: unknown) { try { localStorage.setItem(key, JSON
 function lsStr(key: string, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
 
 interface Session { id: string; name: string; role: string; position: string; isSuperAdmin: boolean; companyId: string; branchId?: string | null; }
-interface StaffUser { id: string; name: string; email?: string; companyId: string; branchId?: string | null; department?: string; position?: string; role?: string; status?: string; }
+interface StaffUser { id: string; name: string; email?: string; companyId: string; branchId?: string | null; department?: string; position?: string; role?: string; status?: string; exitDate?: string; }
 interface Branch { id: string; companyId: string; name: string; allowedIPs?: string; }
 interface AttendanceRecord {
   id: string; companyId: string; userId: string; userName?: string; date: string;
@@ -215,12 +215,21 @@ export default function AttendancePage() {
   const isBranchManager = !!session && !session.isSuperAdmin && !!session.branchId &&
     (session.role === "branch_manager" || (session.position ?? "").toLowerCase().includes("branch manager"));
 
-  // Dialog: show ALL active staff only (exclude inactive and resigned)
+  // Exclude staff who have left: resigned/terminated/retired/dismissed,
+  // AND whose exitDate is on or before the currently viewed date.
+  const EXIT_STATUSES = new Set(["inactive","resigned","terminated","retired","dismissed","suspended"]);
+  const isExited = (u: StaffUser) => {
+    if (!EXIT_STATUSES.has((u.status ?? "").toLowerCase())) return false;
+    // If exitDate is set, only exclude from that date onwards
+    if (u.exitDate) return dateFilter >= u.exitDate;
+    // No exitDate: always exclude if status is resigned/terminated/retired/dismissed
+    return ["resigned","terminated","retired","dismissed"].includes((u.status ?? "").toLowerCase());
+  };
   const allCompanyStaff = staff.length === 0
     ? []
     : cid
-      ? staff.filter(u => u.companyId === cid && u.status !== "inactive" && u.status !== "resigned")
-      : staff.filter(u => u.status !== "inactive" && u.status !== "resigned");
+      ? staff.filter(u => u.companyId === cid && !isExited(u))
+      : staff.filter(u => !isExited(u));
   // Exclude CEO/admin from both table and dialog
   const trackedStaff = allCompanyStaff.filter(u => {
     const p = (u.position ?? "").toLowerCase();

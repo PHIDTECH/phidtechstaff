@@ -43,6 +43,7 @@ interface StaffUser {
   salary: number;
   allowances: Allowance[];
   joinDate: string;
+  exitDate?: string;
   status: string;
   permissions: string[];
 }
@@ -194,6 +195,7 @@ const emptyForm = (companyId = "") => ({
   status: "active", permissions: DEFAULT_PERMISSIONS["staff"] as string[],
   companyId,
   branchId: "",
+  exitDate: "",
   allowances: [] as Allowance[],
 });
 
@@ -381,6 +383,7 @@ export default function UsersPage() {
       permissions: Array.isArray(u.permissions) ? [...u.permissions] : [],
       companyId: u.companyId ?? "",
       branchId: u.branchId ?? "",
+      exitDate: u.exitDate ?? "",
       allowances: Array.isArray(u.allowances) ? [...u.allowances] : [] });
     setFormError("");
     setShowEditDialog(true);
@@ -426,6 +429,7 @@ export default function UsersPage() {
           status: form.status, permissions: form.permissions,
           allowances: form.allowances,
           branchId: form.branchId || null,
+          exitDate: form.exitDate || null,
         };
         const r = await apiPut("/api/users", payload);
         if (!r.ok) { const d = await r.json(); setFormError(d.error ?? "Failed to save."); return; }
@@ -1008,7 +1012,12 @@ export default function UsersPage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Status</label>
-                <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
+                <Select value={form.status} onValueChange={v => {
+                  const exitStatuses = ["resigned","terminated","retired","dismissed"];
+                  const autoExit = exitStatuses.includes(v) && !form.exitDate
+                    ? new Date().toISOString().slice(0,10) : form.exitDate;
+                  setForm(f => ({ ...f, status: v, exitDate: autoExit }));
+                }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="active">Active</SelectItem>
@@ -1020,6 +1029,12 @@ export default function UsersPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {["resigned","terminated","retired","dismissed"].includes(form.status) && (
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">Exit Date</label>
+                  <Input type="date" value={form.exitDate ?? ""} onChange={e => setForm(f => ({ ...f, exitDate: e.target.value }))} />
+                </div>
+              )}
             </div>
 
             {/* Allowances */}
