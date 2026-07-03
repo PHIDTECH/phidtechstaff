@@ -531,7 +531,10 @@ export default function ProjectedPage() {
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Company</label>
                 <Select value={form.saleCompanyId} onValueChange={v => sf({ saleCompanyId: v })}>
                   <SelectTrigger><SelectValue placeholder="Select company…" /></SelectTrigger>
-                  <SelectContent>{companies.filter(c => c.id !== groupCid).map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {groupCid && <SelectItem value={groupCid}>PHIDTECH GROUP HQ</SelectItem>}
+                    {companies.filter(c => c.id !== groupCid).map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
             )}
