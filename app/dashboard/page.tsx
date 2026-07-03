@@ -123,10 +123,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     reload();
-    // Backup trigger for late check-in reminders (API only acts Mon-Fri after 08:00 EAT)
+    // Late check-in reminder (Mon-Fri after 08:00 EAT, deduplicates per day)
     fetch("/api/attendance/late-reminder", { method: "POST" }).catch(() => {});
-    // Trigger due-payment reminders on every dashboard load (API deduplicates per day)
+    // Sign-in reminder: 10 min before 08:00 AND after 08:00 for unsigned staff (2 slots/day)
+    fetch("/api/attendance/signin-reminder", { method: "POST" }).catch(() => {});
+    // Payment due reminders: 1 day before, on due date, every day overdue
     fetch("/api/debt-reminders", { method: "POST" }).catch(() => {});
+    // Task due reminders: on due date and every day overdue until completed
+    fetch("/api/task-reminders", { method: "POST" }).catch(() => {});
     const onUpdate = () => reload();
     window.addEventListener("phidtech_companies_updated", onUpdate);
     window.addEventListener("phidtech_session_updated", onUpdate);

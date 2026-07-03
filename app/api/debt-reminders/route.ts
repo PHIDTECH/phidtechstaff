@@ -2,9 +2,9 @@
  * POST /api/debt-reminders
  *
  * UNIFIED REMINDER RULES (all payment plans):
- *   • 3 days BEFORE due date  → advance warning
- *   • ON due date (day 0)     → due today
- *   • Every 3 days AFTER due date (day 3, 6, 9 …) → overdue, until marked paid
+ *   • 1 day BEFORE due date   → advance warning
+ *   • ON due date (day 0)      → due today
+ *   • EVERY day AFTER due date → overdue, until marked paid
  *
  * Plan-specific due date logic:
  *   • once      — uses sale.dueDate directly
@@ -94,11 +94,11 @@ function getReminderInfo(dueStr: string, today: Date, customerName: string, bala
 
   const diff = daysDiff(dueStr, today); // positive = overdue
 
-  if (diff === -3) {
+  if (diff === -1) {
     return {
       shouldNotify: true,
       urgency: "warning",
-      message: `Dear ${customerName}, your payment of ${fmt(balance)} is due in 3 days (${dueStr}). Please prepare. - PHIDTECH`,
+      message: `Dear ${customerName}, your payment of ${fmt(balance)} is due TOMORROW (${dueStr}). Please prepare to settle. - PHIDTECH`,
     };
   }
   if (diff === 0) {
@@ -108,11 +108,11 @@ function getReminderInfo(dueStr: string, today: Date, customerName: string, bala
       message: `Dear ${customerName}, your payment of ${fmt(balance)} is DUE TODAY (${dueStr}). Please settle now. - PHIDTECH`,
     };
   }
-  if (diff > 0 && diff % 3 === 0) {
+  if (diff > 0) {
     return {
       shouldNotify: true,
       urgency: "overdue",
-      message: `Dear ${customerName}, your payment of ${fmt(balance)} was due on ${dueStr} (${diff} days overdue). Please settle immediately. - PHIDTECH`,
+      message: `Dear ${customerName}, your payment of ${fmt(balance)} was due on ${dueStr} (${diff} day${diff===1?"":"s"} overdue). Please settle immediately. - PHIDTECH`,
     };
   }
   return { shouldNotify: false, message: "", urgency: "" };
