@@ -215,15 +215,15 @@ export default function AttendancePage() {
   const isBranchManager = !!session && !session.isSuperAdmin && !!session.branchId &&
     (session.role === "branch_manager" || (session.position ?? "").toLowerCase().includes("branch manager"));
 
-  // Exclude staff who have left: resigned/terminated/retired/dismissed,
-  // AND whose exitDate is on or before the currently viewed date.
+  // Statuses that always hide staff from attendance (with or without exitDate)
   const EXIT_STATUSES = new Set(["inactive","resigned","terminated","retired","dismissed","suspended"]);
   const isExited = (u: StaffUser) => {
-    if (!EXIT_STATUSES.has((u.status ?? "").toLowerCase())) return false;
-    // If exitDate is set, only exclude from that date onwards
+    const st = (u.status ?? "").toLowerCase();
+    if (!EXIT_STATUSES.has(st)) return false;
+    // If exitDate is set: only hide from that date onwards (so past records remain visible)
     if (u.exitDate) return dateFilter >= u.exitDate;
-    // No exitDate: always exclude if status is resigned/terminated/retired/dismissed
-    return ["resigned","terminated","retired","dismissed"].includes((u.status ?? "").toLowerCase());
+    // No exitDate: always hide for all non-active statuses
+    return true;
   };
   const allCompanyStaff = staff.length === 0
     ? []
