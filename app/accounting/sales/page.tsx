@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ShoppingCart, Plus, Search, DollarSign, CheckCircle, Clock, AlertCircle, Edit, Trash2, Eye, X, BookOpen, Printer, Download, Upload, OctagonX } from "lucide-react";
+import { ShoppingCart, Plus, Search, DollarSign, CheckCircle, Clock, AlertCircle, Edit, Trash2, Eye, X, BookOpen, Printer, Download, Upload, OctagonX, Banknote } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
@@ -102,6 +102,9 @@ export default function AccountingSalesPage() {
   const [clearConfirm, setClearConfirm] = useState(false);
   const [clearing, setClearing]     = useState(false);
   const [saving, setSaving]           = useState(false);
+  const [payDialog, setPayDialog]     = useState<{ sale: Sale; amount: string } | null>(null);
+  const [payError, setPayError]       = useState("");
+  const [paying, setPaying]           = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const reload = async () => {
@@ -226,6 +229,31 @@ export default function AccountingSalesPage() {
   };
 
   const isAdmin = session?.isSuperAdmin || ["admin","superadmin","group_ceo"].includes((session?.role ?? "").toLowerCase());
+
+  const openPayDialog = (s: Sale) => {
+    setPayDialog({ sale: s, amount: "" });
+    setPayError("");
+  };
+
+  const submitPayment = async () => {
+    if (!payDialog) return;
+    const addAmt = Number(payDialog.amount);
+    if (!addAmt || addAmt <= 0) { setPayError("Enter a valid payment amount."); return; }
+    const { sale } = payDialog;
+    const newPaid   = sale.paid + addAmt;
+    const newBal    = Math.max(0, sale.amount - newPaid);
+    const newStatus: Sale["status"] = newBal <= 0 ? "paid" : "partial";
+    if (newPaid > sale.amount) { setPayError(`Amount exceeds outstanding balance of ${formatCurrency(sale.amount - sale.paid)}.`); return; }
+    setPaying(true);
+    try {
+      const updated = { ...sale, paid: newPaid, balance: newBal, status: newStatus };
+      const r = await fetch("/api/accounting/sales", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updated) });
+      if (!r.ok) { setPayError("Save failed. Please try again."); return; }
+      setPayDialog(null);
+      await reload();
+    } catch { setPayError("Network error. Please try again."); }
+    finally { setPaying(false); }
+  };
 
   const downloadCSV = () => {
     const header = "Date,Customer,Amount,Paid,Balance,Status,Notes";
@@ -597,6 +625,11 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
                     <div className="flex items-center justify-end gap-1">
                       <Button variant="ghost" size="icon" onClick={() => setViewItem(s)}><Eye className="w-4 h-4 text-gray-400" /></Button>
                       <Button variant="ghost" size="icon" title="Print Receipt" onClick={() => printReceipt(s)}><Printer className="w-4 h-4 text-green-500" /></Button>
+                      {s.status !== "paid" && (
+                        <Button variant="ghost" size="icon" title="Record Payment" onClick={() => openPayDialog(s)}>
+                          <Banknote className="w-4 h-4 text-emerald-600" />
+                        </Button>
+                      )}
                       <Button variant="ghost" size="icon" onClick={() => openEdit(s)}><Edit className="w-4 h-4 text-blue-400" /></Button>
                       <Button variant="ghost" size="icon" onClick={() => setDeleteId(s.id)}><Trash2 className="w-4 h-4 text-red-400" /></Button>
                     </div>
@@ -908,6 +941,58 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
             <Button onClick={saveForm} disabled={saving}>{saving ? "Saving..." : editItem ? "Save Changes" : "Save Sale"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Record Payment Dialog */}
+      <Dialog open={!!payDialog} onOpenChange={v => { if (!v) setPayDialog(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Banknote className="w-4 h-4 text-emerald-600" /> Record Payment
+            </DialogTitle>
+          </DialogHeader>
+          {payDialog && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+                <p className="font-semibold text-gray-800">{payDialog.sale.customerName}</p>
+                <div className="flex justify-between text-gray-600">
+                  <span>Invoice Total</span><span className="font-medium">{formatCurrency(payDialog.sale.amount)}</span>
+                </div>
+                <div className="flex justify-between text-green-700">
+                  <span>Already Paid</span><span className="font-medium">{formatCurrency(payDialog.sale.paid)}</span>
+                </div>
+                <div className="flex justify-between text-red-600 font-semibold border-t border-gray-200 pt-1">
+                  <span>Outstanding Balance</span><span>{formatCurrency(payDialog.sale.amount - payDialog.sale.paid)}</span>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Payment Amount (TZS) *</label>
+                <Input
+                  type="number"
+                  placeholder="Enter amount received"
+                  value={payDialog.amount}
+                  onChange={e => { setPayDialog(p => p ? { ...p, amount: e.target.value } : null); setPayError(""); }}
+                  autoFocus
+                />
+                {payDialog.amount && Number(payDialog.amount) >= (payDialog.sale.amount - payDialog.sale.paid) && (
+                  <p className="text-xs text-emerald-600 mt-1 font-medium">✓ This will fully settle the balance</p>
+                )}
+              </div>
+              {payError && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                  <p className="text-sm text-red-600">{payError}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayDialog(null)} disabled={paying}>Cancel</Button>
+            <Button onClick={submitPayment} disabled={paying} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              <Banknote className="w-4 h-4 mr-2" />{paying ? "Saving..." : "Record Payment"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, Search, RefreshCw, Download, Upload, AlertCircle, CheckCircle, Clock, TrendingUp, Bell } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Users, Search, RefreshCw, Download, Upload, AlertCircle, CheckCircle, Clock, TrendingUp, Bell, Banknote } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const SESSION_KEY   = "phidtech_session";
@@ -76,6 +77,9 @@ export default function DebtorsPage() {
   const [importing, setImporting]   = useState(false);
   const [importMsg, setImportMsg]   = useState<{type:"success"|"error";text:string}|null>(null);
   const [remindersToday, setRemindersToday] = useState(0);
+  const [payDialog, setPayDialog] = useState<{ saleId: string; customerName: string; amount: number; paid: number; input: string } | null>(null);
+  const [payError, setPayError]   = useState("");
+  const [paying, setPaying]       = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const runReminders = async () => {
@@ -121,13 +125,20 @@ export default function DebtorsPage() {
       // Sales with outstanding balance — skip if paid status OR zero/negative balance
       for (const s of sales) {
         if (String(s.status) === "paid") continue;
-        const bal = Number(s.balance ?? 0);
+        const amount = Number(s.amount || 0);
+        const paid   = Number(s.paid || 0);
+        // Recompute balance from amount-paid to catch stale balance fields in DB
+        const bal = Math.max(0, amount - paid);
         if (bal <= 0) continue;
-        const key = String(s.customerId || s.customerName || "unknown");
+        // Use customerId when non-empty; otherwise use name+phone composite to avoid key collisions
+        const custId = String(s.customerId || "").trim();
+        const key = custId
+          ? custId
+          : `name_${String(s.customerName || "unknown").trim()}_${String(s.customerPhone || "").trim()}`;
         const txDate = String(s.date || s.createdAt || "");
         upsert(key, String(s.customerName || ""), String(s.customerPhone || ""), String(s.companyId || ""), {
-          id: String(s.id), date: txDate, amount: Number(s.amount || 0),
-          paid: Number(s.paid || 0), balance: bal, status: String(s.status || ""), source: "sale",
+          id: String(s.id), date: txDate, amount,
+          paid, balance: bal, status: String(s.status || ""), source: "sale",
         });
       }
       // Invoices with outstanding balance
@@ -171,6 +182,35 @@ export default function DebtorsPage() {
   const totalDebtors  = filtered.length;
   const overdue30     = filtered.filter(d => d.aging !== "current").reduce((s, d) => s + d.balance, 0);
   const critical      = filtered.filter(d => d.aging === "90+").reduce((s, d) => s + d.balance, 0);
+
+  const openPay = (tx: DebtorRow["transactions"][0], customerName: string) => {
+    if (tx.source !== "sale") return;
+    setPayDialog({ saleId: tx.id, customerName, amount: tx.amount, paid: tx.paid, input: "" });
+    setPayError("");
+  };
+
+  const submitPayment = async () => {
+    if (!payDialog) return;
+    const addAmt = Number(payDialog.input);
+    if (!addAmt || addAmt <= 0) { setPayError("Enter a valid payment amount."); return; }
+    const outstanding = payDialog.amount - payDialog.paid;
+    if (addAmt > outstanding) { setPayError(`Amount exceeds outstanding balance of ${formatCurrency(outstanding)}.`); return; }
+    const newPaid   = payDialog.paid + addAmt;
+    const newBal    = Math.max(0, payDialog.amount - newPaid);
+    const newStatus = newBal <= 0 ? "paid" : "partial";
+    setPaying(true);
+    try {
+      const r = await fetch("/api/accounting/sales", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: payDialog.saleId, paid: newPaid, balance: newBal, status: newStatus }),
+      });
+      if (!r.ok) { setPayError("Save failed. Please try again."); return; }
+      setPayDialog(null);
+      await loadData();
+    } catch { setPayError("Network error. Please try again."); }
+    finally { setPaying(false); }
+  };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -385,6 +425,7 @@ export default function DebtorsPage() {
                                   <th className="text-right py-1">Paid</th>
                                   <th className="text-right py-1">Balance</th>
                                   <th className="text-left py-1">Status</th>
+                                  <th className="py-1"></th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -397,6 +438,17 @@ export default function DebtorsPage() {
                                     <td className="py-1 text-right text-green-600">{formatCurrency(tx.paid)}</td>
                                     <td className="py-1 text-right font-semibold text-red-600">{formatCurrency(tx.balance)}</td>
                                     <td className="py-1"><span className="text-xs px-1.5 py-0.5 rounded bg-white border">{tx.status}</span></td>
+                                    <td className="py-1">
+                                      {tx.source === "sale" && tx.status !== "paid" && (
+                                        <button
+                                          onClick={e => { e.stopPropagation(); openPay(tx, d.customerName); }}
+                                          className="flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-0.5 rounded font-medium transition-colors"
+                                          title="Record Payment"
+                                        >
+                                          <Banknote className="w-3 h-3" />Pay
+                                        </button>
+                                      )}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -412,6 +464,58 @@ export default function DebtorsPage() {
           </Table>
         )}
       </div>
+
+      {/* Record Payment Dialog */}
+      <Dialog open={!!payDialog} onOpenChange={v => { if (!v) setPayDialog(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Banknote className="w-4 h-4 text-emerald-600" /> Record Payment
+            </DialogTitle>
+          </DialogHeader>
+          {payDialog && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+                <p className="font-semibold text-gray-800">{payDialog.customerName}</p>
+                <div className="flex justify-between text-gray-600">
+                  <span>Invoice Total</span><span className="font-medium">{formatCurrency(payDialog.amount)}</span>
+                </div>
+                <div className="flex justify-between text-green-700">
+                  <span>Already Paid</span><span className="font-medium">{formatCurrency(payDialog.paid)}</span>
+                </div>
+                <div className="flex justify-between text-red-600 font-semibold border-t border-gray-200 pt-1">
+                  <span>Outstanding Balance</span><span>{formatCurrency(payDialog.amount - payDialog.paid)}</span>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Payment Amount (TZS) *</label>
+                <Input
+                  type="number"
+                  placeholder="Enter amount received"
+                  value={payDialog.input}
+                  onChange={e => { setPayDialog(p => p ? { ...p, input: e.target.value } : null); setPayError(""); }}
+                  autoFocus
+                />
+                {payDialog.input && Number(payDialog.input) >= (payDialog.amount - payDialog.paid) && (
+                  <p className="text-xs text-emerald-600 mt-1 font-medium">✓ This will fully settle the balance</p>
+                )}
+              </div>
+              {payError && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                  <p className="text-sm text-red-600">{payError}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayDialog(null)} disabled={paying}>Cancel</Button>
+            <Button onClick={submitPayment} disabled={paying} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              <Banknote className="w-4 h-4 mr-2" />{paying ? "Saving..." : "Record Payment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Books of Accounts note */}
       <div className="mt-4 bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-700">
