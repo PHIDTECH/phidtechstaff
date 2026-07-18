@@ -177,7 +177,8 @@ export default function MessagesPage() {
     const toSend: { phone: string; name: string }[] = [];
     if (mode === "single") {
       if (!singlePhone.trim()) { setResult({ ok: false, msg: "Please enter a phone number." }); return; }
-      toSend.push({ phone: singlePhone.trim(), name: singlePhone.trim() });
+      const phones = singlePhone.split(",").map(p => p.trim()).filter(Boolean);
+      for (const p of phones) toSend.push({ phone: p, name: p });
     } else {
       if (selectedIds.length === 0) { setResult({ ok: false, msg: "Please select at least one recipient." }); return; }
       for (const id of selectedIds) {
@@ -273,7 +274,7 @@ export default function MessagesPage() {
                       className="w-4 h-4 accent-blue-600"
                     />
                     <span className="text-sm text-gray-700 font-medium">
-                      {m === "single" ? "Single Number" : m === "staff" ? "Staff Members" : m === "loan_customer" ? "Loan Customers" : m === "microfinance" ? "Microfinance Customers" : m === "marketing_customer" ? "Marketing Customers" : m === "media_customer" ? "Media Customers" : m === "business_customer" ? "Business Customers" : m === "licence_customer" ? "Licence Customers" : m === "entertainment_customer" ? "Entertainment Customers" : m === "movies_customer" ? "Movies Customers" : m === "pending_payment" ? "Pending Payments" : "Customers"}
+                      {m === "single" ? "Send Message" : m === "staff" ? "Staff Members" : m === "loan_customer" ? "Loan Customers" : m === "microfinance" ? "Microfinance Customers" : m === "marketing_customer" ? "Marketing Customers" : m === "media_customer" ? "Media Customers" : m === "business_customer" ? "Business Customers" : m === "licence_customer" ? "Licence Customers" : m === "entertainment_customer" ? "Entertainment Customers" : m === "movies_customer" ? "Movies Customers" : m === "pending_payment" ? "Pending Payments" : "Customers"}
                     </span>
                   </label>
                 ))}
@@ -283,14 +284,14 @@ export default function MessagesPage() {
             {/* Single number input */}
             {mode === "single" && (
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Phone Number</label>
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Phone Number(s)</label>
                 <Input
                   value={singlePhone}
                   onChange={e => setSinglePhone(e.target.value)}
-                  placeholder="e.g. 0712345678 or 255712345678"
-                  className="max-w-sm"
+                  placeholder="e.g. 0712345678, 255712345679, 0754000001"
+                  className="max-w-lg"
                 />
-                <p className="text-xs text-gray-400 mt-1">Enter phone number with or without country code</p>
+                <p className="text-xs text-gray-400 mt-1">Enter one or more numbers separated by commas. With or without country code.</p>
               </div>
             )}
 
