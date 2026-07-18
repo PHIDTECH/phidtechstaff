@@ -25,7 +25,7 @@ const nextConfig: NextConfig = {
       },
       {
         // Turbopack bootstrap loader must never be cached — it references chunk hashes that change every build
-        source: "/_next/static/chunks/turbopack:path*",
+        source: "/_next/static/chunks/turbopack(.*)",
         headers: [
           { key: "Cache-Control", value: "no-store, no-cache, must-revalidate, max-age=0" },
           { key: "Pragma",        value: "no-cache" },
