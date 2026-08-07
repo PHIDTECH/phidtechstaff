@@ -195,6 +195,9 @@ export default function AdminPage() {
   const [auditLogs, setAuditLogs] = useState<{id:string;userId:string;userName:string;action:string;module:string;details:string;ipAddress:string;timestamp:string}[]>([]);
   const [auditFilter, setAuditFilter] = useState("all");
   const [auditSearch, setAuditSearch] = useState("");
+  const [backupInfo, setBackupInfo] = useState<{fileCount:number;lastBackup:string;sizeKB:number}|null>(null);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupMsg, setBackupMsg] = useState<{ok:boolean;text:string}|null>(null);
 
   const detectMyIP = async () => {
     setDetectingIP(true);
@@ -247,6 +250,11 @@ export default function AdminPage() {
     try {
       const res = await fetch("/api/auth/audit-log", { cache: "no-store" });
       if (res.ok) setAuditLogs(await res.json());
+    } catch {}
+    // Backup info
+    try {
+      const res = await fetch("/api/backup/info", { cache: "no-store" });
+      if (res.ok) setBackupInfo(await res.json());
     } catch {}
     // Active company from raw localStorage
     try {
@@ -859,19 +867,21 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900">Database Backup</h3>
-                  <p className="text-xs text-gray-400">Last backup: 26 Feb 2026 at 02:00 AM</p>
+                  <p className="text-xs text-gray-400">
+                    {backupInfo?.lastBackup ? `Last modified: ${formatDateTime(backupInfo.lastBackup)}` : "Loading..."}
+                  </p>
                 </div>
               </div>
               <div className="space-y-3">
                 <div className="p-3 bg-green-50 border border-green-100 rounded-lg flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
-                  <p className="text-sm text-green-700">System is healthy. All data backed up successfully.</p>
+                  <p className="text-sm text-green-700">All data files ready for download.</p>
                 </div>
                 {[
-                  { label: "Auto Backup Schedule", value: "Daily at 2:00 AM" },
-                  { label: "Retention Period", value: "30 days" },
-                  { label: "Storage Used", value: "2.4 GB / 50 GB" },
-                  { label: "Last Backup Size", value: "156 MB" },
+                  { label: "Data Files", value: backupInfo ? `${backupInfo.fileCount} JSON files` : "—" },
+                  { label: "Total Data Size", value: backupInfo ? `${backupInfo.sizeKB >= 1024 ? (backupInfo.sizeKB/1024).toFixed(1) + " MB" : backupInfo.sizeKB + " KB"}` : "—" },
+                  { label: "Format", value: "JSON (gzip compressed)" },
+                  { label: "Last Modified", value: backupInfo?.lastBackup ? formatDateTime(backupInfo.lastBackup) : "—" },
                 ].map(item => (
                   <div key={item.label} className="flex justify-between py-2 border-b border-gray-50 last:border-0">
                     <span className="text-sm text-gray-600">{item.label}</span>
@@ -880,13 +890,34 @@ export default function AdminPage() {
                 ))}
               </div>
               <div className="mt-4 flex gap-2">
-                <Button size="sm" className="flex-1">
-                  <Database className="w-4 h-4 mr-2" /> Backup Now
+                <Button size="sm" className="flex-1" disabled={backupLoading} onClick={async () => {
+                  setBackupLoading(true); setBackupMsg(null);
+                  try {
+                    const r = await fetch("/api/backup?secret=Kaijage@@2023");
+                    if (!r.ok) { setBackupMsg({ ok: false, text: "Backup check failed." }); return; }
+                    setBackupMsg({ ok: true, text: "Backup ready. Click Download to save it." });
+                    const res2 = await fetch("/api/backup/info", { cache: "no-store" });
+                    if (res2.ok) setBackupInfo(await res2.json());
+                  } catch { setBackupMsg({ ok: false, text: "Error connecting to server." }); }
+                  finally { setBackupLoading(false); }
+                }}>
+                  <Database className="w-4 h-4 mr-2" /> {backupLoading ? "Preparing..." : "Backup Now"}
                 </Button>
-                <Button size="sm" variant="outline" className="flex-1">
+                <Button size="sm" variant="outline" className="flex-1" onClick={() => {
+                  const a = document.createElement("a");
+                  a.href = "/api/backup?secret=Kaijage@@2023";
+                  a.download = `phidtech-backup-${new Date().toISOString().slice(0,10)}.json.gz`;
+                  a.click();
+                }}>
                   <Download className="w-4 h-4 mr-2" /> Download
                 </Button>
               </div>
+              {backupMsg && (
+                <div className={`mt-3 p-2.5 rounded-lg text-sm flex items-center gap-2 ${ backupMsg.ok ? "bg-green-50 text-green-700 border border-green-100" : "bg-red-50 text-red-700 border border-red-100" }`}>
+                  {backupMsg.ok ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                  {backupMsg.text}
+                </div>
+              )}
             </div>
 
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
