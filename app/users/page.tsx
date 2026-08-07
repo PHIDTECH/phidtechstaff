@@ -18,7 +18,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Users, UserPlus, Search, Mail, Phone, Building2, Shield,
-  UserCheck, Edit, Eye, Lock, CheckSquare, Square, X, Plus, Trash2
+  UserCheck, Edit, Eye, Lock, CheckSquare, Square, X, Plus, Trash2, Ban
 } from "lucide-react";
 import { formatDate, formatCurrency, getInitials, getStatusColor } from "@/lib/utils";
 import { getActiveCid } from "@/lib/getActiveCid";
@@ -461,6 +461,14 @@ export default function UsersPage() {
     finally { setSaving(false); }
   };
 
+  const banUser = async (user: StaffUser) => {
+    const newStatus = user.status === "banned" ? "active" : "banned";
+    try {
+      await apiPut("/api/users", { id: user.id, status: newStatus });
+      await reload();
+    } catch {}
+  };
+
   const doDelete = async () => {
     if (!deleteId) return;
     const idToDelete = deleteId;
@@ -666,6 +674,14 @@ export default function UsersPage() {
                                   <Lock className="w-4 h-4 text-orange-400" />
                                 </Button>
                               )}
+                              {user.id !== sessionData?.id && (
+                                <Button variant="ghost" size="icon"
+                                  title={user.status === "banned" ? "Unban user" : "Ban user — block login"}
+                                  onClick={() => banUser(user)}
+                                  className={user.status === "banned" ? "text-green-500 hover:text-green-700" : "text-red-400 hover:text-red-600"}>
+                                  <Ban className="w-4 h-4" />
+                                </Button>
+                              )}
                               <Button variant="ghost" size="icon" title="Delete user" onClick={() => setDeleteId(user.id)}>
                                 <Trash2 className="w-4 h-4 text-red-400" />
                               </Button>
@@ -751,6 +767,14 @@ export default function UsersPage() {
                               {(canResetPassword || user.id === sessionData?.id) && (
                                 <Button variant="ghost" size="icon" title="Reset Password" onClick={() => { setResetPwUser(user); setResetPwVal(""); setResetPwMsg(""); }}>
                                   <Lock className="w-4 h-4 text-orange-400" />
+                                </Button>
+                              )}
+                              {user.id !== sessionData?.id && (
+                                <Button variant="ghost" size="icon"
+                                  title={user.status === "banned" ? "Unban user" : "Ban user — block login"}
+                                  onClick={() => banUser(user)}
+                                  className={user.status === "banned" ? "text-green-500 hover:text-green-700" : "text-red-400 hover:text-red-600"}>
+                                  <Ban className="w-4 h-4" />
                                 </Button>
                               )}
                               <Button variant="ghost" size="icon" onClick={() => setDeleteId(user.id)}>

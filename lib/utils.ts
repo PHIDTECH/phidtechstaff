@@ -60,6 +60,7 @@ export function getInitials(name: string) {
 export function getStatusColor(status: string) {
   const colors: Record<string, string> = {
     active: "bg-green-100 text-green-800",
+    banned: "bg-red-200 text-red-900 font-bold",
     inactive: "bg-gray-100 text-gray-800",
     pending: "bg-yellow-100 text-yellow-800",
     approved: "bg-green-100 text-green-800",

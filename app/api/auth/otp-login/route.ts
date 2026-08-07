@@ -74,6 +74,10 @@ export async function POST(req: NextRequest) {
         writeAuditLog({ userId: match.id, userName: match.name, action: "LOGIN_DENIED", module: "Auth", details: `Login denied — account inactive`, ipAddress: ip });
         return NextResponse.json({ error: "Your account has been deactivated. Contact the administrator." }, { status: 403 });
       }
+      if (match.status === "banned") {
+        writeAuditLog({ userId: match.id, userName: match.name, action: "LOGIN_DENIED", module: "Auth", details: `Login denied — account banned`, ipAddress: ip });
+        return NextResponse.json({ error: "Your account has been suspended. Contact the system administrator." }, { status: 403 });
+      }
       if (!match.phone?.trim()) {
         writeAuditLog({ userId: match.id, userName: match.name, action: "LOGIN_DENIED", module: "Auth", details: `Login denied — no phone number on account`, ipAddress: ip });
         return NextResponse.json({ error: "No phone number on your account. Contact your administrator to add one before you can log in." }, { status: 400 });
