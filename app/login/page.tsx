@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Eye, EyeOff, Lock, Phone, Mail, ArrowLeft, KeyRound, CheckCircle2, ShieldCheck } from "lucide-react";
+import { Building2, Eye, EyeOff, Lock, Phone, Mail, ArrowLeft, KeyRound, CheckCircle2, ShieldCheck, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 const SESSION_KEY = "phidtech_session";
@@ -13,6 +13,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
+
+  // Login OTP state — loginStep: 0=credentials, 1=otp verification
+  const [loginStep, setLoginStep]         = useState(0);
+  const [loginOtpCode, setLoginOtpCode]   = useState("");
+  const [loginOtpError, setLoginOtpError] = useState("");
+  const [loginOtpLoading, setLoginOtpLoading] = useState(false);
+  const [loginUserId, setLoginUserId]     = useState("");
+  const [loginUserName, setLoginUserName] = useState("");
+  const [loginMaskedPhone, setLoginMaskedPhone] = useState("");
+  const [pendingSession, setPendingSession] = useState<Record<string, unknown> | null>(null);
 
   // OTP reset state — step: 0=login, 1=enter phone, 2=enter OTP+newpw, 3=done
   const [otpStep, setOtpStep]         = useState(0);
@@ -59,49 +69,65 @@ export default function LoginPage() {
     finally { setOtpLoading(false); }
   };
 
+  const applySession = (session: Record<string, unknown>) => {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    const isGroupMember = session.isSuperAdmin || session.companyId === "group";
+    if (!isGroupMember && session.companyId) {
+      localStorage.setItem("phidtech_active_company", session.companyId as string);
+    } else {
+      localStorage.removeItem("phidtech_active_company");
+    }
+    router.push("/dashboard");
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-
-    if (!email || !password) {
-      setError("Please enter your email and password.");
-      return;
-    }
-    if (!email.includes("@")) {
-      setError("Please enter a valid email address.");
-      return;
-    }
-
+    if (!email || !password) { setError("Please enter your email and password."); return; }
+    if (!email.includes("@")) { setError("Please enter a valid email address."); return; }
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/otp-login?action=request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), password }),
       });
       const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error ?? "Invalid email or password. Please try again.");
-        return;
-      }
-
-      const session = data.session;
-      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-
-      // SuperAdmin and Group HQ staff → clear (Group HQ mode); regular staff → set their company
-      const isGroupMember = session.isSuperAdmin || session.companyId === "group";
-      if (!isGroupMember && session.companyId) {
-        localStorage.setItem("phidtech_active_company", session.companyId);
-      } else {
-        localStorage.removeItem("phidtech_active_company");
-      }
-
-      router.push("/dashboard");
+      if (!res.ok) { setError(data.error ?? "Invalid email or password."); return; }
+      // SuperAdmin bypasses OTP
+      if (data.bypass && data.session) { applySession(data.session); return; }
+      // Regular staff — show OTP step
+      setLoginUserId(data.userId);
+      setLoginUserName(data.name ?? "");
+      setLoginMaskedPhone(data.maskedPhone ?? "");
+      setLoginOtpCode("");
+      setLoginOtpError("");
+      setLoginStep(1);
     } catch {
       setError("Connection error. Please check your internet and try again.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleVerifyLoginOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginOtpError("");
+    if (!loginOtpCode.trim()) { setLoginOtpError("Enter the OTP sent to your phone."); return; }
+    setLoginOtpLoading(true);
+    try {
+      const res = await fetch("/api/auth/otp-login?action=verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: loginUserId, otp: loginOtpCode.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setLoginOtpError(data.error ?? "Invalid OTP. Please try again."); return; }
+      applySession(data.session);
+    } catch {
+      setLoginOtpError("Connection error. Try again.");
+    } finally {
+      setLoginOtpLoading(false);
     }
   };
 
@@ -203,6 +229,43 @@ export default function LoginPage() {
                 Back to Sign In
               </Button>
             </div>
+
+          ) : loginStep === 1 ? (
+            /* ── LOGIN OTP VERIFICATION ── */
+            <>
+              <button onClick={() => { setLoginStep(0); setLoginOtpError(""); setLoginOtpCode(""); }} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium mb-5">
+                <ArrowLeft className="w-4 h-4" /> Back
+              </button>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                  <MessageSquare className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Verify Your Identity</h2>
+                  <p className="text-gray-500 text-sm">OTP sent to <strong>{loginMaskedPhone}</strong>{loginUserName ? ` (${loginUserName})` : ""}</p>
+                </div>
+              </div>
+              {loginOtpError && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{loginOtpError}</div>}
+              <form onSubmit={handleVerifyLoginOtp} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">6-Digit OTP</label>
+                  <Input
+                    value={loginOtpCode}
+                    onChange={e => { setLoginOtpCode(e.target.value.replace(/\D/g, "")); setLoginOtpError(""); }}
+                    maxLength={6}
+                    placeholder="Enter 6-digit OTP"
+                    className="text-center text-2xl tracking-widest font-mono"
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-400 mt-1.5">Check your phone for the SMS code. Valid for 10 minutes.</p>
+                </div>
+                <Button type="submit" className="w-full h-11 text-sm font-semibold bg-blue-600 hover:bg-blue-700" disabled={loginOtpLoading}>
+                  {loginOtpLoading
+                    ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />Verifying...</>
+                    : <><ShieldCheck className="w-4 h-4 mr-2" />Confirm & Sign In</>}
+                </Button>
+              </form>
+            </>
 
           ) : (
 
