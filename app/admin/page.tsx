@@ -13,7 +13,7 @@ import {
   CheckCircle, AlertTriangle, Database, Pencil, ArrowLeftRight, X, Plus, MapPin, Trash2, Wifi, Copy, OctagonX
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { auditLogs } from "@/lib/data";
+import { Shield } from "lucide-react";
 import { formatDateTime, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { Company } from "@/lib/types";
@@ -192,6 +192,9 @@ export default function AdminPage() {
   const [testResult, setTestResult] = useState<{ok:boolean;detail:string}|null>(null);
   const [seedingBranches, setSeedingBranches] = useState(false);
   const [seedMsg, setSeedMsg] = useState<{ok:boolean;text:string}|null>(null);
+  const [auditLogs, setAuditLogs] = useState<{id:string;userId:string;userName:string;action:string;module:string;details:string;ipAddress:string;timestamp:string}[]>([]);
+  const [auditFilter, setAuditFilter] = useState("all");
+  const [auditSearch, setAuditSearch] = useState("");
 
   const detectMyIP = async () => {
     setDetectingIP(true);
@@ -239,6 +242,11 @@ export default function AdminPage() {
     try {
       const res = await fetch("/api/settings/beem", { cache: "no-store" });
       if (res.ok) setBeemSettings(await res.json());
+    } catch {}
+    // Audit logs
+    try {
+      const res = await fetch("/api/auth/audit-log", { cache: "no-store" });
+      if (res.ok) setAuditLogs(await res.json());
     } catch {}
     // Active company from raw localStorage
     try {
@@ -383,6 +391,7 @@ export default function AdminPage() {
     { label: "Total Users", value: staffUsers.length, icon: Users, color: "text-purple-600", bg: "bg-purple-50" },
     { label: "Active Users", value: staffUsers.filter(u => u.status === "active").length, icon: CheckCircle, color: "text-green-600", bg: "bg-green-50" },
     { label: "Audit Events", value: auditLogs.length, icon: Activity, color: "text-orange-600", bg: "bg-orange-50" },
+    { label: "Failed Logins", value: auditLogs.filter(l => l.action === "LOGIN_FAILED" || l.action === "LOGIN_BLOCKED").length, icon: Shield, color: "text-red-600", bg: "bg-red-50" },
   ];
 
   const modulePermissions = [
@@ -1032,61 +1041,91 @@ export default function AdminPage() {
         {/* Audit Logs Tab */}
         <TabsContent value="audit">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">System Audit Logs</h3>
-              <Button variant="outline" size="sm">
-                <Download className="w-4 h-4 mr-2" /> Export Logs
-              </Button>
+            <div className="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-gray-900">Security Audit Log</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{auditLogs.length} events recorded · newest first</p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Input placeholder="Search user or IP..." value={auditSearch} onChange={e => setAuditSearch(e.target.value)} className="h-8 text-sm w-44" />
+                <Select value={auditFilter} onValueChange={setAuditFilter}>
+                  <SelectTrigger className="h-8 text-sm w-36"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Events</SelectItem>
+                    <SelectItem value="LOGIN_SUCCESS">Login Success</SelectItem>
+                    <SelectItem value="LOGIN_FAILED">Login Failed</SelectItem>
+                    <SelectItem value="LOGIN_BLOCKED">Locked Out</SelectItem>
+                    <SelectItem value="OTP_SENT">OTP Sent</SelectItem>
+                    <SelectItem value="OTP_FAILED">OTP Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" onClick={reload}><RefreshCw className="w-3.5 h-3.5 mr-1.5" />Refresh</Button>
+                <Button variant="outline" size="sm" onClick={() => {
+                  const rows = auditLogs.map(l => `"${l.timestamp}","${l.userName}","${l.action}","${l.module}","${l.details}","${l.ipAddress}"`);
+                  const blob = new Blob([`Timestamp,User,Action,Module,Details,IP\n${rows.join("\n")}`], { type: "text/csv" });
+                  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+                  a.download = `audit_log_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+                }}><Download className="w-3.5 h-3.5 mr-1.5" />Export CSV</Button>
+              </div>
             </div>
+            {auditLogs.length === 0 ? (
+              <div className="py-16 text-center text-gray-400">
+                <Activity className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p className="font-medium">No audit events yet</p>
+                <p className="text-sm mt-1">Login attempts will appear here</p>
+              </div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>User</TableHead>
                   <TableHead>Action</TableHead>
-                  <TableHead>Module</TableHead>
                   <TableHead>Details</TableHead>
                   <TableHead>IP Address</TableHead>
-                  <TableHead>Timestamp</TableHead>
+                  <TableHead>Time</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {auditLogs.map(log => {
-                  const user = staffUsers.find(u => u.id === log.userId);
-                  return (
+                {auditLogs
+                  .filter(log => {
+                    const matchFilter = auditFilter === "all" || log.action === auditFilter;
+                    const q = auditSearch.toLowerCase();
+                    const matchSearch = !q || log.userName.toLowerCase().includes(q) || log.ipAddress.includes(q) || log.action.toLowerCase().includes(q);
+                    return matchFilter && matchSearch;
+                  })
+                  .slice(0, 200)
+                  .map(log => (
                     <TableRow key={log.id}>
                       <TableCell>
-                        {user && (
-                          <div className="flex items-center gap-2">
-                            <Avatar className="w-7 h-7">
-                              <AvatarFallback className="text-[10px]">{getInitials(user.name)}</AvatarFallback>
-                            </Avatar>
-                            <span className="text-sm text-gray-700">{user.name}</span>
+                        <div className="flex items-center gap-2">
+                          <Avatar className="w-7 h-7">
+                            <AvatarFallback className="text-[10px]">{getInitials(log.userName)}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{log.userName}</p>
                           </div>
-                        )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <span className={`text-xs px-2.5 py-1 rounded-full font-medium font-mono ${
-                          log.action.includes("LOGIN") ? "bg-green-100 text-green-800" :
-                          log.action.includes("DEACTIVATED") || log.action.includes("DELETED") ? "bg-red-100 text-red-800" :
-                          log.action.includes("APPROVED") ? "bg-blue-100 text-blue-800" :
+                          log.action === "LOGIN_SUCCESS" ? "bg-green-100 text-green-800" :
+                          log.action === "LOGIN_FAILED" || log.action === "OTP_FAILED" ? "bg-red-100 text-red-800" :
+                          log.action === "LOGIN_BLOCKED" ? "bg-red-200 text-red-900 font-bold" :
+                          log.action === "OTP_SENT" ? "bg-blue-100 text-blue-800" :
+                          log.action === "LOGIN_DENIED" ? "bg-orange-100 text-orange-800" :
                           "bg-gray-100 text-gray-700"
                         }`}>
                           {log.action}
                         </span>
                       </TableCell>
-                      <TableCell>
-                        <span className="text-xs bg-purple-50 text-purple-700 px-2.5 py-1 rounded-full font-medium">
-                          {log.module}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-sm text-gray-500 max-w-sm truncate">{log.details}</TableCell>
+                      <TableCell className="text-sm text-gray-500 max-w-xs truncate">{log.details}</TableCell>
                       <TableCell className="font-mono text-xs text-gray-500">{log.ipAddress}</TableCell>
-                      <TableCell className="text-xs text-gray-500">{formatDateTime(log.timestamp)}</TableCell>
+                      <TableCell className="text-xs text-gray-500 whitespace-nowrap">{formatDateTime(log.timestamp)}</TableCell>
                     </TableRow>
-                  );
-                })}
+                  ))}
               </TableBody>
             </Table>
+            )}
           </div>
         </TabsContent>
       </Tabs>
