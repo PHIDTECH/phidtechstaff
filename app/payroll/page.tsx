@@ -183,7 +183,10 @@ export default function PayrollPage() {
     // cid === "" means Group HQ / all-companies view — do NOT default to "group"
     setActiveCompanyId(cid);
     const isBM = !!sess && !sess.isSuperAdmin && !!sess.branchId && !GENERAL_ROLES_PAYROLL.includes(sess.position ?? sess.role ?? "");
-    const isActive = (u: StaffUser) => (u.status ?? "").toLowerCase() === "active";
+    const isActive = (u: StaffUser) => {
+      const s = (u.status ?? "").toLowerCase();
+      return s === "active" && s !== "resigned" && s !== "terminated" && s !== "inactive";
+    };
     setStaffList(
       cid
         ? allStaff.filter(u => u.companyId === cid && isActive(u) && (!isBM || u.branchId === sess?.branchId))

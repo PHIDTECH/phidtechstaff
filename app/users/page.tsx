@@ -333,6 +333,12 @@ export default function UsersPage() {
     GENERAL_ROLES_USERS.some(r => _ur === r || _up === r);
   // Subsidiary employees (non-managers) only see themselves — not the full staff list
   const canSeeAllStaff = sessionData?.isSuperAdmin || (isGroupHQMode && isGroupManagerUser) || (!isGroupHQMode && isGroupManagerUser);
+  const canSeeSalary = sessionData?.isSuperAdmin ||
+    _ur.includes("ceo") || _up.includes("ceo") ||
+    _ur.includes("accountant") || _up.includes("accountant") ||
+    _ur.includes("gm") || _up.includes("gm") ||
+    _ur === "group_cfo" || _up === "group_cfo" ||
+    _ur === "admin" || _up === "admin";
   const companyUsers = (() => {
     if (!isGroupManagerUser && !sessionData?.isSuperAdmin) {
       // Regular staff only see their own record
@@ -572,7 +578,7 @@ export default function UsersPage() {
                     <TableHead>Branch</TableHead>
                     <TableHead>Department</TableHead>
                     <TableHead>Position</TableHead>
-                    <TableHead>Basic Salary</TableHead>
+                    {canSeeSalary && <TableHead>Basic Salary</TableHead>}
                     <TableHead>Allowances</TableHead>
                     <TableHead>Join Date</TableHead>
                     <TableHead>Status</TableHead>
@@ -613,7 +619,7 @@ export default function UsersPage() {
                           {positionLabel(user.position)}
                         </span>
                       </TableCell>
-                      <TableCell className="font-medium text-gray-800">{formatCurrency(user.salary)}</TableCell>
+                      {canSeeSalary && <TableCell className="font-medium text-gray-800">{formatCurrency(user.salary)}</TableCell>}
                       <TableCell>
                         {user.allowances && user.allowances.length > 0 ? (
                           <div className="group relative cursor-default inline-block">

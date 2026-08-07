@@ -92,6 +92,7 @@ export default function AccountingSalesPage() {
   const [formError, setFormError]   = useState("");
   const [selCustomer, setSelCustomer] = useState<Customer | null>(null);
   const [custSearch, setCustSearch]   = useState("");
+  const [custSelectOpen, setCustSelectOpen] = useState(false);
 
   const [loading, setLoading]       = useState(true);
   const [statPeriod, setStatPeriod] = useState<"daily"|"weekly"|"monthly"|"yearly"|"all">("all");
@@ -360,6 +361,7 @@ export default function AccountingSalesPage() {
   const openAdd = () => {
     setEditItem(null); setSelCustomer(null);
     setForm(emptyForm()); setFormError("");
+    setCustSearch(""); setCustSelectOpen(false);
     setShowDialog(true);
   };
 
@@ -727,7 +729,7 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
       </Dialog>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={v => { if (!v) setShowDialog(false); }}>
+      <Dialog open={showDialog} onOpenChange={v => { if (!v) { setShowDialog(false); setCustSearch(""); setCustSelectOpen(false); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -759,9 +761,9 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
               )}
               <div className="col-span-2">
                 <label className="text-sm font-medium text-gray-700 mb-1.5 block">Customer *</label>
-                <Select value={form.customerId} onValueChange={v => {
+                <Select open={custSelectOpen} onOpenChange={setCustSelectOpen} value={form.customerId} onValueChange={v => {
                   const c = customers.find(cu => cu.id === v) ?? null;
-                  setSelCustomer(c); sf({ customerId: v }); setCustSearch("");
+                  setSelCustomer(c); sf({ customerId: v }); setCustSearch(""); setCustSelectOpen(false);
                 }}>
                   <SelectTrigger><SelectValue placeholder="Select customer from list" /></SelectTrigger>
                   <SelectContent className="max-h-72 p-0">
