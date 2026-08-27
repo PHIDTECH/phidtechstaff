@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Settings, Users, Building2, Activity, RefreshCw, Download,
-  CheckCircle, AlertTriangle, Database, Pencil, ArrowLeftRight, X, Plus, MapPin, Trash2, Wifi, Copy, OctagonX
+  CheckCircle, AlertTriangle, Database, Pencil, ArrowLeftRight, X, Plus, MapPin, Trash2, Wifi, Copy, OctagonX, Bell, MessageSquare
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Shield } from "lucide-react";
@@ -199,6 +199,18 @@ export default function AdminPage() {
   const [backupLoading, setBackupLoading] = useState(false);
   const [backupMsg, setBackupMsg] = useState<{ok:boolean;text:string}|null>(null);
 
+  const notifDefaults = {
+    emailNotifications: true, smsNotifications: false, inAppNotifications: true,
+    leaveRequestAlerts: true, payrollReminders: true, invoiceDueAlerts: true,
+    lowStockAlerts: true, taskDeadlineReminders: false, kpiPerformanceAlerts: true,
+    otpAttendance: true, otpPaymentReminder: true, otpTaskReminder: false,
+    otpLeaveApproval: true, otpExpenseApproval: true, otpInvoiceDue: true,
+    otpLoginTwoFactor: true, otpPayrollPaid: true,
+  };
+  const [notifSettings, setNotifSettings] = useState(notifDefaults);
+  const [notifSaving, setNotifSaving] = useState(false);
+  const [notifMsg, setNotifMsg] = useState<{ok:boolean;text:string}|null>(null);
+
   const detectMyIP = async () => {
     setDetectingIP(true);
     try {
@@ -255,6 +267,11 @@ export default function AdminPage() {
     try {
       const res = await fetch("/api/backup/info", { cache: "no-store" });
       if (res.ok) setBackupInfo(await res.json());
+    } catch {}
+    // Notification settings
+    try {
+      const res = await fetch("/api/settings/notifications", { cache: "no-store" });
+      if (res.ok) setNotifSettings(s => ({ ...s, ...(await res.json()) }));
     } catch {}
     // Active company from raw localStorage
     try {
@@ -827,33 +844,129 @@ export default function AdminPage() {
 
         {/* Notifications Tab */}
         <TabsContent value="notifications">
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="font-semibold text-gray-900 mb-4">Notification Settings</h3>
-            <div className="space-y-4">
-              {[
-                { label: "Email Notifications", desc: "Send email alerts for important system events", enabled: true },
-                { label: "SMS Notifications", desc: "Send SMS for critical alerts (payroll, approvals)", enabled: false },
-                { label: "In-App Notifications", desc: "Show real-time notifications within the system", enabled: true },
-                { label: "Leave Request Alerts", desc: "Notify managers when leave is submitted", enabled: true },
-                { label: "Payroll Reminders", desc: "Send reminder 3 days before payroll due date", enabled: true },
-                { label: "Invoice Due Alerts", desc: "Alert finance team for overdue invoices", enabled: true },
-                { label: "Low Stock Alerts", desc: "Alert inventory manager when stock hits reorder level", enabled: true },
-                { label: "Task Deadline Reminders", desc: "Remind staff of upcoming task deadlines", enabled: false },
-                { label: "KPI Performance Alerts", desc: "Alert managers when KPIs fall below threshold", enabled: true },
-              ].map(item => (
-                <div key={item.label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
-                  <div>
-                    <p className="font-medium text-gray-800">{item.label}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" defaultChecked={item.enabled} className="sr-only peer" />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  </label>
+          <div className="space-y-5">
+            {notifMsg && (
+              <div className={`px-4 py-3 rounded-xl text-sm border font-medium ${
+                notifMsg.ok ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"
+              }`}>{notifMsg.text}</div>
+            )}
+
+            {/* OTP / SMS Notifications */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+                  <MessageSquare className="w-5 h-5 text-blue-600" />
                 </div>
-              ))}
-              <Button className="mt-2">Save Notification Settings</Button>
+                <div>
+                  <h3 className="font-semibold text-gray-900">OTP / SMS Notification Triggers</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Control which events send an SMS OTP or notification via Beem Africa</p>
+                </div>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {([
+                  { key: "otpAttendance",      label: "Attendance Check-in OTP",   desc: "Send OTP SMS when a staff member checks in/out for attendance verification", color: "text-teal-600", bg: "bg-teal-50" },
+                  { key: "otpPaymentReminder", label: "Payment Reminder OTP",       desc: "Send SMS reminder when a payment or salary is due for processing",            color: "text-green-600", bg: "bg-green-50" },
+                  { key: "otpTaskReminder",    label: "Task Reminder OTP",          desc: "Send SMS when a task deadline is approaching or a task is assigned",          color: "text-purple-600", bg: "bg-purple-50" },
+                  { key: "otpLeaveApproval",   label: "Leave Approval OTP",         desc: "Notify staff via SMS when their leave request is approved or rejected",        color: "text-orange-600", bg: "bg-orange-50" },
+                  { key: "otpExpenseApproval", label: "Expense Approval OTP",       desc: "Send SMS when an expense claim is approved or disbursed",                     color: "text-amber-600", bg: "bg-amber-50" },
+                  { key: "otpInvoiceDue",      label: "Invoice Due OTP",            desc: "Alert finance team via SMS when an invoice is overdue",                       color: "text-red-600", bg: "bg-red-50" },
+                  { key: "otpLoginTwoFactor",  label: "Login 2FA OTP",              desc: "Send OTP code via SMS for two-factor authentication at login",               color: "text-indigo-600", bg: "bg-indigo-50" },
+                  { key: "otpPayrollPaid",     label: "Payroll Paid OTP",           desc: "Notify staff via SMS when their salary has been paid",                        color: "text-blue-600", bg: "bg-blue-50" },
+                ] as { key: keyof typeof notifSettings; label: string; desc: string; color: string; bg: string }[]).map(item => (
+                  <div key={item.key} className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/60">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg ${item.bg} flex items-center justify-center shrink-0`}>
+                        <MessageSquare className={`w-4 h-4 ${item.color}`} />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-800 text-sm">{item.label}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={notifSettings[item.key]}
+                      onClick={() => setNotifSettings(s => ({ ...s, [item.key]: !s[item.key] }))}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                        notifSettings[item.key] ? "bg-blue-600" : "bg-gray-200"
+                      }`}
+                    >
+                      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                        notifSettings[item.key] ? "translate-x-5" : "translate-x-1"
+                      }`} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
+
+            {/* General Notifications */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center">
+                  <Bell className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">General Notification Channels</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Configure system-wide notification channels and event alerts</p>
+                </div>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {([
+                  { key: "emailNotifications",  label: "Email Notifications",      desc: "Send email alerts for important system events" },
+                  { key: "smsNotifications",    label: "SMS Notifications",        desc: "Send SMS for critical alerts (payroll, approvals)" },
+                  { key: "inAppNotifications",  label: "In-App Notifications",     desc: "Show real-time notifications within the system" },
+                  { key: "leaveRequestAlerts",  label: "Leave Request Alerts",     desc: "Notify managers when leave is submitted" },
+                  { key: "payrollReminders",    label: "Payroll Reminders",        desc: "Send reminder 3 days before payroll due date" },
+                  { key: "invoiceDueAlerts",    label: "Invoice Due Alerts",       desc: "Alert finance team for overdue invoices" },
+                  { key: "lowStockAlerts",      label: "Low Stock Alerts",         desc: "Alert inventory manager when stock hits reorder level" },
+                  { key: "taskDeadlineReminders", label: "Task Deadline Reminders", desc: "Remind staff of upcoming task deadlines" },
+                  { key: "kpiPerformanceAlerts",  label: "KPI Performance Alerts",  desc: "Alert managers when KPIs fall below threshold" },
+                ] as { key: keyof typeof notifSettings; label: string; desc: string }[]).map(item => (
+                  <div key={item.key} className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/60">
+                    <div>
+                      <p className="font-medium text-gray-800 text-sm">{item.label}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={notifSettings[item.key]}
+                      onClick={() => setNotifSettings(s => ({ ...s, [item.key]: !s[item.key] }))}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                        notifSettings[item.key] ? "bg-blue-600" : "bg-gray-200"
+                      }`}
+                    >
+                      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                        notifSettings[item.key] ? "translate-x-5" : "translate-x-1"
+                      }`} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <Button
+              disabled={notifSaving}
+              onClick={async () => {
+                setNotifSaving(true); setNotifMsg(null);
+                try {
+                  const res = await fetch("/api/settings/notifications", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(notifSettings),
+                  });
+                  setNotifMsg(res.ok
+                    ? { ok: true, text: "Notification settings saved successfully!" }
+                    : { ok: false, text: "Failed to save settings." });
+                } catch { setNotifMsg({ ok: false, text: "Network error." }); }
+                setNotifSaving(false);
+                setTimeout(() => setNotifMsg(null), 4000);
+              }}
+            >
+              {notifSaving ? "Saving…" : "Save Notification Settings"}
+            </Button>
           </div>
         </TabsContent>
 

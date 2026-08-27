@@ -1,8 +1,10 @@
 /**
  * POST /api/task-reminders
- * Scans all tasks that are due today or overdue and not completed.
- * Sends a daily SMS to assigned staff until task is marked complete.
- * Safe to call on every page load — deduplicates per task per day.
+ * Scans tasks and sends ONE reminder per task per day:
+ *   • 1 day BEFORE due date  — advance warning
+ *   • ON due date            — due today
+ *   • EVERY day AFTER due date until completed/done/cancelled
+ * Safe to call on every page load — deduplicates per (taskId + date).
  */
 
 import { NextResponse } from "next/server";
@@ -33,11 +35,14 @@ export async function POST() {
     // Set of "taskId|date" already sent today
     const sentToday = new Set(logs.filter(l => l.date === todayStr).map(l => `${l.taskId}|${todayStr}`));
 
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0,10);
+
     const dueTasks = tasks.filter(t => {
       if (!t.dueDate) return false;
       if (["completed", "done", "cancelled"].includes((t.status ?? "").toLowerCase())) return false;
       const due = new Date(t.dueDate); due.setHours(0,0,0,0);
-      return due <= today; // due today or overdue
+      return due <= tomorrow; // 1 day before, on due date, or overdue
     });
 
     const newLogs: ReminderLog[] = [];
@@ -52,19 +57,28 @@ export async function POST() {
       const due    = new Date(task.dueDate); due.setHours(0,0,0,0);
       const overdue = Math.floor((today.getTime() - due.getTime()) / 86400000);
 
-      const msg = overdue > 0
-        ? `Dear ${staff?.name ?? "Staff"}, task "${task.title}" is overdue by ${overdue} day${overdue===1?"":"s"}. Please complete it immediately. - PHIDTECH`
-        : `Dear ${staff?.name ?? "Staff"}, task "${task.title}" is due TODAY. Please complete it. - PHIDTECH`;
+      const due2 = new Date(task.dueDate); due2.setHours(0,0,0,0);
+      const overdueDays = Math.floor((today.getTime() - due2.getTime()) / 86400000);
+      const isTomorrow  = task.dueDate === tomorrowStr;
+
+      const msg = overdueDays > 0
+        ? `Dear ${staff?.name ?? "Staff"}, task "${task.title}" is overdue by ${overdueDays} day${overdueDays===1?"":"s"}. Please complete it immediately. - PHIDTECH`
+        : isTomorrow
+          ? `Dear ${staff?.name ?? "Staff"}, task "${task.title}" is due TOMORROW (${task.dueDate}). Please prepare to complete it. - PHIDTECH`
+          : `Dear ${staff?.name ?? "Staff"}, task "${task.title}" is due TODAY. Please complete it. - PHIDTECH`;
+
+      const urgency = overdueDays > 0 ? "overdue" : isTomorrow ? "warning" : "due_today";
+      const title   = overdueDays > 0 ? `Task Overdue (${overdueDays}d) — ${task.title}` : isTomorrow ? `Task Due Tomorrow — ${task.title}` : `Task Due Today — ${task.title}`;
 
       // In-app notification
       newNotifs.push({
         id: `notif-task-${task.id}-${todayStr}`,
         type: "warning",
-        title: overdue > 0 ? `Task Overdue (${overdue}d) - ${task.title}` : `Task Due Today - ${task.title}`,
+        title,
         message: msg,
         userId: task.assignedTo,
         companyId: task.companyId,
-        urgency: overdue > 0 ? "overdue" : "due_today",
+        urgency,
         smsSent: false,
         read: false,
         createdAt: new Date().toISOString(),
