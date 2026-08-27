@@ -93,6 +93,7 @@ export default function AccountingSalesPage() {
   const [selCustomer, setSelCustomer] = useState<Customer | null>(null);
   const [custSearch, setCustSearch]   = useState("");
   const [custSelectOpen, setCustSelectOpen] = useState(false);
+  const [page, setPage] = useState(1);
 
   const [loading, setLoading]       = useState(true);
   const [statPeriod, setStatPeriod] = useState<"daily"|"weekly"|"monthly"|"yearly"|"all">("all");
@@ -178,6 +179,8 @@ export default function AccountingSalesPage() {
 
   useEffect(() => { reload(); }, []);  // eslint-disable-line
 
+  useEffect(() => { setPage(1); }, [search, statusFilter]);
+
   const co        = cidRef.current || cid;
   const coSales   = (co ? sales.filter(s => s.companyId === co) : sales).sort((a,b) => b.date.localeCompare(a.date));
   const coCusts   = co ? customers.filter(c => c.companyId === co) : customers;
@@ -207,6 +210,9 @@ export default function AccountingSalesPage() {
     const mf = statusFilter === "all" || s.status === statusFilter;
     return ms && mf;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / 25));
+  const pagedSales = filtered.slice((page - 1) * 25, page * 25);
 
   // Period-specific data for stat cards only
   const periodSales = coSales.filter(periodFilter);
@@ -608,7 +614,7 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map(s => (
+              {pagedSales.map(s => (
                 <TableRow key={s.id}>
                   <TableCell className="font-mono text-xs text-blue-700 font-semibold">{s.id}</TableCell>
                   <TableCell className="text-sm text-gray-600">{formatDate(s.date)}</TableCell>
@@ -640,6 +646,16 @@ ${s.notes?`<p style="font-size:11px;color:#6b7280;margin-top:10px">Note: ${s.not
               ))}
             </TableBody>
           </Table>
+        )}
+        {filtered.length > 25 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+            <p className="text-sm text-gray-500">Showing {Math.min((page-1)*25+1, filtered.length)}–{Math.min(page*25, filtered.length)} of {filtered.length}</p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p-1)}>← Prev</Button>
+              <span className="text-sm font-medium text-gray-700">Page {page} / {totalPages}</span>
+              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p+1)}>Next →</Button>
+            </div>
+          </div>
         )}
       </div>
 

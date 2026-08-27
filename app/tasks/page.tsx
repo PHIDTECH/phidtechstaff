@@ -100,6 +100,7 @@ export default function TasksPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [custSearch, setCustSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [companiesList, setCompaniesList] = useState<{id:string;name:string}[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -213,6 +214,8 @@ export default function TasksPage() {
     if (selectedTask) chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [selectedTask?.comments?.length]);
 
+  useEffect(() => { setPage(1); }, [search, statusFilter]);
+
   // Sync selectedTask when tasksList updates
   useEffect(() => {
     if (selectedTask) {
@@ -244,6 +247,9 @@ export default function TasksPage() {
     const matchStatus = statusFilter === "all" || t.status === statusFilter;
     return matchSearch && matchStatus;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / 25));
+  const pagedTasks = filtered.slice((page - 1) * 25, page * 25);
 
   const pending    = companyTasks.filter(t => t.status === "pending").length;
   const inProgress = companyTasks.filter(t => t.status === "in-progress").length;
@@ -450,7 +456,7 @@ export default function TasksPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((task) => {
+                  {pagedTasks.map((task) => {
                     const assignee = staffList.find(u => u.id === task.assignedTo);
                     return (
                       <TableRow key={task.id}>
@@ -513,6 +519,16 @@ export default function TasksPage() {
                   })}
                 </TableBody>
               </Table>
+            )}
+            {filtered.length > 25 && (
+              <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+                <p className="text-sm text-gray-500">Showing {Math.min((page-1)*25+1, filtered.length)}–{Math.min(page*25, filtered.length)} of {filtered.length}</p>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p-1)}>← Prev</Button>
+                  <span className="text-sm font-medium text-gray-700">Page {page} / {totalPages}</span>
+                  <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p+1)}>Next →</Button>
+                </div>
+              </div>
             )}
           </div>
         </TabsContent>

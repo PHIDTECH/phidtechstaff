@@ -80,6 +80,7 @@ export default function DebtorsPage() {
   const [payDialog, setPayDialog] = useState<{ saleId: string; customerName: string; amount: number; paid: number; input: string } | null>(null);
   const [payError, setPayError]   = useState("");
   const [paying, setPaying]       = useState(false);
+  const [page, setPage] = useState(1);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const runReminders = async () => {
@@ -172,11 +173,16 @@ export default function DebtorsPage() {
 
   useEffect(() => { loadData(); runReminders(); }, []);
 
+  useEffect(() => { setPage(1); }, [search, agingFilter]);
+
   const isGroupView = !cid || cid === groupCid;
   const filtered = debtors
     .filter(d => isGroupView || d.companyId === cid)
     .filter(d => agingFilter === "all" || d.aging === agingFilter)
     .filter(d => !search || d.customerName.toLowerCase().includes(search.toLowerCase()) || d.customerPhone.includes(search));
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / 25));
+  const pagedDebtors = filtered.slice((page - 1) * 25, page * 25);
 
   const totalBalance  = filtered.reduce((s, d) => s + d.balance, 0);
   const totalDebtors  = filtered.length;
@@ -380,13 +386,13 @@ export default function DebtorsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((d, i) => {
+              {pagedDebtors.map((d, i) => {
                 const coName = companies.find(c => c.id === d.companyId)?.name || d.companyId;
                 const isExpanded = expanded === d.customerId;
                 return (
                   <>
                     <TableRow key={d.customerId} className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpanded(isExpanded ? null : d.customerId)}>
-                      <TableCell className="text-gray-400 text-xs">{i + 1}</TableCell>
+                      <TableCell className="text-gray-400 text-xs">{(page - 1) * 25 + i + 1}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">
@@ -462,6 +468,16 @@ export default function DebtorsPage() {
               })}
             </TableBody>
           </Table>
+        )}
+        {filtered.length > 25 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+            <p className="text-sm text-gray-500">Showing {Math.min((page-1)*25+1, filtered.length)}–{Math.min(page*25, filtered.length)} of {filtered.length}</p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p-1)}>← Prev</Button>
+              <span className="text-sm font-medium text-gray-700">Page {page} / {totalPages}</span>
+              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p+1)}>Next →</Button>
+            </div>
+          </div>
         )}
       </div>
 

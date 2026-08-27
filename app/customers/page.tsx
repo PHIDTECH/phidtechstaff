@@ -113,6 +113,7 @@ export default function CustomersPage() {
   const [loading, setLoading]             = useState(true);
   const [clearConfirm, setClearConfirm]   = useState(false);
   const [clearing, setClearing]           = useState(false);
+  const [page, setPage] = useState(1);
 
   const loadSession = () => {
     const sess = lsGet<Session>(SESSION_KEY, null as never);
@@ -200,6 +201,8 @@ export default function CustomersPage() {
     };
   }, []);
 
+  useEffect(() => { setPage(1); }, [search, typeFilter, branchFilter]);
+
   // Visibility: always filter by the currently active/switched company
   const ALL_GRP_ROLES_C = ["group_ceo","group_cfo","group_manager","group_controller","group_hr","group_auditor","group_legal","group_it","group_accountant"];
   const _cr = (session?.role ?? "").toLowerCase();
@@ -223,6 +226,9 @@ export default function CustomersPage() {
     const matchBranch = branchFilter === "all" || c.branch === branchFilter;
     return matchSearch && matchType && matchBranch;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / 25));
+  const pagedCustomers = filtered.slice((page - 1) * 25, page * 25);
 
   const activeCount   = visibleCustomers.filter(c => c.status === "active").length;
   const businessCount = visibleCustomers.filter(c => c.type === "business").length;
@@ -445,7 +451,7 @@ export default function CustomersPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map(cust => (
+                  {pagedCustomers.map(cust => (
                     <TableRow key={cust.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -503,6 +509,16 @@ export default function CustomersPage() {
                   ))}
                 </TableBody>
               </Table>
+            )}
+            {filtered.length > 25 && (
+              <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+                <p className="text-sm text-gray-500">Showing {Math.min((page-1)*25+1, filtered.length)}–{Math.min(page*25, filtered.length)} of {filtered.length}</p>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p-1)}>← Prev</Button>
+                  <span className="text-sm font-medium text-gray-700">Page {page} / {totalPages}</span>
+                  <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p+1)}>Next →</Button>
+                </div>
+              </div>
             )}
           </div>
         </TabsContent>
