@@ -18,6 +18,16 @@ import { formatDateTime, getInitials } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { Company } from "@/lib/types";
 
+const NOTIF_DEFAULTS = {
+  emailNotifications: true, smsNotifications: false, inAppNotifications: true,
+  leaveRequestAlerts: true, payrollReminders: true, invoiceDueAlerts: true,
+  lowStockAlerts: true, taskDeadlineReminders: false, kpiPerformanceAlerts: true,
+  otpAttendance: true, otpPaymentReminder: true, otpTaskReminder: false,
+  otpLeaveApproval: true, otpExpenseApproval: true, otpInvoiceDue: true,
+  otpLoginTwoFactor: true, otpPayrollPaid: true,
+};
+type NotifSettings = typeof NOTIF_DEFAULTS;
+
 const COMPANIES_KEY = "phidtech_companies";
 const ACTIVE_KEY = "phidtech_active_company";
 const USERS_KEY = "phidtech_users";
@@ -199,15 +209,7 @@ export default function AdminPage() {
   const [backupLoading, setBackupLoading] = useState(false);
   const [backupMsg, setBackupMsg] = useState<{ok:boolean;text:string}|null>(null);
 
-  const notifDefaults = {
-    emailNotifications: true, smsNotifications: false, inAppNotifications: true,
-    leaveRequestAlerts: true, payrollReminders: true, invoiceDueAlerts: true,
-    lowStockAlerts: true, taskDeadlineReminders: false, kpiPerformanceAlerts: true,
-    otpAttendance: true, otpPaymentReminder: true, otpTaskReminder: false,
-    otpLeaveApproval: true, otpExpenseApproval: true, otpInvoiceDue: true,
-    otpLoginTwoFactor: true, otpPayrollPaid: true,
-  };
-  const [notifSettings, setNotifSettings] = useState(notifDefaults);
+  const [notifSettings, setNotifSettings] = useState<NotifSettings>(NOTIF_DEFAULTS);
   const [notifSaving, setNotifSaving] = useState(false);
   const [notifMsg, setNotifMsg] = useState<{ok:boolean;text:string}|null>(null);
 
@@ -271,7 +273,10 @@ export default function AdminPage() {
     // Notification settings
     try {
       const res = await fetch("/api/settings/notifications", { cache: "no-store" });
-      if (res.ok) setNotifSettings(s => ({ ...s, ...(await res.json()) }));
+      if (res.ok) {
+        const data = await res.json();
+        setNotifSettings(s => ({ ...s, ...data }));
+      }
     } catch {}
     // Active company from raw localStorage
     try {
@@ -845,11 +850,6 @@ export default function AdminPage() {
         {/* Notifications Tab */}
         <TabsContent value="notifications">
           <div className="space-y-5">
-            {notifMsg && (
-              <div className={`px-4 py-3 rounded-xl text-sm border font-medium ${
-                notifMsg.ok ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"
-              }`}>{notifMsg.text}</div>
-            )}
 
             {/* OTP / SMS Notifications */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -872,7 +872,7 @@ export default function AdminPage() {
                   { key: "otpInvoiceDue",      label: "Invoice Due OTP",            desc: "Alert finance team via SMS when an invoice is overdue",                       color: "text-red-600", bg: "bg-red-50" },
                   { key: "otpLoginTwoFactor",  label: "Login 2FA OTP",              desc: "Send OTP code via SMS for two-factor authentication at login",               color: "text-indigo-600", bg: "bg-indigo-50" },
                   { key: "otpPayrollPaid",     label: "Payroll Paid OTP",           desc: "Notify staff via SMS when their salary has been paid",                        color: "text-blue-600", bg: "bg-blue-50" },
-                ] as { key: keyof typeof notifSettings; label: string; desc: string; color: string; bg: string }[]).map(item => (
+                ] as { key: keyof NotifSettings; label: string; desc: string; color: string; bg: string }[]).map(item => (
                   <div key={item.key} className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/60">
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-lg ${item.bg} flex items-center justify-center shrink-0`}>
@@ -923,7 +923,7 @@ export default function AdminPage() {
                   { key: "lowStockAlerts",      label: "Low Stock Alerts",         desc: "Alert inventory manager when stock hits reorder level" },
                   { key: "taskDeadlineReminders", label: "Task Deadline Reminders", desc: "Remind staff of upcoming task deadlines" },
                   { key: "kpiPerformanceAlerts",  label: "KPI Performance Alerts",  desc: "Alert managers when KPIs fall below threshold" },
-                ] as { key: keyof typeof notifSettings; label: string; desc: string }[]).map(item => (
+                ] as { key: keyof NotifSettings; label: string; desc: string }[]).map(item => (
                   <div key={item.key} className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/60">
                     <div>
                       <p className="font-medium text-gray-800 text-sm">{item.label}</p>
@@ -947,26 +947,38 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <Button
-              disabled={notifSaving}
-              onClick={async () => {
-                setNotifSaving(true); setNotifMsg(null);
-                try {
-                  const res = await fetch("/api/settings/notifications", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(notifSettings),
-                  });
-                  setNotifMsg(res.ok
-                    ? { ok: true, text: "Notification settings saved successfully!" }
-                    : { ok: false, text: "Failed to save settings." });
-                } catch { setNotifMsg({ ok: false, text: "Network error." }); }
-                setNotifSaving(false);
-                setTimeout(() => setNotifMsg(null), 4000);
-              }}
-            >
-              {notifSaving ? "Saving…" : "Save Notification Settings"}
-            </Button>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <Button
+                disabled={notifSaving}
+                onClick={async () => {
+                  setNotifSaving(true); setNotifMsg(null);
+                  try {
+                    const res = await fetch("/api/settings/notifications", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(notifSettings),
+                    });
+                    setNotifMsg(res.ok
+                      ? { ok: true, text: "Saved successfully!" }
+                      : { ok: false, text: "Failed to save. Check server logs." });
+                  } catch { setNotifMsg({ ok: false, text: "Network error — could not reach server." }); }
+                  setNotifSaving(false);
+                }}
+              >
+                {notifSaving ? "Saving…" : "Save Notification Settings"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setNotifSettings(NOTIF_DEFAULTS)}
+              >
+                Reset to Defaults
+              </Button>
+              {notifMsg && (
+                <span className={`text-sm font-medium px-3 py-1.5 rounded-lg border ${
+                  notifMsg.ok ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"
+                }`}>{notifMsg.ok ? "✓" : "✗"} {notifMsg.text}</span>
+              )}
+            </div>
           </div>
         </TabsContent>
 
