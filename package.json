@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "env PATH=\"${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}\" next build",
     "start": "next start -p ${PORT:-3000}",
     "start:prod": "NODE_ENV=production next start -p ${PORT:-3000}",
     "lint": "eslint"
