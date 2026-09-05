@@ -34,12 +34,39 @@ function normalisePhone(phone: string): string {
  * Send an SMS via the Beem Africa API.
  * Returns true on success.  Logs every attempt to sms_log.json.
  */
+const TRIGGER_NOTIF_KEY: Record<string, string> = {
+  attendance:       "otpAttendance",
+  payment_reminder: "otpPaymentReminder",
+  task_reminder:    "otpTaskReminder",
+  leave_approval:   "otpLeaveApproval",
+  expense_approval: "otpExpenseApproval",
+  invoice_due:      "otpInvoiceDue",
+  login_2fa:        "otpLoginTwoFactor",
+  payroll_paid:     "otpPayrollPaid",
+};
+
 export async function sendSms(
   phone: string,
   recipientName: string,
   message: string,
   trigger?: string
 ): Promise<{ ok: boolean; error?: string }> {
+  const notif = readDb<Record<string, boolean>>("notification_settings", {});
+
+  const smsEnabled = notif.smsNotifications !== false
+    ? (notif.smsNotifications ?? false)
+    : false;
+
+  const notifKey = trigger ? TRIGGER_NOTIF_KEY[trigger] : undefined;
+  const triggerEnabled = notifKey ? (notif[notifKey] ?? false) : smsEnabled;
+
+  if (!triggerEnabled && notifKey) {
+    return { ok: false, error: `SMS notification disabled for: ${trigger}` };
+  }
+  if (!smsEnabled && !notifKey) {
+    return { ok: false, error: "SMS notifications are disabled in settings" };
+  }
+
   const settings = readDb<BeemSettings>("beem_settings", {
     apiKey: "", secretKey: "", senderId: "INFO",
   });

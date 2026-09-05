@@ -22,9 +22,9 @@ const NOTIF_DEFAULTS = {
   emailNotifications: true, smsNotifications: false, inAppNotifications: true,
   leaveRequestAlerts: true, payrollReminders: true, invoiceDueAlerts: true,
   lowStockAlerts: true, taskDeadlineReminders: false, kpiPerformanceAlerts: true,
-  otpAttendance: true, otpPaymentReminder: true, otpTaskReminder: false,
-  otpLeaveApproval: true, otpExpenseApproval: true, otpInvoiceDue: true,
-  otpLoginTwoFactor: true, otpPayrollPaid: true,
+  otpAttendance: false, otpPaymentReminder: false, otpTaskReminder: false,
+  otpLeaveApproval: false, otpExpenseApproval: false, otpInvoiceDue: false,
+  otpLoginTwoFactor: false, otpPayrollPaid: false,
 };
 type NotifSettings = typeof NOTIF_DEFAULTS;
 

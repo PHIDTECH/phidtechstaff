@@ -31,19 +31,33 @@ const defaults: NotificationSettings = {
   lowStockAlerts: true,
   taskDeadlineReminders: false,
   kpiPerformanceAlerts: true,
-  otpAttendance: true,
-  otpPaymentReminder: true,
+  otpAttendance: false,
+  otpPaymentReminder: false,
   otpTaskReminder: false,
-  otpLeaveApproval: true,
-  otpExpenseApproval: true,
-  otpInvoiceDue: true,
-  otpLoginTwoFactor: true,
-  otpPayrollPaid: true,
+  otpLeaveApproval: false,
+  otpExpenseApproval: false,
+  otpInvoiceDue: false,
+  otpLoginTwoFactor: false,
+  otpPayrollPaid: false,
 };
 
+const SETTINGS_VERSION = 2;
+
 export async function GET() {
-  const settings = readDb<NotificationSettings>("notification_settings", defaults);
-  return NextResponse.json({ ...defaults, ...settings });
+  const existing = readDb<Partial<NotificationSettings> & { _v?: number }>("notification_settings", {});
+  if (Object.keys(existing).length === 0 || (existing._v ?? 0) < SETTINGS_VERSION) {
+    const migrated = {
+      ...defaults,
+      ...existing,
+      otpAttendance: false, otpPaymentReminder: false, otpTaskReminder: false,
+      otpLeaveApproval: false, otpExpenseApproval: false, otpInvoiceDue: false,
+      otpLoginTwoFactor: false, otpPayrollPaid: false,
+      _v: SETTINGS_VERSION,
+    };
+    writeDb("notification_settings", migrated);
+    return NextResponse.json(migrated);
+  }
+  return NextResponse.json({ ...defaults, ...existing });
 }
 
 export async function POST(req: NextRequest) {
@@ -54,7 +68,7 @@ export async function POST(req: NextRequest) {
     for (const key of Object.keys(defaults) as (keyof NotificationSettings)[]) {
       if (key in body) updated[key] = Boolean(body[key]);
     }
-    writeDb("notification_settings", updated);
+    writeDb("notification_settings", { ...updated, _v: SETTINGS_VERSION });
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error("POST /api/settings/notifications:", e);
