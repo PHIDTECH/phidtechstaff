@@ -36,6 +36,8 @@ function normalisePhone(phone: string): string {
  */
 const TRIGGER_NOTIF_KEY: Record<string, string> = {
   attendance:       "otpAttendance",
+  late_checkin:     "otpAttendance",
+  signin_reminder:  "otpAttendance",
   payment_reminder: "otpPaymentReminder",
   task_reminder:    "otpTaskReminder",
   leave_approval:   "otpLeaveApproval",

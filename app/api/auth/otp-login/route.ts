@@ -78,13 +78,33 @@ export async function POST(req: NextRequest) {
         writeAuditLog({ userId: match.id, userName: match.name, action: "LOGIN_DENIED", module: "Auth", details: `Login denied — account banned`, ipAddress: ip });
         return NextResponse.json({ error: "Your account has been suspended. Contact the system administrator." }, { status: 403 });
       }
+
+      // Check if login OTP is enabled in notification settings
+      const notifSettings = readDb<Record<string, boolean>>("notification_settings", {});
+      const otpLoginEnabled = notifSettings.otpLoginTwoFactor === true;
+
+      // Credentials OK — clear rate limit
+      clearRateLimit(rateKey);
+
+      // If OTP is disabled, bypass directly with session
+      if (!otpLoginEnabled) {
+        writeAuditLog({ userId: match.id, userName: match.name, action: "LOGIN_SUCCESS", module: "Auth", details: `Login success (OTP disabled)`, ipAddress: ip });
+        return NextResponse.json({
+          bypass: true,
+          session: {
+            id: match.id, name: match.name, email: match.email,
+            role: match.role, position: match.position,
+            permissions: match.permissions ?? [],
+            companyId: match.companyId, branchId: match.branchId ?? null,
+            isSuperAdmin: false,
+          },
+        });
+      }
+
       if (!match.phone?.trim()) {
         writeAuditLog({ userId: match.id, userName: match.name, action: "LOGIN_DENIED", module: "Auth", details: `Login denied — no phone number on account`, ipAddress: ip });
         return NextResponse.json({ error: "No phone number on your account. Contact your administrator to add one before you can log in." }, { status: 400 });
       }
-
-      // Credentials OK — clear rate limit, send OTP
-      clearRateLimit(rateKey);
 
       const otp = String(Math.floor(100000 + Math.random() * 900000));
       const expiresAt = Date.now() + 10 * 60 * 1000;
@@ -95,7 +115,7 @@ export async function POST(req: NextRequest) {
       const smsResult = await sendSms(
         match.phone, match.name,
         `Dear ${match.name}, your PHIDTECH MS login OTP is: ${otp}. Valid for 10 minutes. Do not share this code. - PHIDTECH`,
-        "login_otp"
+        "login_2fa"
       );
 
       if (!smsResult.ok) {
