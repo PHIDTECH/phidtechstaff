@@ -19,9 +19,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { Company } from "@/lib/types";
 
 const NOTIF_DEFAULTS = {
-  emailNotifications: true, smsNotifications: false, inAppNotifications: true,
-  leaveRequestAlerts: true, payrollReminders: true, invoiceDueAlerts: true,
-  lowStockAlerts: true, taskDeadlineReminders: false, kpiPerformanceAlerts: true,
   otpAttendance: false, otpPaymentReminder: false, otpTaskReminder: false,
   otpLeaveApproval: false, otpExpenseApproval: false, otpInvoiceDue: false,
   otpLoginTwoFactor: false, otpPayrollPaid: false,
@@ -882,52 +879,6 @@ export default function AdminPage() {
                         <p className="font-medium text-gray-800 text-sm">{item.label}</p>
                         <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={notifSettings[item.key]}
-                      onClick={() => setNotifSettings(s => ({ ...s, [item.key]: !s[item.key] }))}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
-                        notifSettings[item.key] ? "bg-blue-600" : "bg-gray-200"
-                      }`}
-                    >
-                      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
-                        notifSettings[item.key] ? "translate-x-5" : "translate-x-1"
-                      }`} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* General Notifications */}
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center">
-                  <Bell className="w-5 h-5 text-purple-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">General Notification Channels</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">Configure system-wide notification channels and event alerts</p>
-                </div>
-              </div>
-              <div className="divide-y divide-gray-50">
-                {([
-                  { key: "emailNotifications",  label: "Email Notifications",      desc: "Send email alerts for important system events" },
-                  { key: "smsNotifications",    label: "SMS Notifications",        desc: "Send SMS for critical alerts (payroll, approvals)" },
-                  { key: "inAppNotifications",  label: "In-App Notifications",     desc: "Show real-time notifications within the system" },
-                  { key: "leaveRequestAlerts",  label: "Leave Request Alerts",     desc: "Notify managers when leave is submitted" },
-                  { key: "payrollReminders",    label: "Payroll Reminders",        desc: "Send reminder 3 days before payroll due date" },
-                  { key: "invoiceDueAlerts",    label: "Invoice Due Alerts",       desc: "Alert finance team for overdue invoices" },
-                  { key: "lowStockAlerts",      label: "Low Stock Alerts",         desc: "Alert inventory manager when stock hits reorder level" },
-                  { key: "taskDeadlineReminders", label: "Task Deadline Reminders", desc: "Remind staff of upcoming task deadlines" },
-                  { key: "kpiPerformanceAlerts",  label: "KPI Performance Alerts",  desc: "Alert managers when KPIs fall below threshold" },
-                ] as { key: keyof NotifSettings; label: string; desc: string }[]).map(item => (
-                  <div key={item.key} className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/60">
-                    <div>
-                      <p className="font-medium text-gray-800 text-sm">{item.label}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
                     </div>
                     <button
                       type="button"

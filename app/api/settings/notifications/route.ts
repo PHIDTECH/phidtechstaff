@@ -2,15 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { readDb, writeDb } from "@/lib/serverDb";
 
 export interface NotificationSettings {
-  emailNotifications: boolean;
-  smsNotifications: boolean;
-  inAppNotifications: boolean;
-  leaveRequestAlerts: boolean;
-  payrollReminders: boolean;
-  invoiceDueAlerts: boolean;
-  lowStockAlerts: boolean;
-  taskDeadlineReminders: boolean;
-  kpiPerformanceAlerts: boolean;
   otpAttendance: boolean;
   otpPaymentReminder: boolean;
   otpTaskReminder: boolean;
@@ -22,15 +13,6 @@ export interface NotificationSettings {
 }
 
 const defaults: NotificationSettings = {
-  emailNotifications: true,
-  smsNotifications: false,
-  inAppNotifications: true,
-  leaveRequestAlerts: true,
-  payrollReminders: true,
-  invoiceDueAlerts: true,
-  lowStockAlerts: true,
-  taskDeadlineReminders: false,
-  kpiPerformanceAlerts: true,
   otpAttendance: false,
   otpPaymentReminder: false,
   otpTaskReminder: false,
@@ -41,7 +23,7 @@ const defaults: NotificationSettings = {
   otpPayrollPaid: false,
 };
 
-const SETTINGS_VERSION = 2;
+const SETTINGS_VERSION = 3;
 
 export async function GET() {
   const existing = readDb<Partial<NotificationSettings> & { _v?: number }>("notification_settings", {});

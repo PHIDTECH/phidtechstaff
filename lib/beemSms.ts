@@ -54,19 +54,16 @@ export async function sendSms(
   trigger?: string
 ): Promise<{ ok: boolean; error?: string }> {
   const notif = readDb<Record<string, boolean>>("notification_settings", {});
-
-  const smsEnabled = notif.smsNotifications !== false
-    ? (notif.smsNotifications ?? false)
-    : false;
-
   const notifKey = trigger ? TRIGGER_NOTIF_KEY[trigger] : undefined;
-  const triggerEnabled = notifKey ? (notif[notifKey] ?? false) : smsEnabled;
 
-  if (!triggerEnabled && notifKey) {
-    return { ok: false, error: `SMS notification disabled for: ${trigger}` };
-  }
-  if (!smsEnabled && !notifKey) {
-    return { ok: false, error: "SMS notifications are disabled in settings" };
+  if (notifKey) {
+    if (notif[notifKey] !== true) {
+      return { ok: false, error: `SMS notification disabled for: ${trigger}` };
+    }
+  } else {
+    if (notif.smsNotifications !== true) {
+      return { ok: false, error: "SMS notifications are disabled in settings" };
+    }
   }
 
   const settings = readDb<BeemSettings>("beem_settings", {
